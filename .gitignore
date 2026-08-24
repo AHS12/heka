@@ -1,0 +1,27 @@
+# Wails / Go
+build/bin/
+build/*.exe
+frontend/dist
+frontend/wailsjs
+
+# Node
+node_modules/
+
+# Go
+*.test
+*.exe
+
+# Heka runtime
+data/
+.heka-dev-daemon.log
+.heka-dev-daemon.log.err
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store
+.commandcode/
