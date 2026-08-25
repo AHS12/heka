@@ -2,7 +2,10 @@ package db
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -357,6 +360,174 @@ func (s *RunStore) CountBySchedule(scheduleID string, since time.Time) (int, err
 		scheduleID, since.UTC().Format(time.RFC3339),
 	).Scan(&n)
 	return n, err
+}
+
+// RunsFilter holds optional filters for the global runs listing (SPEC-14 §1).
+type RunsFilter struct {
+	Task   string // task slug
+	Status string // run status
+	From   string // RFC3339 lower bound (inclusive)
+	To     string // RFC3339 upper bound (inclusive)
+	Q      string // substring search over stdout/stderr
+	Cursor string // base64-encoded cursor (started_at:run_id)
+	Limit  int
+	Order  string // "desc" (default, newest first) or "asc" (oldest first)
+}
+
+// RunsResult is the paginated runs response (SPEC-14 §1).
+type RunsResult struct {
+	Runs      []Run
+	Total     int
+	NextCursor string
+}
+
+// ListRuns returns filtered runs with total count and cursor pagination.
+// The q parameter is a plain substring; % and _ in user input are escaped so
+// they are treated as literals (SPEC-14 §1, PRD §31 injection care).
+// Cursor is a base64-encoded "started_at:run_id" for stable pagination.
+func (s *RunStore) ListRuns(f RunsFilter) (RunsResult, error) {
+	where := []string{}
+	args := []any{}
+
+	if f.Task != "" {
+		where = append(where, "task_slug = ?")
+		args = append(args, f.Task)
+	}
+	if f.Status != "" {
+		where = append(where, "status = ?")
+		args = append(args, f.Status)
+	}
+	if f.From != "" {
+		where = append(where, "started_at >= ?")
+		args = append(args, f.From)
+	}
+	if f.To != "" {
+		where = append(where, "started_at <= ?")
+		args = append(args, f.To)
+	}
+	if f.Q != "" {
+		escaped := escapeLike(f.Q)
+		where = append(where, "(stdout LIKE ? ESCAPE '\\' OR stderr LIKE ? ESCAPE '\\')")
+		args = append(args, "%"+escaped+"%", "%"+escaped+"%")
+	}
+
+	// Decode cursor for keyset pagination.
+	if f.Cursor != "" {
+		cursorSID, err := decodeCursor(f.Cursor)
+		if err == nil {
+			if f.Order == "asc" {
+				// Oldest first: want rows after the cursor
+				where = append(where, "(started_at > ? OR (started_at = ? AND run_id > ?))")
+			} else {
+				// Newest first (default): want rows before the cursor
+				where = append(where, "(started_at < ? OR (started_at = ? AND run_id < ?))")
+			}
+			args = append(args, cursorSID.StartedAt, cursorSID.StartedAt, cursorSID.RunID)
+		}
+	}
+
+	clause := ""
+	if len(where) > 0 {
+		clause = " WHERE " + strings.Join(where, " AND ")
+	}
+
+	// Count total.
+	var total int
+	countQ := "SELECT COUNT(*) FROM runs" + clause
+	if err := s.db.sql.QueryRow(countQ, args...).Scan(&total); err != nil {
+		return RunsResult{}, err
+	}
+
+	limit := f.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 25
+	}
+
+	order := "DESC"
+	if f.Order == "asc" {
+		order = "ASC"
+	}
+
+	query := `SELECT run_id, group_id, attempt, task_slug, COALESCE(schedule_id, '') AS schedule_id,
+	                 trigger, status, started_at, finished_at, duration_ms, exit_code, pid,
+	                 stdout, stderr, created_at
+	            FROM runs` + clause + ` ORDER BY started_at ` + order + `, run_id ` + order + ` LIMIT ?`
+	args = append(args, limit+1) // fetch one extra to detect next page
+
+	rows, err := s.db.sql.Query(query, args...)
+	if err != nil {
+		return RunsResult{}, err
+	}
+	defer rows.Close()
+	allRuns, err := scanRuns(rows)
+	if err != nil {
+		return RunsResult{}, err
+	}
+
+	var nextCursor string
+	if len(allRuns) > limit {
+		runs := allRuns[:limit]
+		last := runs[len(runs)-1]
+		if last.StartedAt != nil {
+			nextCursor = encodeCursor(*last.StartedAt, last.RunID)
+		}
+		return RunsResult{Runs: runs, Total: total, NextCursor: nextCursor}, nil
+	}
+	return RunsResult{Runs: allRuns, Total: total}, nil
+}
+
+// cursorSID holds the decoded cursor components.
+type cursorSID struct {
+	StartedAt string
+	RunID     string
+}
+
+func encodeCursor(startedAt, runID string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(startedAt + ":" + runID))
+}
+
+func decodeCursor(cursor string) (cursorSID, error) {
+	b, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return cursorSID{}, err
+	}
+	s := string(b)
+	i := strings.LastIndex(s, ":")
+	if i < 0 {
+		return cursorSID{}, fmt.Errorf("invalid cursor")
+	}
+	return cursorSID{StartedAt: s[:i], RunID: s[i+1:]}, nil
+}
+
+// escapeLike escapes % and _ so LIKE treats them as literals.
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
+// ListByKind filters schedules by kind ("recurring" or "onetime").
+func (s *ScheduleStore) ListByKind(kind string) ([]Schedule, error) {
+	rows, err := s.db.sql.Query(
+		`SELECT id, slug, task_slug, kind, cron, run_at, timezone, enabled,
+		        missed_policy, next_run_at, last_run_at, last_status, created_at
+		   FROM schedules WHERE kind = ? ORDER BY slug`, kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Schedule
+	for rows.Next() {
+		var sch Schedule
+		if err := rows.Scan(&sch.ID, &sch.Slug, &sch.TaskSlug, &sch.Kind, &sch.Cron, &sch.RunAt,
+			&sch.Timezone, &sch.Enabled, &sch.MissedPolicy, &sch.NextRunAt, &sch.LastRunAt,
+			&sch.LastStatus, &sch.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, sch)
+	}
+	return out, rows.Err()
 }
 
 // Prune deletes finished runs (and their captured output) finished before the

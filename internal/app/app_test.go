@@ -42,6 +42,19 @@ func (s *stubCaller) SetTaskEnabled(string, bool) error               { return s
 func (s *stubCaller) SetSecret(string, string) error                  { return s.err }
 func (s *stubCaller) ListSecrets() ([]string, error)                  { return nil, s.err }
 func (s *stubCaller) DeleteSecret(string) error                       { return s.err }
+func (s *stubCaller) ListSchedulesFiltered(string) ([]ipc.Schedule, error) { return nil, s.err }
+func (s *stubCaller) CreateSchedule(ipc.Schedule) (ipc.Schedule, error)    { return ipc.Schedule{}, s.err }
+func (s *stubCaller) UpdateSchedule(string, ipc.Schedule) (ipc.Schedule, error) {
+	return ipc.Schedule{}, s.err
+}
+func (s *stubCaller) DeleteSchedule(string) error     { return s.err }
+func (s *stubCaller) EnableSchedule(string) error     { return s.err }
+func (s *stubCaller) DisableSchedule(string) error    { return s.err }
+func (s *stubCaller) ListRuns(ipc.RunFilters) (ipc.RunListResult, error) {
+	return ipc.RunListResult{}, s.err
+}
+func (s *stubCaller) Run(string) (ipc.Run, error)    { return ipc.Run{}, s.err }
+func (s *stubCaller) Cancel(string) error            { return s.err }
 
 func newAppWith(caller ipcCaller, started *int, startErr error) *App {
 	a := NewApp("Heka", "0.1.0")

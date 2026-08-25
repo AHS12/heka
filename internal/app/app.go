@@ -51,6 +51,15 @@ type ipcCaller interface {
 	SetSecret(key, value string) error
 	ListSecrets() ([]string, error)
 	DeleteSecret(key string) error
+	ListSchedulesFiltered(kind string) ([]ipc.Schedule, error)
+	CreateSchedule(s ipc.Schedule) (ipc.Schedule, error)
+	UpdateSchedule(id string, s ipc.Schedule) (ipc.Schedule, error)
+	DeleteSchedule(id string) error
+	EnableSchedule(id string) error
+	DisableSchedule(id string) error
+	ListRuns(f ipc.RunFilters) (ipc.RunListResult, error)
+	Run(runID string) (ipc.Run, error)
+	Cancel(slug string) error
 }
 
 // ErrDialogCanceled is the sentinel for a user canceling an open/save dialog;
@@ -79,6 +88,15 @@ type RunResponseDTO struct {
 	GroupID string `json:"group_id"`
 	Status  string `json:"status"`
 }
+
+// ScheduleDTO is the Wails bridge view of a schedule (SPEC-14 §2).
+type ScheduleDTO = ipc.Schedule
+
+// RunDTO is the Wails bridge view of a run (SPEC-14 §4).
+type RunDTO = ipc.Run
+
+// RunListResultDTO is the paginated runs response (SPEC-14 §1).
+type RunListResultDTO = ipc.RunListResult
 
 // App is the Wails-bound struct. Its exported methods become JS bindings.
 type App struct {
@@ -419,6 +437,135 @@ func (a *App) ExportTaskYAML(slug string) error {
 		return fmt.Errorf("write export: %w", err)
 	}
 	return nil
+}
+
+// ---- Schedules surface (SPEC-14 §2): CRUD + filter.
+
+func (a *App) ListSchedules(kind string) ([]ScheduleDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := client.ListSchedulesFiltered(kind)
+	if err != nil {
+		return nil, wrapIPCError(err)
+	}
+	return rows, nil
+}
+
+func (a *App) CreateSchedule(slug, taskSlug, kind, cron, runAt, missedPolicy string) (ScheduleDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return ScheduleDTO{}, err
+	}
+	s, err := client.CreateSchedule(ipc.Schedule{
+		Slug:         slug,
+		TaskSlug:     taskSlug,
+		Kind:         kind,
+		Cron:         cron,
+		RunAt:        runAt,
+		MissedPolicy: missedPolicy,
+	})
+	if err != nil {
+		return ScheduleDTO{}, wrapIPCError(err)
+	}
+	return s, nil
+}
+
+func (a *App) UpdateSchedule(id, slug, taskSlug, kind, cron, runAt, missedPolicy string) (ScheduleDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return ScheduleDTO{}, err
+	}
+	s, err := client.UpdateSchedule(id, ipc.Schedule{
+		Slug:         slug,
+		TaskSlug:     taskSlug,
+		Kind:         kind,
+		Cron:         cron,
+		RunAt:        runAt,
+		MissedPolicy: missedPolicy,
+	})
+	if err != nil {
+		return ScheduleDTO{}, wrapIPCError(err)
+	}
+	return s, nil
+}
+
+func (a *App) DeleteSchedule(id string) error {
+	client, err := a.cfgClient()
+	if err != nil {
+		return err
+	}
+	if err := client.DeleteSchedule(id); err != nil {
+		return wrapIPCError(err)
+	}
+	return nil
+}
+
+func (a *App) EnableSchedule(id string) error {
+	client, err := a.cfgClient()
+	if err != nil {
+		return err
+	}
+	if err := client.EnableSchedule(id); err != nil {
+		return wrapIPCError(err)
+	}
+	return nil
+}
+
+func (a *App) DisableSchedule(id string) error {
+	client, err := a.cfgClient()
+	if err != nil {
+		return err
+	}
+	if err := client.DisableSchedule(id); err != nil {
+		return wrapIPCError(err)
+	}
+	return nil
+}
+
+// ---- Runs surface (SPEC-14 §1, §4): global listing + detail.
+
+func (a *App) ListRuns(task, status, from, to, q, cursor, order string, limit int) (RunListResultDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return RunListResultDTO{}, err
+	}
+	result, err := client.ListRuns(ipc.RunFilters{
+		Task: task, Status: status, From: from, To: to, Q: q,
+		Cursor: cursor, Limit: limit, Order: order,
+	})
+	if err != nil {
+		return RunListResultDTO{}, wrapIPCError(err)
+	}
+	return result, nil
+}
+
+func (a *App) GetRun(runID string) (RunDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return RunDTO{}, err
+	}
+	run, err := client.Run(runID)
+	if err != nil {
+		return RunDTO{}, wrapIPCError(err)
+	}
+	return run, nil
+}
+
+func (a *App) CancelRun(slug string) error {
+	client, err := a.cfgClient()
+	if err != nil {
+		return err
+	}
+	if err := client.Cancel(slug); err != nil {
+		return wrapIPCError(err)
+	}
+	return nil
+}
+
+func (a *App) ListTasksForSchedules() ([]TaskSummaryDTO, error) {
+	return a.ListTasks()
 }
 
 // cfgClient lazily resolves the configuration and IPC client. Cached so

@@ -33,6 +33,15 @@ vi.mock('@wailsjs/go/app/App', () => ({
   ListSecrets: vi.fn(),
   SetSecret: vi.fn(),
   DeleteSecret: vi.fn(),
+  ListSchedules: vi.fn(),
+  CreateSchedule: vi.fn(),
+  UpdateSchedule: vi.fn(),
+  DeleteSchedule: vi.fn(),
+  EnableSchedule: vi.fn(),
+  DisableSchedule: vi.fn(),
+  ListRuns: vi.fn(),
+  GetRun: vi.fn(),
+  CancelRun: vi.fn(),
 }))
 
 // CodeMirror measures text with Range.getClientRects on every animation
@@ -63,3 +72,5 @@ vi.mocked(bindings.GetTask).mockRejectedValue(new Error('not_found: task not fou
 vi.mocked(bindings.GetTaskYAML).mockRejectedValue(new Error('not_found: task not found'))
 vi.mocked(bindings.ValidateTaskYAML).mockResolvedValue([])
 vi.mocked(bindings.ListSecrets).mockResolvedValue([])
+vi.mocked(bindings.ListSchedules).mockResolvedValue([])
+vi.mocked(bindings.ListRuns).mockResolvedValue({runs: [], total: 0} as any)

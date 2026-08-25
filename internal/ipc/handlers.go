@@ -205,6 +205,37 @@ func (s *Server) handleRunDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toRun(row))
 }
 
+func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, "GET") {
+		return
+	}
+	q := r.URL.Query()
+	f := db.RunsFilter{
+		Task:   q.Get("task"),
+		Status: q.Get("status"),
+		From:   q.Get("from"),
+		To:     q.Get("to"),
+		Q:      q.Get("q"),
+		Cursor: q.Get("cursor"),
+		Order:  q.Get("order"),
+	}
+	if raw := q.Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			f.Limit = n
+		}
+	}
+	result, err := s.deps.Runs.ListRuns(f)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, RunListWithTotal{
+		Runs:       toRuns(result.Runs),
+		Total:      result.Total,
+		NextCursor: result.NextCursor,
+	})
+}
+
 // writeTaskError maps db errors onto the envelope table.
 func writeTaskError(w http.ResponseWriter, err error, slug string) {
 	if errors.Is(err, db.ErrNotFound) {

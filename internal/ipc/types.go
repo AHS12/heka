@@ -64,6 +64,13 @@ type RunList struct {
 	Runs []Run `json:"runs"`
 }
 
+// RunListWithTotal is the paginated envelope for GET /v1/runs (SPEC-14 §1).
+type RunListWithTotal struct {
+	Runs       []Run `json:"runs"`
+	Total      int   `json:"total"`
+	NextCursor string `json:"next_cursor,omitempty"`
+}
+
 // Run is one attempt row on the wire (SPEC-05 group/attempt model).
 type Run struct {
 	RunID      string `json:"run_id"`

@@ -7,6 +7,10 @@ import {Placeholder} from './pages/Placeholder'
 import {TasksPage} from './pages/TasksPage'
 import {TaskEditorPage} from './pages/TaskEditorPage'
 import {SettingsPage} from './pages/SettingsPage'
+import {SchedulesPage} from './pages/SchedulesPage'
+import {LogsPage} from './pages/LogsPage'
+import {LogDetailPage} from './pages/RunDetailPage'
+import {AboutPage} from './pages/AboutPage'
 
 export function AppRouter() {
   return (
@@ -17,11 +21,11 @@ export function AppRouter() {
           <Route path="tasks" element={<TasksPage />} />
           <Route path="tasks/new" element={<TaskEditorPage />} />
           <Route path="tasks/:slug" element={<TaskEditorPage />} />
-          <Route path="schedules" element={<Placeholder title="Schedules" />} />
-          <Route path="jobs" element={<Placeholder title="Jobs" />} />
-          <Route path="runs" element={<Placeholder title="Runs" />} />
-          <Route path="logs" element={<Placeholder title="Logs" />} />
+          <Route path="schedules" element={<SchedulesPage />} />
+          <Route path="logs" element={<LogsPage />} />
+          <Route path="logs/:runId" element={<LogDetailPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="about" element={<AboutPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

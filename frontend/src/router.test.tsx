@@ -1,4 +1,4 @@
-// router tests (SPEC-12 §6.3): every PRD §24 route renders its placeholder,
+// router tests (SPEC-12 §6.3): every PRD §24 route renders its page,
 // and unknown hashes redirect to Dashboard. AppRouter sits inside App's
 // provider stack, so the test recreates the QueryClient wrapper.
 import {beforeEach, describe, expect, it, vi} from 'vitest'
@@ -24,16 +24,17 @@ describe('router', () => {
     window.location.hash = '#/'
   })
 
+  it('renders Dashboard as placeholder', async () => {
+    const {findByTestId, findByRole} = await renderAt('#/')
+    expect(await findByTestId('placeholder-page')).toBeInTheDocument()
+    expect(await findByRole('heading', {level: 2, name: 'Dashboard'})).toBeInTheDocument()
+  })
+
   it.each([
-    ['#/', 'Dashboard'],
     ['#/schedules', 'Schedules'],
-    ['#/jobs', 'Jobs'],
-    ['#/runs', 'Runs'],
     ['#/logs', 'Logs'],
   ])('renders %s as %s', async (hash, title) => {
-    const {findByTestId, findByRole} = await renderAt(hash)
-    expect(await findByTestId('placeholder-page')).toBeInTheDocument()
-    // The heading — not the matching nav pill — proves the page rendered.
+    const {findByRole} = await renderAt(hash)
     expect(await findByRole('heading', {level: 2, name: title})).toBeInTheDocument()
   })
 

@@ -250,10 +250,78 @@ func (c *Client) Run(runID string) (Run, error) {
 	return out, err
 }
 
+// RunFilters holds optional query parameters for the global runs listing
+// (SPEC-14 §1).
+type RunFilters struct {
+	Task   string
+	Status string
+	From   string
+	To     string
+	Q      string
+	Cursor string
+	Limit  int
+	Order  string
+}
+
+// RunListResult is the paginated runs response from the IPC layer.
+type RunListResult struct {
+	Runs       []Run `json:"runs"`
+	Total      int   `json:"total"`
+	NextCursor string `json:"next_cursor"`
+}
+
+// ListRuns hits GET /v1/runs with filter params (SPEC-14 §1).
+func (c *Client) ListRuns(f RunFilters) (RunListResult, error) {
+	var out RunListResult
+	path := "/v1/runs"
+	params := []string{}
+	if f.Task != "" {
+		params = append(params, "task="+f.Task)
+	}
+	if f.Status != "" {
+		params = append(params, "status="+f.Status)
+	}
+	if f.From != "" {
+		params = append(params, "from="+f.From)
+	}
+	if f.To != "" {
+		params = append(params, "to="+f.To)
+	}
+	if f.Q != "" {
+		params = append(params, "q="+f.Q)
+	}
+	if f.Cursor != "" {
+		params = append(params, "cursor="+f.Cursor)
+	}
+	if f.Limit > 0 {
+		params = append(params, "limit="+fmt.Sprint(f.Limit))
+	}
+	if f.Order != "" {
+		params = append(params, "order="+f.Order)
+	}
+	if len(params) > 0 {
+		path += "?" + strings.Join(params, "&")
+	}
+	err := c.do("GET", path, nil, &out)
+	return out, err
+}
+
 // Schedules (SPEC-09).
 func (c *Client) ListSchedules() ([]Schedule, error) {
 	var out []Schedule
 	err := c.do("GET", "/v1/schedules", nil, &out)
+	return out, err
+}
+
+// ListSchedulesFiltered returns schedules filtered by kind ("recurring" or
+// "onetime"). Empty kind returns all (SPEC-14 §3).
+func (c *Client) ListSchedulesFiltered(kind string) ([]Schedule, error) {
+	var out []Schedule
+	path := "/v1/schedules"
+	if kind != "" {
+		path += "?kind=" + kind
+	}
+	err := c.do("GET", path, nil, &out)
 	return out, err
 }
 

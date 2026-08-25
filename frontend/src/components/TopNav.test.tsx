@@ -29,10 +29,7 @@ describe('TopNav', () => {
       'Dashboard',
       'Tasks',
       'Schedules',
-      'Jobs',
-      'Runs',
       'Logs',
-      'Settings',
     ]) {
       expect(screen.getByRole('link', {name: label})).toBeInTheDocument()
     }

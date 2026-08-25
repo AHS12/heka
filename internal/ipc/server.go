@@ -73,6 +73,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/tasks/{slug}/runs", s.handleTaskRuns)
 
 	// Runs.
+	mux.HandleFunc("/v1/runs", s.handleRuns)
 	mux.HandleFunc("/v1/runs/{run_id}", s.handleRunDetail)
 
 	// Schedules (SPEC-09).

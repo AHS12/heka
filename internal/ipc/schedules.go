@@ -34,7 +34,14 @@ func toSchedule(s db.Schedule) Schedule {
 func (s *Server) handleSchedules(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		rows, err := s.deps.Schedules.List()
+		kind := r.URL.Query().Get("kind")
+		var rows []db.Schedule
+		var err error
+		if kind == "recurring" || kind == "onetime" {
+			rows, err = s.deps.Schedules.ListByKind(kind)
+		} else {
+			rows, err = s.deps.Schedules.List()
+		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal", err.Error())
 			return

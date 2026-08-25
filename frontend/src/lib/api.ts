@@ -25,6 +25,15 @@ import {
   ListSecrets,
   SetSecret,
   DeleteSecret,
+  ListSchedules,
+  CreateSchedule,
+  UpdateSchedule,
+  DeleteSchedule,
+  EnableSchedule,
+  DisableSchedule,
+  ListRuns,
+  GetRun,
+  CancelRun,
 } from '@wailsjs/go/app/App'
 import type {task} from '@wailsjs/go/models'
 
@@ -302,6 +311,152 @@ export async function setSecret(key: string, value: string): Promise<void> {
 export async function deleteSecret(key: string): Promise<void> {
   try {
     await DeleteSecret(key)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+// ---- Schedules surface (SPEC-14 §2).
+
+export interface Schedule {
+  id: string
+  slug: string
+  task_slug: string
+  kind: string // "recurring" | "onetime"
+  cron?: string
+  run_at?: string
+  enabled: boolean
+  missed_policy: string
+  next_run_at?: string
+  last_run_at?: string
+  last_status?: string
+}
+
+export async function listSchedules(kind?: string): Promise<Schedule[]> {
+  try {
+    return await ListSchedules(kind ?? '')
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function createSchedule(
+  slug: string,
+  taskSlug: string,
+  kind: string,
+  cron: string,
+  runAt: string,
+  missedPolicy: string
+): Promise<Schedule> {
+  try {
+    return await CreateSchedule(slug, taskSlug, kind, cron, runAt, missedPolicy)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function updateSchedule(
+  id: string,
+  slug: string,
+  taskSlug: string,
+  kind: string,
+  cron: string,
+  runAt: string,
+  missedPolicy: string
+): Promise<Schedule> {
+  try {
+    return await UpdateSchedule(id, slug, taskSlug, kind, cron, runAt, missedPolicy)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function deleteSchedule(id: string): Promise<void> {
+  try {
+    await DeleteSchedule(id)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function enableSchedule(id: string): Promise<void> {
+  try {
+    await EnableSchedule(id)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function disableSchedule(id: string): Promise<void> {
+  try {
+    await DisableSchedule(id)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+// ---- Runs surface (SPEC-14 §1, §4).
+
+export interface Run {
+  run_id: string
+  group_id: string
+  attempt: number
+  task_slug: string
+  schedule_id?: string
+  trigger: string
+  status: string
+  started_at?: string
+  finished_at?: string
+  duration_ms?: number
+  exit_code?: number
+  pid?: number
+  stdout?: string
+  stderr?: string
+}
+
+export interface RunListResult {
+  runs: Run[]
+  total: number
+  next_cursor?: string
+}
+
+export async function listRuns(filters: {
+  task?: string
+  status?: string
+  from?: string
+  to?: string
+  q?: string
+  cursor?: string
+  limit?: number
+  order?: string
+} = {}): Promise<RunListResult> {
+  try {
+    return await ListRuns(
+      filters.task ?? '',
+      filters.status ?? '',
+      filters.from ?? '',
+      filters.to ?? '',
+      filters.q ?? '',
+      filters.cursor ?? '',
+      filters.order ?? '',
+      filters.limit ?? 0
+    )
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function getRun(runID: string): Promise<Run> {
+  try {
+    return await GetRun(runID)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function cancelRun(slug: string): Promise<void> {
+  try {
+    await CancelRun(slug)
   } catch (err) {
     throw toAPIError(err)
   }
