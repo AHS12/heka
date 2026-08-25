@@ -1,0 +1,132 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+/* Tailwind dark mode must follow the .dark class on <html>, not the OS
+   preference, so the app's theme switcher stays in sync. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * HeroUI theme tokens: override the library defaults so our app's palette
+ * stays consistent across light / dark / future themes.  The selectors
+ * mirror HeroUI's own convention (`.dark` for dark, `[data-theme="…"]` for
+ * named themes).  Each block re-declares only the tokens we care about;
+ * everything else inherits from HeroUI's defaults.
+ */
+
+/* ---------- Light (default) ---------- */
+:root {
+  color-scheme: light;
+  --foreground: oklch(0.21 0.006 286);     /* near-black */
+  --background: oklch(0.98 0 0);            /* near-white */
+  --field-foreground: var(--foreground);
+  --field-background: var(--background);
+}
+
+/* ---------- Dark ---------- */
+.dark,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --foreground: oklch(0.95 0 0);            /* near-white */
+  --background: oklch(0.14 0.005 286);      /* near-black */
+  --field-foreground: var(--foreground);
+  --field-background: var(--background);
+}
+
+/* Ensure body text is always readable regardless of HeroUI's theme layer */
+body {
+  color: var(--foreground);
+  background-color: var(--background);
+}
+
+/* ---- Accent foundation (Settings will surface a picker) ----
+   All accent-driven utilities (bg-accent, text-accent-contrast,
+   ring-accent-ring, …) resolve against these two CSS variables, which are
+   swapped by the data-accent attribute on <html>. To add an accent: extend
+   the map below + the ACCENT_PRESETS list in src/lib/accent.ts. */
+:root,
+:root[data-accent="blue"] {
+  --accent: oklch(0.55 0.22 250); /* default brand — blue */
+  --accent-contrast: oklch(0.99 0 0); /* white text on accent fills */
+  --accent-ring: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+:root[data-accent="violet"] {
+  --accent: oklch(0.56 0.23 290);
+  --accent-contrast: oklch(0.99 0 0);
+  --accent-ring: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+:root[data-accent="emerald"] {
+  --accent: oklch(0.6 0.17 160);
+  --accent-contrast: oklch(0.99 0 0);
+  --accent-ring: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+:root[data-accent="amber"] {
+  --accent: oklch(0.68 0.16 75);
+  --accent-contrast: oklch(0.2 0.02 75); /* dark text on amber fills */
+  --accent-ring: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+:root[data-accent="rose"] {
+  --accent: oklch(0.58 0.21 15);
+  --accent-contrast: oklch(0.99 0 0);
+  --accent-ring: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+:root[data-accent="cyan"] {
+  --accent: oklch(0.65 0.15 210);
+  --accent-contrast: oklch(0.99 0 0);
+  --accent-ring: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+@theme inline {
+  --color-accent: var(--accent);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-accent-ring: var(--accent-ring);
+}
+
+/* Scroll areas always reserve space for the scrollbar gutter so content
+   doesn't shift when scrolling starts. The scrollbar itself stays invisible
+   until the user scrolls, then fades ~600ms after stopping.
+
+   Chromium 121+ (WebView2/Wails) ignores ::-webkit-scrollbar whenever the
+   standard scrollbar-width/scrollbar-color are set, so we must NOT set them
+   here — only scrollbar-gutter — and style the thumb purely via the webkit
+   pseudo-elements. Firefox gets a standards-only fallback via @supports. */
+.heka-scroll {
+  scrollbar-gutter: stable;
+}
+.heka-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+.heka-scroll::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.heka-scroll.heka-scroll-show::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+@supports not selector(::-webkit-scrollbar) {
+  .heka-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .heka-scroll.heka-scroll-show {
+    scrollbar-color: color-mix(in oklab, var(--accent) 45%, transparent) transparent;
+  }
+}
+
+/* CodeMirror's internal scroller (YAML editor) — same accent scrollbar. */
+.heka-scroll .cm-scroller::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+.heka-scroll .cm-scroller::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--accent) 45%, transparent);
+}

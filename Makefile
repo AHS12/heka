@@ -28,9 +28,13 @@ ifeq ($(OS),Windows_NT)
 	wails build -o heka-gui$(EXE) -ldflags "-H windowsgui"
 endif
 
-## test: run Go tests (builds the frontend first so the go:embed works)
-test: frontend/dist
+## test: Go tests + frontend suite (builds the frontend first so the go:embed works)
+test: frontend/dist frontend-test
 	go test ./...
+
+## frontend-test: Vitest suite for the shell and pages (SPEC-12 §6)
+frontend-test:
+	cd frontend && npm test
 
 ## check: quality gate = vet + lint + test
 check: vet lint test

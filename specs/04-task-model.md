@@ -83,7 +83,7 @@ The 2s polling loop that calls `Scan` is the daemon's (SPEC-06). `Scan` itself i
 
 ## 5. Index record (bridge to SPEC-03)
 
-The daemon derives the `tasks` index row from the canonical task (slug, name, yaml_path, parsed fields, enabled). `task.ToIndex(task, yamlPath)` returns the record; SPEC-06 stores it via `db.Tasks()`. The task package does not import the db package (one-way dependency: daemon composes them). `enabled` is runtime state — the YAML has no `enabled` field in v1; the daemon keeps it in the index row (documented in master spec §7, D3 spirit).
+The daemon syncs each canonical task into the `tasks` index row, storing the **full task JSON** as `parsed_json` (not just a projection) so IPC handlers can execute it without re-reading files (specified in SPEC-07, implemented by the daemon sync loop). The task package does not import the db package (one-way dependency: daemon composes them). `enabled` is runtime state — the YAML has no `enabled` field in v1; the daemon keeps it in the index row (D3 spirit).
 
 ## 6. Example task
 
@@ -100,7 +100,7 @@ The daemon derives the `tasks` index row from the canonical task (slug, name, ya
 ## 8. Files
 
 ```text
-internal/core/task/model.go      # Task struct, defaults, IndexRecord helper
+internal/core/task/model.go      # Task struct, defaults, json tags (wire format)
 internal/core/task/yaml.go       # parse/marshal (strict decoder) + Import/Export
 internal/core/task/validate.go   # Validate(Task) []error
 internal/core/task/store.go      # Scan/LoadFile/Save/Delete

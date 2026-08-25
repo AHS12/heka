@@ -1,0 +1,206 @@
+package cli
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	"heka/internal/daemon"
+	"heka/internal/ipc"
+	"heka/internal/osapp"
+)
+
+func (a *App) daemonCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "daemon",
+		Short: "Manage the background daemon",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return errors.New("specify: heka daemon start|stop|status")
+		},
+	}
+	cmd.AddCommand(
+		&cobra.Command{
+			Use:   "start",
+			Short: "Start the daemon in the background",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if err := daemon.Start(a.cfg); err != nil {
+					return err
+				}
+				if a.json {
+					a.printJSON(map[string]any{"ok": true, "action": "daemon_start"})
+					return nil
+				}
+				fmt.Fprintln(a.stdout, "heka daemon started")
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use:   "stop",
+			Short: "Stop the daemon gracefully",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if err := daemon.Stop(a.cfg); err != nil {
+					return err
+				}
+				if a.json {
+					a.printJSON(map[string]any{"ok": true, "action": "daemon_stop"})
+					return nil
+				}
+				fmt.Fprintln(a.stdout, "heka daemon stopped")
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use:   "status",
+			Short: "Show daemon health",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				h, err := daemon.Status(a.cfg)
+				if err != nil {
+					return ipc.ErrDaemonNotRunning
+				}
+				if a.json {
+					a.printJSON(map[string]any{"daemon": "running", "health": h})
+					return nil
+				}
+				fmt.Fprintf(a.stdout, "Heka daemon: running\n")
+				fmt.Fprintf(a.stdout, "version:    %s\n", h.Version)
+				fmt.Fprintf(a.stdout, "uptime:     %s\n", humanDuration(h.UptimeSeconds*1000))
+				fmt.Fprintf(a.stdout, "core:       %s\n", h.Core)
+				fmt.Fprintf(a.stdout, "scheduler:  %s\n", h.Scheduler)
+				if !h.LastHeartbeat.IsZero() {
+					fmt.Fprintf(a.stdout, "heartbeat:  %s ago\n",
+						time.Since(h.LastHeartbeat).Truncate(time.Second))
+				}
+				return nil
+			},
+		},
+	)
+	cmd.AddCommand(a.watchCmd(), a.watchdogCmd())
+	return cmd
+}
+
+// watchCmd implements `heka daemon watch [--once]` (SPEC-10 §1): the command
+// the OS entries call, and a manual foreground loop.
+func (a *App) watchCmd() *cobra.Command {
+	var once bool
+	w := &cobra.Command{
+		Use:   "watch",
+		Short: "Check the daemon and restart it if down (watchdog)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if once {
+				return osapp.WatchOnce(a.cfg)
+			}
+			// Foreground loop for manual testing / container-style runs.
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				if err := osapp.WatchOnce(a.cfg); err != nil {
+					if a.json {
+						a.printJSON(map[string]any{"ok": false, "error": err.Error()})
+					} else {
+						fmt.Fprintf(a.stderr, "heka: watch: %v\n", err)
+					}
+				}
+				<-ticker.C
+			}
+		},
+	}
+	w.Flags().BoolVar(&once, "once", false, "run a single check, then exit")
+	return w
+}
+
+// watchdogCmd manages the OS-level watchdog entry (SPEC-10 §3).
+func (a *App) watchdogCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "watchdog",
+		Short: "Manage the OS-level watchdog entry",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return errors.New("specify: heka daemon watchdog install|uninstall|status")
+		},
+	}
+
+	var intervalMinutes int
+	install := &cobra.Command{
+		Use:   "install",
+		Short: "Register the watchdog with the operating system",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			exe, err := os.Executable()
+			if err != nil {
+				return err
+			}
+			interval := time.Duration(intervalMinutes) * time.Minute
+			if interval <= 0 {
+				interval = osapp.DefaultWatchdogInterval
+			}
+			if err := osapp.NewInstaller().Install(interval, exe); err != nil {
+				return err
+			}
+			if a.json {
+				a.printJSON(map[string]any{
+					"ok": true, "action": "watchdog_install",
+					"interval_minutes": int(interval.Minutes()),
+				})
+				return nil
+			}
+			fmt.Fprintf(a.stdout, "watchdog installed (every %dm)\n", int(interval.Minutes()))
+			return nil
+		},
+	}
+	install.Flags().IntVar(&intervalMinutes, "interval", 0, "check interval in minutes (default 5)")
+
+	uninstall := &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove the watchdog OS entry",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := osapp.NewInstaller().Uninstall(); err != nil {
+				return err
+			}
+			if a.json {
+				a.printJSON(map[string]any{"ok": true, "action": "watchdog_uninstall"})
+				return nil
+			}
+			fmt.Fprintln(a.stdout, "watchdog removed")
+			return nil
+		},
+	}
+
+	status := &cobra.Command{
+		Use:   "status",
+		Short: "Show watchdog installation state",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			installed, interval, err := osapp.NewInstaller().Status()
+			if err != nil {
+				return err
+			}
+			if a.json {
+				a.printJSON(map[string]any{
+					"installed": installed,
+					"interval_minutes": func() int {
+						if installed {
+							return int(interval.Minutes())
+						}
+						return 0
+					}(),
+				})
+				return nil
+			}
+			if installed {
+				fmt.Fprintf(a.stdout, "watchdog: installed (every %dm)\n", int(interval.Minutes()))
+			} else {
+				fmt.Fprintln(a.stdout, "watchdog: not installed")
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(install, uninstall, status)
+	return cmd
+}

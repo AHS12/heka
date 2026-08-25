@@ -1,21 +1,21 @@
 // Heka — a local task runner and scheduler for programmers (SPEC-01).
 //
 // main.go is the single entry point for the whole application. It dispatches
-// to one of four modes based on the command-line arguments (master spec §3):
+// to one of three modes based on the command-line arguments (master spec §3,
+// SPEC-08 §1):
 //
 //	heka                  → GUI (Wails window)
 //	heka gui              → GUI
 //	heka daemon           → daemon (foreground)
-//	heka daemon <cmd>     → daemon control
-//	heka <command>        → CLI client
+//	heka <command>        → CLI client (cobra tree, incl. daemon start|stop|status)
+//
+// The CLI tree is the help owner; "heka --help" flows through cobra.
 package main
 
 import (
 	"embed"
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -24,6 +24,7 @@ import (
 	"heka/internal/app"
 	"heka/internal/cli"
 	"heka/internal/config"
+	"heka/internal/daemon"
 )
 
 const (
@@ -38,46 +39,39 @@ var assets embed.FS
 type mode int
 
 const (
-	modeGUI           mode = iota // heka, heka gui
-	modeDaemon                    // heka daemon
-	modeDaemonControl             // heka daemon <start|stop|status>
-	modeCLI                       // heka <command>
-	modeHelp                      // heka help | -h | --help
+	modeGUI    mode = iota // heka, heka gui
+	modeDaemon             // heka daemon
+	modeCLI                // heka <command> | help | --help (cobra owns the rest)
 )
 
 // resolveMode maps command-line arguments to a mode. It is a pure function so
-// it can be unit-tested without running the application.
-func resolveMode(args []string) (mode, string) {
+// it can be unit-tested without running the application (SPEC-01).
+func resolveMode(args []string) mode {
 	if len(args) == 0 {
-		return modeGUI, ""
+		return modeGUI
 	}
 	switch args[0] {
 	case "gui":
-		return modeGUI, ""
+		return modeGUI
 	case "daemon":
 		if len(args) == 1 {
-			return modeDaemon, ""
+			return modeDaemon
 		}
-		return modeDaemonControl, args[1]
-	case "help", "-h", "--help":
-		return modeHelp, ""
+		return modeCLI // daemon start|stop|status live in the cobra tree
 	}
-	return modeCLI, args[0]
+	return modeCLI
 }
 
 func main() {
-	m, arg := resolveMode(os.Args[1:])
-	switch m {
+	switch resolveMode(os.Args[1:]) {
 	case modeGUI:
 		runGUI()
 	case modeDaemon:
 		runDaemon()
-	case modeDaemonControl:
-		runDaemonControl(arg)
 	case modeCLI:
-		cli.Stub(arg)
-	case modeHelp:
-		usage()
+		if err := cli.Run(os.Args[1:]); err != nil {
+			os.Exit(1)
+		}
 	}
 }
 
@@ -102,8 +96,7 @@ func runGUI() {
 	}
 }
 
-// runDaemon is a stub until SPEC-06. It runs in the foreground, reports the
-// resolved configuration (SPEC-02), and blocks until interrupted.
+// runDaemon runs the daemon in the foreground (SPEC-06).
 func runDaemon() {
 	cfg, err := config.LoadDefault()
 	if err != nil {
@@ -113,26 +106,8 @@ func runDaemon() {
 	fmt.Printf("heka daemon v%s starting (foreground)\n", appVersion)
 	fmt.Printf("  data dir:  %s\n", cfg.DataDir)
 	fmt.Printf("  tasks dir: %s\n", cfg.TasksDir)
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-	<-sig
-	fmt.Println("heka daemon stopped")
-}
-
-// runDaemonControl is a stub until SPEC-06.
-func runDaemonControl(cmd string) {
-	fmt.Fprintf(os.Stderr, "heka: daemon control %q arrives in SPEC-06\n", cmd)
-	os.Exit(1)
-}
-
-// usage prints the command-line help text.
-func usage() {
-	fmt.Println(`Heka — a local task runner and scheduler for programmers.
-
-Usage:
-  heka                     Start the desktop GUI.
-  heka gui                 Start the desktop GUI.
-  heka daemon              Run the daemon in the foreground.
-  heka daemon <command>    Manage the background daemon (SPEC-06).
-  heka <command> [flags]   Run a CLI command (SPEC-08).`)
+	if err := daemon.Run(cfg, appVersion); err != nil {
+		fmt.Fprintln(os.Stderr, "heka:", err)
+		os.Exit(1)
+	}
 }

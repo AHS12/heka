@@ -1,0 +1,112 @@
+// Package osapp holds OS-level integration the daemon needs while it runs
+// (SPEC-10 watchdog, SPEC-15 startup registration/tray). Only watchdog code
+// lives here today.
+package osapp
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"time"
+
+	"heka/internal/config"
+	"heka/internal/daemon"
+	"heka/internal/ipc"
+)
+
+// Watchdog interval default (minutes).
+const (
+	DefaultWatchdogInterval = 5 * time.Minute
+	maxAttemptsPerMinute    = 2
+)
+
+// Hooks are the seams WatchOnce uses; tests swap them for fakes.
+var (
+	// CheckDaemon reports whether the daemon answers health pings.
+	CheckDaemon = func(cfg config.Config) error {
+		_, err := ipc.NewClient(cfg).Health()
+		return err
+	}
+	// StartDaemon spawns a detached daemon and waits for readiness.
+	StartDaemon = daemon.Start
+)
+
+// Installer manages the OS-level watchdog entry (SPEC-10 §3).
+type Installer interface {
+	Install(interval time.Duration, hekaPath string) error
+	Uninstall() error
+	Status() (Installed bool, Interval time.Duration, err error)
+}
+
+// WatchOnce is the whole `heka daemon watch --once` command (SPEC-10 §1):
+//
+//  1. daemon alive?        → exit 0
+//  2. backoff in effect?   → exit 0 (don't pile on a crash loop)
+//  3. start, record attempt → exit 0 on success, 1 if it fails to come up
+func WatchOnce(cfg config.Config) error {
+	if CheckDaemon(cfg) == nil {
+		return nil
+	}
+	state := readWatchdogState(cfg)
+	if state.backedOff() {
+		// Slide the cooldown window; attempts are not consumed by skips.
+		writeWatchdogState(cfg, state)
+		return nil
+	}
+	state.attempt()
+	writeWatchdogState(cfg, state)
+	return StartDaemon(cfg)
+}
+
+// watchdogState is the backoff bookkeeping. A file, not the DB: when the
+// daemon is down, nothing else is readable (SPEC-10 §2).
+type watchdogState struct {
+	LastAttempt        time.Time `json:"last_attempt"`
+	AttemptsLastMinute int       `json:"attempts_last_minute"`
+}
+
+func (s watchdogState) backedOff() bool {
+	if time.Since(s.LastAttempt) > time.Minute {
+		return false // window expired; next attempt is allowed
+	}
+	return s.AttemptsLastMinute >= maxAttemptsPerMinute
+}
+
+func (s *watchdogState) attempt() {
+	if time.Since(s.LastAttempt) > time.Minute {
+		s.AttemptsLastMinute = 0
+	}
+	s.AttemptsLastMinute++
+	s.LastAttempt = time.Now()
+}
+
+func watchdogStatePath(cfg config.Config) string {
+	return filepath.Join(cfg.DataDir, "watchdog.state")
+}
+
+func readWatchdogState(cfg config.Config) watchdogState {
+	var st watchdogState
+	data, err := os.ReadFile(watchdogStatePath(cfg))
+	if err != nil {
+		return st
+	}
+	_ = json.Unmarshal(data, &st)
+	return st
+}
+
+func writeWatchdogState(cfg config.Config, st watchdogState) {
+	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
+		return
+	}
+	data, err := json.Marshal(st)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(watchdogStatePath(cfg), data, 0o600)
+}
+
+// NewInstaller returns the platform's watchdog installer. It is a var so
+// tests (and the CLI) can substitute a fake.
+var NewInstaller = func() Installer {
+	return newPlatformInstaller()
+}
