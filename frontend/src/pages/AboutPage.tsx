@@ -164,12 +164,7 @@ export function AboutPage() {
       {/* Hero */}
       <section className="space-y-3">
         <div className="flex items-center gap-3">
-          <div className="grid size-12 place-items-center rounded-2xl bg-accent/10">
-            <svg className="size-6 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M12 6v6l4 2" />
-              <circle cx="12" cy="12" r="10" />
-            </svg>
-          </div>
+          <img src="/appicon.png" alt="Heka" className="size-12 rounded-2xl shadow-sm" />
           <div>
             <h2 className="text-xl font-bold tracking-tight">Heka <span className="text-sm font-normal text-zinc-400 dark:text-zinc-500">v{APP_VERSION}</span></h2>
             <p className="text-sm text-zinc-500 dark:text-zinc-400">

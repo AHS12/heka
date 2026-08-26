@@ -291,13 +291,13 @@ func TestWatchOnceFlagsThroughCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	swapWatchHooks(t,
-		func(config.Config) error { return errors.New("down") },
-		func(config.Config) error { return nil },
-	)
 	a := NewApp(cfg, &stubClient{})
+	a.startDaemon = func(config.Config) error { return nil }
 	out, errOut := &bytes.Buffer{}, &bytes.Buffer{}
 	a.stdout, a.stderr = out, errOut
+	swapWatchHooks(t,
+		func(config.Config) error { return errors.New("down") },
+	)
 
 	if err := runArgs(t, a, "daemon", "watch", "--once"); err != nil {
 		t.Fatalf("watch --once on a down daemon that recovers must exit 0: %v", err)
@@ -338,12 +338,12 @@ func (f fakeInstaller) Install(time.Duration, string) error  { return nil }
 func (f fakeInstaller) Uninstall() error                     { return nil }
 func (f fakeInstaller) Status() (bool, time.Duration, error) { return f.installed, f.interval, nil }
 
-// swapWatchHooks stubs the osapp watchdog seams for cli tests.
-func swapWatchHooks(t *testing.T, check, start func(config.Config) error) {
+// swapWatchHooks stubs the osapp watchdog seam for cli tests.
+func swapWatchHooks(t *testing.T, check func(config.Config) error) {
 	t.Helper()
-	origCheck, origStart := osapp.CheckDaemon, osapp.StartDaemon
-	osapp.CheckDaemon, osapp.StartDaemon = check, start
+	origCheck := osapp.CheckDaemon
+	osapp.CheckDaemon = check
 	t.Cleanup(func() {
-		osapp.CheckDaemon, osapp.StartDaemon = origCheck, origStart
+		osapp.CheckDaemon = origCheck
 	})
 }

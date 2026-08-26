@@ -18,23 +18,18 @@ func testConfig(t *testing.T) config.Config {
 	return cfg
 }
 
-func withHooks(t *testing.T, check func(config.Config) error, start func(config.Config) error) {
+func withCheckDaemon(t *testing.T, check func(config.Config) error) {
 	t.Helper()
-	origCheck, origStart := CheckDaemon, StartDaemon
-	CheckDaemon, StartDaemon = check, start
-	t.Cleanup(func() {
-		CheckDaemon, StartDaemon = origCheck, origStart
-	})
+	orig := CheckDaemon
+	CheckDaemon = check
+	t.Cleanup(func() { CheckDaemon = orig })
 }
 
 func TestWatchOnceHealthyDoesNothing(t *testing.T) {
 	cfg := testConfig(t)
 	started := false
-	withHooks(t,
-		func(config.Config) error { return nil },
-		func(config.Config) error { started = true; return nil },
-	)
-	if err := WatchOnce(cfg); err != nil {
+	withCheckDaemon(t, func(config.Config) error { return nil })
+	if err := WatchOnce(cfg, func(config.Config) error { started = true; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	if started {
@@ -45,11 +40,8 @@ func TestWatchOnceHealthyDoesNothing(t *testing.T) {
 func TestWatchOnceDownStarts(t *testing.T) {
 	cfg := testConfig(t)
 	started := 0
-	withHooks(t,
-		func(config.Config) error { return errDaemonFake },
-		func(config.Config) error { started++; return nil },
-	)
-	if err := WatchOnce(cfg); err != nil {
+	withCheckDaemon(t, func(config.Config) error { return errDaemonFake })
+	if err := WatchOnce(cfg, func(config.Config) error { started++; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	if started != 1 {
@@ -59,11 +51,8 @@ func TestWatchOnceDownStarts(t *testing.T) {
 
 func TestWatchOnceStartFailureReported(t *testing.T) {
 	cfg := testConfig(t)
-	withHooks(t,
-		func(config.Config) error { return errDaemonFake },
-		func(config.Config) error { return errStartFake },
-	)
-	if err := WatchOnce(cfg); err == nil {
+	withCheckDaemon(t, func(config.Config) error { return errDaemonFake })
+	if err := WatchOnce(cfg, func(config.Config) error { return errStartFake }); err == nil {
 		t.Fatal("expected start failure to surface")
 	}
 	st := readWatchdogState(cfg)
@@ -75,22 +64,20 @@ func TestWatchOnceStartFailureReported(t *testing.T) {
 func TestWatchOnceBackoff(t *testing.T) {
 	cfg := testConfig(t)
 	started := 0
-	withHooks(t,
-		func(config.Config) error { return errDaemonFake },
-		func(config.Config) error { started++; return errStartFake },
-	)
+	withCheckDaemon(t, func(config.Config) error { return errDaemonFake })
+	fakeStart := func(config.Config) error { started++; return errStartFake }
 
-	if err := WatchOnce(cfg); err == nil {
+	if err := WatchOnce(cfg, fakeStart); err == nil {
 		t.Fatal("first call should attempt and fail")
 	}
-	if err := WatchOnce(cfg); err == nil {
+	if err := WatchOnce(cfg, fakeStart); err == nil {
 		t.Fatal("second call should attempt and fail")
 	}
 	// Third and fourth calls within the minute are backed off: no trip, no error.
-	if err := WatchOnce(cfg); err != nil {
+	if err := WatchOnce(cfg, fakeStart); err != nil {
 		t.Fatalf("backed-off call must exit 0, got %v", err)
 	}
-	if err := WatchOnce(cfg); err != nil {
+	if err := WatchOnce(cfg, fakeStart); err != nil {
 		t.Fatalf("backed-off call must exit 0, got %v", err)
 	}
 	if started != 2 {
@@ -101,17 +88,16 @@ func TestWatchOnceBackoff(t *testing.T) {
 func TestBackoffExpires(t *testing.T) {
 	cfg := testConfig(t)
 	started := 0
-	withHooks(t,
-		func(config.Config) error { return errDaemonFake },
-		func(config.Config) error { started++; return errStartFake },
-	)
-	_ = WatchOnce(cfg)
-	_ = WatchOnce(cfg)
+	withCheckDaemon(t, func(config.Config) error { return errDaemonFake })
+	fakeStart := func(config.Config) error { started++; return errStartFake }
+
+	_ = WatchOnce(cfg, fakeStart)
+	_ = WatchOnce(cfg, fakeStart)
 	// Simulate the window passing.
 	st := readWatchdogState(cfg)
 	st.LastAttempt = time.Now().Add(-2 * time.Minute)
 	writeWatchdogState(cfg, st)
-	if err := WatchOnce(cfg); err == nil {
+	if err := WatchOnce(cfg, fakeStart); err == nil {
 		t.Fatal("expired window should allow a new attempt")
 	}
 	if started != 3 {
@@ -125,7 +111,6 @@ func TestStateFileSurvives(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// Fresh reads are zero.
 	if st := readWatchdogState(cfg); st.AttemptsLastMinute != 0 {
 		t.Fatalf("fresh state = %+v", st)
 	}

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"heka/internal/config"
-	"heka/internal/daemon"
 	"heka/internal/ipc"
 )
 
@@ -27,9 +26,10 @@ var (
 		_, err := ipc.NewClient(cfg).Health()
 		return err
 	}
-	// StartDaemon spawns a detached daemon and waits for readiness.
-	StartDaemon = daemon.Start
 )
+
+// StartFunc is the function signature for starting the daemon.
+type StartFunc func(cfg config.Config) error
 
 // Installer manages the OS-level watchdog entry (SPEC-10 §3).
 type Installer interface {
@@ -43,19 +43,18 @@ type Installer interface {
 //  1. daemon alive?        → exit 0
 //  2. backoff in effect?   → exit 0 (don't pile on a crash loop)
 //  3. start, record attempt → exit 0 on success, 1 if it fails to come up
-func WatchOnce(cfg config.Config) error {
+func WatchOnce(cfg config.Config, startDaemon StartFunc) error {
 	if CheckDaemon(cfg) == nil {
 		return nil
 	}
 	state := readWatchdogState(cfg)
 	if state.backedOff() {
-		// Slide the cooldown window; attempts are not consumed by skips.
 		writeWatchdogState(cfg, state)
 		return nil
 	}
 	state.attempt()
 	writeWatchdogState(cfg, state)
-	return StartDaemon(cfg)
+	return startDaemon(cfg)
 }
 
 // watchdogState is the backoff bookkeeping. A file, not the DB: when the
@@ -67,7 +66,7 @@ type watchdogState struct {
 
 func (s watchdogState) backedOff() bool {
 	if time.Since(s.LastAttempt) > time.Minute {
-		return false // window expired; next attempt is allowed
+		return false
 	}
 	return s.AttemptsLastMinute >= maxAttemptsPerMinute
 }

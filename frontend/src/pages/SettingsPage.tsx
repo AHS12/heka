@@ -1,9 +1,19 @@
 // pages/SettingsPage.tsx — the settings surface: appearance (theme + accent,
-// both persisted shell stores) and the secrets vault manager (names in,
-// values go to the daemon's encrypted store and never come back).
+// both persisted shell stores), daemon startup/reliability toggles, and the
+// secrets vault manager (names in, values go to the daemon's encrypted store
+// and never come back).
 import {useState} from 'react'
 import {useQuery, useQueryClient, useMutation} from '@tanstack/react-query'
-import {apiErrorDetails, listSecrets, setSecret, deleteSecret} from '../lib/api'
+import {
+  apiErrorDetails,
+  listSecrets,
+  setSecret,
+  deleteSecret,
+  startupEnabled,
+  startupSet,
+  watchdogEnabled,
+  watchdogSet,
+} from '../lib/api'
 import {useTheme} from '../lib/theme'
 import {useAccent, ACCENT_COLORS, ACCENT_PRESETS} from '../lib/accent'
 import type {Accent} from '../lib/accent'
@@ -17,6 +27,8 @@ export function SettingsPage() {
     <div className="mx-auto max-w-2xl space-y-8">
       <h2 className="text-lg font-semibold">Settings</h2>
       <AppearanceSection />
+      <StartupSection />
+      <ReliabilitySection />
       <SecretsSection />
     </div>
   )
@@ -81,6 +93,127 @@ function AppearanceSection() {
         </div>
       </div>
     </section>
+  )
+}
+
+function StartupSection() {
+  const qc = useQueryClient()
+  const enabled = useQuery({queryKey: ['startup'], queryFn: startupEnabled})
+  const [error, setError] = useState<string | null>(null)
+
+  const toggle = useMutation({
+    mutationFn: (on: boolean) => startupSet(on),
+    onSuccess: () => {
+      setError(null)
+      void qc.invalidateQueries({queryKey: ['startup']})
+    },
+    onError: (err) => setError(apiErrorDetails(err).join('; ')),
+  })
+
+  return (
+    <section className="space-y-3">
+      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+        Startup
+      </h3>
+      <ToggleRow
+        label="Start with system"
+        hint="Register the daemon to start when you log in"
+        checked={enabled.data ?? false}
+        disabled={enabled.isLoading || toggle.isPending}
+        onChange={(on) => { setError(null); toggle.mutate(on) }}
+      />
+      {error && (
+        <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+      )}
+    </section>
+  )
+}
+
+function ReliabilitySection() {
+  const qc = useQueryClient()
+  const status = useQuery({queryKey: ['watchdog'], queryFn: watchdogEnabled})
+  const [error, setError] = useState<string | null>(null)
+
+  const toggle = useMutation({
+    mutationFn: (on: boolean) => watchdogSet(on),
+    onSuccess: () => {
+      setError(null)
+      void qc.invalidateQueries({queryKey: ['watchdog']})
+    },
+    onError: (err) => setError(apiErrorDetails(err).join('; ')),
+  })
+
+  const installed = status.data?.installed ?? false
+  const interval = status.data?.intervalMinutes ?? 5
+
+  return (
+    <section className="space-y-3">
+      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+        Reliability
+      </h3>
+      <ToggleRow
+        label="Watchdog guard"
+        hint={
+          installed
+            ? `Checks every ${interval}m — restarts the daemon if it goes down`
+            : 'Periodically checks the daemon and restarts it if it goes down'
+        }
+        checked={installed}
+        disabled={status.isLoading || toggle.isPending}
+        onChange={(on) => { setError(null); toggle.mutate(on) }}
+      />
+      {error && (
+        <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+      )}
+    </section>
+  )
+}
+
+function ToggleRow({
+  label,
+  hint,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  checked: boolean
+  disabled?: boolean
+  onChange: (on: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-zinc-200/80 bg-white/60 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+      <div>
+        <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+          {label}
+        </p>
+        {hint && (
+          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            {hint}
+          </p>
+        )}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring disabled:cursor-not-allowed disabled:opacity-50 ${
+          checked
+            ? 'bg-accent'
+            : 'bg-zinc-300 dark:bg-zinc-600'
+        }`}
+      >
+        <span
+          className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+            checked ? 'translate-x-6' : 'translate-x-1'
+          }`}
+        />
+      </button>
+    </div>
   )
 }
 

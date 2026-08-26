@@ -281,14 +281,96 @@ func TestValidateSchedule(t *testing.T) {
 
 func TestCountOccurrences(t *testing.T) {
 	start := time.Date(2026, 8, 24, 8, 0, 0, 0, time.UTC)
-	// Fires strictly before end; a 1s tail gives the full 10 buckets. (The
-	// engine treats this as heuristic anyway — anchors differ by ±1.)
 	end := start.Add(10*time.Minute + time.Second)
 	if n := countOccurrences("@every 1m", start, end); n != 10 {
 		t.Fatalf("count = %d, want 10", n)
 	}
-	// Empty windows count nothing.
 	if n := countOccurrences("@every 1m", end, end); n != 0 {
 		t.Fatalf("empty window count = %d", n)
+	}
+}
+
+func TestPauseResume(t *testing.T) {
+	database, sch, runner := setup(t)
+	saveSchedule(t, database, db.Schedule{
+		ID: "s7", Slug: "pause-test", TaskSlug: "daily", Kind: "recurring",
+		Cron: "@every 1s", Enabled: true, MissedPolicy: "skip", CreatedAt: db.Now(),
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := sch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	sch.Start(ctx)
+	defer sch.Stop()
+
+	// Wait for at least one fire.
+	deadline := time.Now().Add(3 * time.Second)
+	for runner.count() == 0 && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if runner.count() == 0 {
+		t.Fatal("schedule never fired before pause")
+	}
+
+	// Pause: ticks should stop, no skipped run rows written.
+	sch.Pause()
+	if !sch.IsPaused() {
+		t.Fatal("IsPaused should be true after Pause")
+	}
+	countBeforePause := runner.count()
+	time.Sleep(2500 * time.Millisecond) // wait for 2+ tick windows
+	if runner.count() != countBeforePause {
+		t.Fatalf("ticks fired while paused: %d → %d", countBeforePause, runner.count())
+	}
+
+	// Verify no skipped run rows were written for the pause period.
+	rows, _ := database.Runs().ListByTask("daily", 10)
+	for _, r := range rows {
+		if r.Status == "skipped" {
+			// Skipped rows from pause are NOT expected (unlike overlap skips).
+			t.Fatal("pause must not write skipped run rows")
+		}
+	}
+
+	// Resume: ticks should restart.
+	sch.Resume()
+	if sch.IsPaused() {
+		t.Fatal("IsPaused should be false after Resume")
+	}
+	deadline = time.Now().Add(3 * time.Second)
+	for runner.count() == countBeforePause && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if runner.count() == countBeforePause {
+		t.Fatal("ticks did not resume after Resume")
+	}
+}
+
+func TestHealthShowsPaused(t *testing.T) {
+	database, sch, _ := setup(t)
+	saveSchedule(t, database, db.Schedule{
+		ID: "s8", Slug: "health-pause", TaskSlug: "daily", Kind: "recurring",
+		Cron: "@every 1m", Enabled: true, MissedPolicy: "skip", CreatedAt: db.Now(),
+	})
+	if err := sch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sch.Start(ctx)
+	defer sch.Stop()
+
+	// Before pause: NextRun returns a time.
+	next, _ := sch.NextRun()
+	if next.IsZero() {
+		t.Fatal("NextRun should not be zero before pause")
+	}
+
+	sch.Pause()
+	// After pause: NextRun still returns the same (frozen) time.
+	nextAfter, _ := sch.NextRun()
+	if !nextAfter.Equal(next) {
+		t.Fatalf("NextRun changed while paused: %v → %v", next, nextAfter)
 	}
 }

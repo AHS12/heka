@@ -51,9 +51,10 @@ type Scheduler struct {
 	run  Runner
 	cron *cron.Cron
 
-	mu   sync.Mutex
-	recs map[string]record
-	ctx  context.Context
+	mu      sync.Mutex
+	recs    map[string]record
+	ctx     context.Context
+	paused  bool
 }
 
 // New builds an empty scheduler. Call Sync to load schedules, Start to begin
@@ -79,6 +80,29 @@ func (s *Scheduler) Start(ctx context.Context) {
 		<-ctx.Done()
 		s.Stop()
 	}()
+}
+
+// Pause freezes the scheduler: recurring ticks and one-time jobs are silently
+// skipped without writing skipped run rows. next_run_at stops advancing.
+// Persisted via the caller (daemon KV) so the flag survives restarts.
+func (s *Scheduler) Pause() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.paused = true
+}
+
+// Resume unfreezes the scheduler; the next cron tick will fire normally.
+func (s *Scheduler) Resume() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.paused = false
+}
+
+// IsPaused reports whether the scheduler is currently paused.
+func (s *Scheduler) IsPaused() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.paused
 }
 
 // Stop halts the cron loop and all pending one-time timers. Idempotent.
@@ -145,12 +169,17 @@ func (s *Scheduler) stopRecordLocked(id string) {
 	}
 }
 
-// fire handles a recurring tick (SPEC-09 §2).
+// fire handles a recurring tick (SPEC-09 §2). When the scheduler is paused
+// the tick is silently dropped — no skipped run row, next_run_at frozen.
 func (s *Scheduler) fire(id string) {
 	s.mu.Lock()
 	rec, ok := s.recs[id]
+	paused := s.paused
 	s.mu.Unlock()
 	if !ok {
+		return
+	}
+	if paused {
 		return
 	}
 	sch, err := s.db.Schedules().Get(id)
@@ -166,7 +195,14 @@ func (s *Scheduler) fire(id string) {
 }
 
 // fireOnetime dispatches once and marks the job done (SPEC-09 §2).
+// Skipped when the scheduler is paused.
 func (s *Scheduler) fireOnetime(id string) {
+	s.mu.Lock()
+	paused := s.paused
+	s.mu.Unlock()
+	if paused {
+		return
+	}
 	sch, err := s.db.Schedules().Get(id)
 	if err != nil || !sch.Enabled {
 		return

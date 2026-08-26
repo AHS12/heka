@@ -27,10 +27,9 @@ import (
 	"heka/internal/daemon"
 )
 
-const (
-	appName    = "Heka"
-	appVersion = "0.1.0"
-)
+const appName = "Heka"
+
+var appVersion = "0.1.0"
 
 //go:embed all:frontend/dist
 var assets embed.FS
@@ -96,17 +95,17 @@ func runGUI() {
 	}
 }
 
-// runDaemon runs the daemon in the foreground (SPEC-06).
+// runDaemon runs the daemon in the foreground with a system tray (SPEC-15).
 func runDaemon() {
 	cfg, err := config.LoadDefault()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "heka:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("heka daemon v%s starting (foreground)\n", appVersion)
+	fmt.Printf("heka daemon v%s starting (tray)\n", appVersion)
 	fmt.Printf("  data dir:  %s\n", cfg.DataDir)
 	fmt.Printf("  tasks dir: %s\n", cfg.TasksDir)
-	if err := daemon.Run(cfg, appVersion); err != nil {
+	if err := daemon.RunTray(cfg, appVersion); err != nil {
 		fmt.Fprintln(os.Stderr, "heka:", err)
 		os.Exit(1)
 	}

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -17,6 +18,7 @@ import (
 	"heka/internal/core/task"
 	"heka/internal/daemon"
 	"heka/internal/ipc"
+	"heka/internal/osapp"
 )
 
 // Info is the static application information shown by the frontend shell.
@@ -60,6 +62,8 @@ type ipcCaller interface {
 	ListRuns(f ipc.RunFilters) (ipc.RunListResult, error)
 	Run(runID string) (ipc.Run, error)
 	Cancel(slug string) error
+	PauseScheduler() error
+	ResumeScheduler() error
 }
 
 // ErrDialogCanceled is the sentinel for a user canceling an open/save dialog;
@@ -566,6 +570,62 @@ func (a *App) CancelRun(slug string) error {
 
 func (a *App) ListTasksForSchedules() ([]TaskSummaryDTO, error) {
 	return a.ListTasks()
+}
+
+// ---- Startup / Watchdog passthroughs (SPEC-15 §4) — local OS operations,
+// not IPC. The daemon is not involved; these talk to the OS directly.
+
+// StartupEnabled reports whether the daemon is registered to start with the OS.
+func (a *App) StartupEnabled() (bool, error) {
+	return osapp.NewStartupRegistrar().Enabled()
+}
+
+// StartupSet enables or disables OS-level startup registration for the daemon.
+func (a *App) StartupSet(on bool) error {
+	if on {
+		exe, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		return osapp.NewStartupRegistrar().Enable(exe)
+	}
+	return osapp.NewStartupRegistrar().Disable()
+}
+
+// WatchdogEnabled reports whether the OS-level watchdog is installed.
+func (a *App) WatchdogEnabled() (bool, time.Duration, error) {
+	installer := osapp.NewInstaller()
+	return installer.Status()
+}
+
+// WatchdogSet installs or uninstalls the OS-level watchdog.
+func (a *App) WatchdogSet(on bool) error {
+	if on {
+		exe, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		return osapp.NewInstaller().Install(osapp.DefaultWatchdogInterval, exe)
+	}
+	return osapp.NewInstaller().Uninstall()
+}
+
+// PauseScheduler pauses the scheduler (SPEC-15 §2).
+func (a *App) PauseScheduler() error {
+	client, err := a.cfgClient()
+	if err != nil {
+		return err
+	}
+	return wrapIPCError(client.PauseScheduler())
+}
+
+// ResumeScheduler resumes the scheduler (SPEC-15 §2).
+func (a *App) ResumeScheduler() error {
+	client, err := a.cfgClient()
+	if err != nil {
+		return err
+	}
+	return wrapIPCError(client.ResumeScheduler())
 }
 
 // cfgClient lazily resolves the configuration and IPC client. Cached so

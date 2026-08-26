@@ -23,7 +23,10 @@ type Deps struct {
 	TaskFiles     TaskFilesystem // task YAML read/write (SPEC-13 §1)
 	SyncTasks     func() error   // reindex tasks dir after file mutations
 	Runner        Runner
-	Shutdown      func() // graceful daemon shutdown (SPEC-06 sequence)
+	Shutdown      func()            // graceful daemon shutdown (SPEC-06 sequence)
+	Pause         func()            // scheduler pause (SPEC-15 §2)
+	Resume        func()            // scheduler resume (SPEC-15 §2)
+	IsPaused      func() bool       // scheduler paused query (SPEC-15 §2)
 }
 
 // TaskFilesystem is the filesystem half of task CRUD (SPEC-13 §1). The daemon
@@ -85,6 +88,10 @@ func (s *Server) Handler() http.Handler {
 	// Secrets (SPEC-11).
 	mux.HandleFunc("/v1/secrets", s.handleSecrets)
 	mux.HandleFunc("/v1/secrets/{key}", s.handleSecret)
+
+	// Scheduler control (SPEC-15 §2).
+	mux.HandleFunc("/v1/scheduler/pause", s.handleSchedulerPause)
+	mux.HandleFunc("/v1/scheduler/resume", s.handleSchedulerResume)
 
 	// Unknown routes → JSON 404 envelope.
 	mux.HandleFunc("/", notFound)

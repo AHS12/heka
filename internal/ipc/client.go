@@ -383,3 +383,13 @@ func (c *Client) DeleteSecret(key string) error {
 func (c *Client) Shutdown() error {
 	return c.do("POST", "/v1/daemon/shutdown", nil, nil)
 }
+
+// PauseScheduler pauses the scheduler (SPEC-15 §2).
+func (c *Client) PauseScheduler() error {
+	return c.do("POST", "/v1/scheduler/pause", nil, nil)
+}
+
+// ResumeScheduler resumes the scheduler (SPEC-15 §2).
+func (c *Client) ResumeScheduler() error {
+	return c.do("POST", "/v1/scheduler/resume", nil, nil)
+}

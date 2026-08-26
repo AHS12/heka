@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"heka/internal/config"
+	"heka/internal/daemon"
 	"heka/internal/ipc"
 )
 
@@ -30,9 +31,10 @@ type APIClient interface {
 
 // App wires one command invocation. stdout/stderr are injectable for tests.
 type App struct {
-	cfg    config.Config
-	client APIClient
-	json   bool
+	cfg         config.Config
+	client      APIClient
+	json        bool
+	startDaemon func(config.Config) error // seam: daemon.Start
 
 	stdout io.Writer
 	stderr io.Writer
@@ -62,7 +64,7 @@ func (a *App) RunErr(args []string) error {
 // NewApp builds the command tree. Exporting it keeps tests honest about
 // construction.
 func NewApp(cfg config.Config, client APIClient) *App {
-	a := &App{cfg: cfg, client: client, stdout: os.Stdout, stderr: os.Stderr}
+	a := &App{cfg: cfg, client: client, stdout: os.Stdout, stderr: os.Stderr, startDaemon: daemon.Start}
 	root := &cobra.Command{
 		Use:           "heka",
 		Short:         "Heka — a local task runner and scheduler",

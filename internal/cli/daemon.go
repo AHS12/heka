@@ -27,7 +27,7 @@ func (a *App) daemonCmd() *cobra.Command {
 			Short: "Start the daemon in the background",
 			Args:  cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, args []string) error {
-				if err := daemon.Start(a.cfg); err != nil {
+				if err := a.startDaemon(a.cfg); err != nil {
 					return err
 				}
 				if a.json {
@@ -80,7 +80,7 @@ func (a *App) daemonCmd() *cobra.Command {
 			},
 		},
 	)
-	cmd.AddCommand(a.watchCmd(), a.watchdogCmd())
+	cmd.AddCommand(a.watchCmd(), a.watchdogCmd(), a.startupCmd())
 	return cmd
 }
 
@@ -94,13 +94,13 @@ func (a *App) watchCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if once {
-				return osapp.WatchOnce(a.cfg)
+				return osapp.WatchOnce(a.cfg, a.startDaemon)
 			}
 			// Foreground loop for manual testing / container-style runs.
 			ticker := time.NewTicker(30 * time.Second)
 			defer ticker.Stop()
 			for {
-				if err := osapp.WatchOnce(a.cfg); err != nil {
+				if err := osapp.WatchOnce(a.cfg, a.startDaemon); err != nil {
 					if a.json {
 						a.printJSON(map[string]any{"ok": false, "error": err.Error()})
 					} else {
@@ -202,5 +202,79 @@ func (a *App) watchdogCmd() *cobra.Command {
 		},
 	}
 	cmd.AddCommand(install, uninstall, status)
+	return cmd
+}
+
+// startupCmd manages OS-level startup registration (SPEC-15 §3).
+func (a *App) startupCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "startup",
+		Short: "Manage OS startup registration (user-level, no admin)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return errors.New("specify: heka daemon startup on|off|status")
+		},
+	}
+
+	on := &cobra.Command{
+		Use:   "on",
+		Short: "Register the daemon to start with the OS",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			exe, err := os.Executable()
+			if err != nil {
+				return err
+			}
+			if err := osapp.NewStartupRegistrar().Enable(exe); err != nil {
+				return err
+			}
+			if a.json {
+				a.printJSON(map[string]any{"ok": true, "action": "startup_on"})
+				return nil
+			}
+			fmt.Fprintln(a.stdout, "startup registration enabled")
+			return nil
+		},
+	}
+
+	off := &cobra.Command{
+		Use:   "off",
+		Short: "Remove OS startup registration",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := osapp.NewStartupRegistrar().Disable(); err != nil {
+				return err
+			}
+			if a.json {
+				a.printJSON(map[string]any{"ok": true, "action": "startup_off"})
+				return nil
+			}
+			fmt.Fprintln(a.stdout, "startup registration removed")
+			return nil
+		},
+	}
+
+	status := &cobra.Command{
+		Use:   "status",
+		Short: "Show OS startup registration state",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			enabled, err := osapp.NewStartupRegistrar().Enabled()
+			if err != nil {
+				return err
+			}
+			if a.json {
+				a.printJSON(map[string]any{"enabled": enabled})
+				return nil
+			}
+			if enabled {
+				fmt.Fprintln(a.stdout, "startup: enabled")
+			} else {
+				fmt.Fprintln(a.stdout, "startup: not enabled")
+			}
+			return nil
+		},
+	}
+
+	cmd.AddCommand(on, off, status)
 	return cmd
 }

@@ -34,6 +34,12 @@ import {
   ListRuns,
   GetRun,
   CancelRun,
+  StartupEnabled,
+  StartupSet,
+  WatchdogEnabled,
+  WatchdogSet,
+  PauseScheduler,
+  ResumeScheduler,
 } from '@wailsjs/go/app/App'
 import type {task} from '@wailsjs/go/models'
 
@@ -457,6 +463,59 @@ export async function getRun(runID: string): Promise<Run> {
 export async function cancelRun(slug: string): Promise<void> {
   try {
     await CancelRun(slug)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+// ---- Startup / Watchdog / Scheduler control (SPEC-15).
+
+export async function startupEnabled(): Promise<boolean> {
+  try {
+    return await StartupEnabled()
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function startupSet(on: boolean): Promise<void> {
+  try {
+    await StartupSet(on)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function watchdogEnabled(): Promise<{installed: boolean; intervalMinutes: number}> {
+  try {
+    const result = await WatchdogEnabled()
+    // Wails flattens (bool, time.Duration, error) — result is [boolean, number].
+    const [installed, intervalMs] = result as unknown as [boolean, number]
+    return {installed, intervalMinutes: Math.round((intervalMs ?? 0) / 60000)}
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function watchdogSet(on: boolean): Promise<void> {
+  try {
+    await WatchdogSet(on)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function pauseScheduler(): Promise<void> {
+  try {
+    await PauseScheduler()
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function resumeScheduler(): Promise<void> {
+  try {
+    await ResumeScheduler()
   } catch (err) {
     throw toAPIError(err)
   }

@@ -1,6 +1,6 @@
 # SPEC-15 — Tray & OS Startup
 
-Status: **Draft** · Depends on: SPEC-08 (daemon control), SPEC-09 (scheduler), SPEC-10 (watchdog), SPEC-12 (GUI) · Master spec: D6, §3, PRD §16–17
+Status: **In Progress** · Depends on: SPEC-08 (daemon control), SPEC-09 (scheduler), SPEC-10 (watchdog), SPEC-12 (GUI) · Master spec: D6, §3, PRD §16–17
 
 ## Goal
 

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	"heka/internal/db"
 	"heka/internal/ipc"
 	"heka/internal/notify"
+	"heka/internal/osapp"
 )
 
 const (
@@ -42,6 +44,24 @@ type Daemon struct {
 	startedAt time.Time
 	shutdown  chan struct{}
 	once      sync.Once
+}
+
+// Pause halts the scheduler; recurring and one-time ticks are silently
+// skipped. The flag is persisted in KV so it survives daemon restarts.
+func (d *Daemon) Pause() {
+	d.scheduler.Pause()
+	_ = d.db.KV().Set("scheduler_paused", "true")
+}
+
+// Resume unfreezes the scheduler.
+func (d *Daemon) Resume() {
+	d.scheduler.Resume()
+	_ = d.db.KV().Delete("scheduler_paused")
+}
+
+// SchedulerPaused reports whether the scheduler is currently paused.
+func (d *Daemon) SchedulerPaused() bool {
+	return d.scheduler.IsPaused()
 }
 
 func newDaemon(cfg config.Config, version string, database *db.DB) *Daemon {
@@ -73,8 +93,69 @@ func Run(cfg config.Config, version string) error {
 	}
 	defer ln.Close()
 
-	// Daemon process env first, then the secret store (SPEC-11 §4), for every
-	// ${VAR} resolution the executor and notifier perform.
+	d, handler, err := startCore(cfg, version, database)
+	if err != nil {
+		return err
+	}
+
+	server := &http.Server{Handler: handler}
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- server.Serve(ln) }()
+
+	select {
+	case <-d.shutdown:
+	case err := <-serveErr:
+		if err != nil {
+			return err
+		}
+	}
+
+	_ = server.Close()
+	d.shutdownAll()
+	return nil
+}
+
+// RunTray starts the daemon with a system tray (SPEC-15 §1). The core runs
+// in a goroutine; the main thread is handed to systray.Run which blocks until
+// Quit is clicked.
+func RunTray(cfg config.Config, version string) error {
+	database, err := db.Open(cfg.DataDir)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer database.Close()
+
+	d, handler, err := startCore(cfg, version, database)
+	if err != nil {
+		return err
+	}
+
+	// IPC server in background (tray is the main-thread owner).
+	server := &http.Server{Handler: handler}
+	go func() { _ = server.Serve(mustListen(cfg)) }()
+
+	// Tray blocks the main thread; core is already running in goroutines.
+	osapp.RunTray(osapp.TrayDeps{
+		Cfg:        cfg,
+		DB:         database,
+		Pause:      d.Pause,
+		Resume:     d.Resume,
+		IsPaused:   d.SchedulerPaused,
+		Version:    version,
+		OnShutdown: func() { d.once.Do(func() { close(d.shutdown) }) },
+	})
+
+	// Tray exited (Quit clicked): graceful shutdown.
+	_ = server.Close()
+	d.shutdownAll()
+	return nil
+}
+
+// startCore initialises the executor, scheduler, heartbeat, tasks-sync, and
+// wires the IPC handler. Returns the daemon (for Pause/Resume/health) and the
+// HTTP handler. Both Run and RunTray delegate here.
+func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, http.Handler, error) {
+	// Daemon process env first, then the secret store (SPEC-11 §4).
 	resolver := func(name string) (string, bool) {
 		if v, ok := os.LookupEnv(name); ok {
 			return v, true
@@ -85,7 +166,7 @@ func Run(cfg config.Config, version string) error {
 	d := newDaemon(cfg, version, database)
 	d.exec = executor.New(database, cfg.MaxOutputBytes, 5*time.Second, resolver, cfg.RunArtifactsDir)
 
-	// Notifications (SPEC-11): fire on group completion, per-task notify_on.
+	// Notifications (SPEC-11).
 	notifier := notify.New(
 		notify.WithResolver(resolver),
 		notify.WithLogger(func(format string, args ...any) {
@@ -104,11 +185,14 @@ func Run(cfg config.Config, version string) error {
 		notifier.NotifyTaskResult(&t, r.FinalStatus)
 	})
 
-	// Scheduler (SPEC-09): load schedules, start ticking, reconcile missed
-	// runs while the daemon was down.
+	// Scheduler (SPEC-09).
 	d.scheduler = scheduler.New(database, d.exec)
 	if err := d.scheduler.Sync(); err != nil {
-		return fmt.Errorf("load schedules: %w", err)
+		return nil, nil, fmt.Errorf("load schedules: %w", err)
+	}
+	// Restore persisted pause state (SPEC-15 §2).
+	if v, _, _ := database.KV().Get("scheduler_paused"); v == "true" {
+		d.scheduler.Pause()
 	}
 	d.scheduler.Start(d.execCtx)
 	go func() {
@@ -132,24 +216,12 @@ func Run(cfg config.Config, version string) error {
 		SyncTasks:     func() error { d.syncTasks(); return nil },
 		Runner:        d.exec,
 		Shutdown:      func() { d.once.Do(func() { close(d.shutdown) }) },
+		Pause:         d.Pause,
+		Resume:        d.Resume,
+		IsPaused:      d.SchedulerPaused,
 	}).Handler()
 
-	server := &http.Server{Handler: handler}
-	serveErr := make(chan error, 1)
-	go func() { serveErr <- server.Serve(ln) }()
-
-	select {
-	case <-d.shutdown:
-	case err := <-serveErr:
-		if err != nil {
-			return err
-		}
-	}
-
-	// Graceful: stop accepting, drain in-flight groups, then close.
-	_ = server.Close()
-	d.shutdownAll()
-	return nil
+	return d, handler, nil
 }
 
 // noteStartup records daemon identity in kv (SPEC-06 §3).
@@ -200,7 +272,11 @@ func (d *Daemon) health() ipc.Health {
 		LastHeartbeat: parsed,
 	}
 	if d.scheduler != nil {
-		h.Scheduler = "running"
+		if d.scheduler.IsPaused() {
+			h.Scheduler = "paused"
+		} else {
+			h.Scheduler = "running"
+		}
 		if next, taskSlug := d.scheduler.NextRun(); !next.IsZero() {
 			h.NextRunAt = next
 			h.NextTaskSlug = taskSlug
@@ -218,4 +294,14 @@ func (d *Daemon) shutdownAll() {
 	for d.exec.Active() > 0 && time.Now().Before(deadline) {
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+// mustListen binds the IPC endpoint or panics. Used by RunTray where the
+// listener is started in a goroutine and a fatal error should crash fast.
+func mustListen(cfg config.Config) net.Listener {
+	ln, err := ipc.Listen(cfg)
+	if err != nil {
+		panic(fmt.Sprintf("bind IPC endpoint: %v", err))
+	}
+	return ln
 }

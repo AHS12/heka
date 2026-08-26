@@ -314,3 +314,23 @@ func toRun(r db.Run) Run {
 	}
 	return out
 }
+
+func (s *Server) handleSchedulerPause(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, "POST") {
+		return
+	}
+	if s.deps.Pause != nil {
+		s.deps.Pause()
+	}
+	respondOK(w)
+}
+
+func (s *Server) handleSchedulerResume(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, "POST") {
+		return
+	}
+	if s.deps.Resume != nil {
+		s.deps.Resume()
+	}
+	respondOK(w)
+}
