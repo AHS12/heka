@@ -80,7 +80,7 @@ func (i *launchdInstaller) Status() (bool, time.Duration, error) {
 		return false, 0, nil
 	}
 	if strings.Contains(string(out), "com.heka.watchdog") {
-		return true, time.Minute, nil
+		return true, DefaultWatchdogInterval, nil
 	}
 	return false, 0, nil
 }

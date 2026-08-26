@@ -104,7 +104,7 @@ func (i *systemdInstaller) Status() (bool, time.Duration, error) {
 	interval := time.Duration(0)
 	for _, line := range strings.Split(string(out), "\n") {
 		if strings.Contains(line, timerName) {
-			interval = time.Minute // cadence lives in the unit file; existence is the signal
+			interval = DefaultWatchdogInterval // cadence lives in the unit file; existence is the signal
 			break
 		}
 	}

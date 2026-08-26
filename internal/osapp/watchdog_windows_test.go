@@ -110,6 +110,23 @@ func TestSchtasksNotInstalled(t *testing.T) {
 	}
 }
 
+func TestSchtasksStatusFallsBackToDefault(t *testing.T) {
+	// Task exists but the Repeat line is missing or unparseable (locale
+	// variance) — Status must fall back to the default interval, never 0.
+	calls := fakeHiddenCommand(t, []string{"Task To Run: C:\\heka\\heka.exe daemon watch --once"})
+	inst := &schtasksInstaller{}
+	installed, interval, err := inst.Status()
+	if err != nil || !installed {
+		t.Fatalf("status = %v %v %v", installed, interval, err)
+	}
+	if interval != DefaultWatchdogInterval {
+		t.Fatalf("interval = %v, want default %v", interval, DefaultWatchdogInterval)
+	}
+	if !strings.Contains((*calls)[0], "/Query") {
+		t.Fatalf("status query missing: %s", (*calls)[0])
+	}
+}
+
 func TestSchtasksUninstall(t *testing.T) {
 	calls := fakeHiddenCommand(t, nil)
 	inst := &schtasksInstaller{}

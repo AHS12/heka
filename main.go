@@ -74,8 +74,15 @@ func main() {
 	}
 }
 
-// runGUI starts the Wails desktop window (SPEC-01 §3).
+// runGUI starts the Wails desktop window (SPEC-01 §3). The single-instance
+// guard runs first: if another GUI is already open, tell the user and exit
+// without creating a second window.
 func runGUI() {
+	if !app.TryLockGUI() {
+		app.ShowGUIAlreadyRunning()
+		return
+	}
+	defer app.UnlockGUI()
 	a := app.NewApp(appName, appVersion)
 	err := wails.Run(&options.App{
 		Title:     appName,

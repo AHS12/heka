@@ -35,33 +35,33 @@ func (s *stubCaller) CreateTask(string) (ipc.TaskDetail, error) { return s.detai
 func (s *stubCaller) UpdateTask(string, string) (ipc.TaskDetail, error) {
 	return s.detail, s.err
 }
-func (s *stubCaller) DeleteTask(string) error                         { return s.err }
-func (s *stubCaller) TaskYAML(string) (string, error)                 { return s.yaml, s.err }
-func (s *stubCaller) ValidateTaskYAML(string) ([]string, error)       { return s.errs, s.err }
-func (s *stubCaller) ParseTask(string) (ipc.TaskDetail, error)        { return s.detail, s.err }
-func (s *stubCaller) RunTask(string, string) (ipc.RunResponse, error) { return s.run, s.err }
-func (s *stubCaller) SetTaskEnabled(string, bool) error               { return s.err }
-func (s *stubCaller) SetSecret(string, string) error                  { return s.err }
-func (s *stubCaller) ListSecrets() ([]string, error)                  { return nil, s.err }
-func (s *stubCaller) DeleteSecret(string) error                       { return s.err }
+func (s *stubCaller) DeleteTask(string) error                              { return s.err }
+func (s *stubCaller) TaskYAML(string) (string, error)                      { return s.yaml, s.err }
+func (s *stubCaller) ValidateTaskYAML(string) ([]string, error)            { return s.errs, s.err }
+func (s *stubCaller) ParseTask(string) (ipc.TaskDetail, error)             { return s.detail, s.err }
+func (s *stubCaller) RunTask(string, string) (ipc.RunResponse, error)      { return s.run, s.err }
+func (s *stubCaller) SetTaskEnabled(string, bool) error                    { return s.err }
+func (s *stubCaller) SetSecret(string, string) error                       { return s.err }
+func (s *stubCaller) ListSecrets() ([]string, error)                       { return nil, s.err }
+func (s *stubCaller) DeleteSecret(string) error                            { return s.err }
 func (s *stubCaller) ListSchedulesFiltered(string) ([]ipc.Schedule, error) { return nil, s.err }
 func (s *stubCaller) CreateSchedule(ipc.Schedule) (ipc.Schedule, error)    { return ipc.Schedule{}, s.err }
 func (s *stubCaller) UpdateSchedule(string, ipc.Schedule) (ipc.Schedule, error) {
 	return ipc.Schedule{}, s.err
 }
-func (s *stubCaller) DeleteSchedule(string) error     { return s.err }
-func (s *stubCaller) EnableSchedule(string) error     { return s.err }
-func (s *stubCaller) DisableSchedule(string) error    { return s.err }
+func (s *stubCaller) DeleteSchedule(string) error  { return s.err }
+func (s *stubCaller) EnableSchedule(string) error  { return s.err }
+func (s *stubCaller) DisableSchedule(string) error { return s.err }
 func (s *stubCaller) ListRuns(ipc.RunFilters) (ipc.RunListResult, error) {
 	return ipc.RunListResult{}, s.err
 }
-func (s *stubCaller) Run(string) (ipc.Run, error)    { return ipc.Run{}, s.err }
-func (s *stubCaller) Cancel(string) error            { return s.err }
-func (s *stubCaller) PauseScheduler() error              { return s.err }
-func (s *stubCaller) ResumeScheduler() error             { return s.err }
-func (s *stubCaller) Stats() (ipc.Stats, error)          { return ipc.Stats{}, s.err }
-func (s *stubCaller) GetSettings() (ipc.SettingsDTO, error)  { return ipc.SettingsDTO{}, s.err }
-func (s *stubCaller) UpdateSettings(ipc.SettingsDTO) error   { return s.err }
+func (s *stubCaller) Run(string) (ipc.Run, error)           { return ipc.Run{}, s.err }
+func (s *stubCaller) Cancel(string) error                   { return s.err }
+func (s *stubCaller) PauseScheduler() error                 { return s.err }
+func (s *stubCaller) ResumeScheduler() error                { return s.err }
+func (s *stubCaller) Stats() (ipc.Stats, error)             { return ipc.Stats{}, s.err }
+func (s *stubCaller) GetSettings() (ipc.SettingsDTO, error) { return ipc.SettingsDTO{}, s.err }
+func (s *stubCaller) UpdateSettings(ipc.SettingsDTO) error  { return s.err }
 
 func newAppWith(caller ipcCaller, started *int, startErr error) *App {
 	a := NewApp("Heka", "0.1.0")
@@ -196,6 +196,25 @@ func TestWatchdogEnabledNotInstalled(t *testing.T) {
 	}
 	if dto.Installed || dto.IntervalMinutes != 0 {
 		t.Fatalf("dto = %+v, want not installed + 0m", dto)
+	}
+}
+
+func TestWatchdogEnabledZeroIntervalFallsBackToDefault(t *testing.T) {
+	// A platform Status() that reports installed with an unparseable interval
+	// must never surface 0m to the Settings page.
+	orig := osapp.NewInstaller
+	osapp.NewInstaller = func() osapp.Installer {
+		return fakeInstaller{installed: true, interval: 0}
+	}
+	defer func() { osapp.NewInstaller = orig }()
+
+	a := NewApp("Heka", "0.1.0")
+	dto, err := a.WatchdogEnabled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !dto.Installed || dto.IntervalMinutes != int64(osapp.DefaultWatchdogInterval.Minutes()) {
+		t.Fatalf("dto = %+v, want installed + default %dm", dto, int(osapp.DefaultWatchdogInterval.Minutes()))
 	}
 }
 

@@ -94,5 +94,11 @@ func (i *schtasksInstaller) Status() (bool, time.Duration, error) {
 			}
 		}
 	}
+	// The task exists but the cadence line didn't parse (locale variance of
+	// `schtasks /Query /V`). Fall back to the default install interval so the
+	// Settings page never shows 0m.
+	if interval == 0 {
+		interval = DefaultWatchdogInterval
+	}
 	return true, interval, nil
 }

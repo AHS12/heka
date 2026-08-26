@@ -610,9 +610,16 @@ func (a *App) WatchdogEnabled() (WatchdogStatusDTO, error) {
 	if err != nil {
 		return WatchdogStatusDTO{}, err
 	}
+	// A platform Status() can report 0 while installed (unparseable OS
+	// output). Never surface 0m to the Settings page — fall back to the
+	// default install interval.
+	intervalMinutes := int64(interval.Minutes())
+	if installed && intervalMinutes <= 0 {
+		intervalMinutes = int64(osapp.DefaultWatchdogInterval.Minutes())
+	}
 	return WatchdogStatusDTO{
 		Installed:       installed,
-		IntervalMinutes: int64(interval.Minutes()),
+		IntervalMinutes: intervalMinutes,
 	}, nil
 }
 
