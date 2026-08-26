@@ -19,11 +19,14 @@ import {
   getSettings,
   updateSettings,
 } from '../lib/api'
-import {useTheme} from '../lib/theme'
+import {useTheme, LIGHT_VARIANTS, DARK_VARIANTS} from '../lib/theme'
+import type {ThemeVariant} from '../lib/theme'
 import {useAccent, ACCENT_COLORS, ACCENT_PRESETS} from '../lib/accent'
 import type {Accent} from '../lib/accent'
 import type {ThemeChoice} from '../lib/theme'
+import {useAnimations} from '../lib/animations'
 import {Field, SelectField, TextInput, pillBtn} from '../components/controls'
+import {Switch} from '@heroui/react'
 
 const SECRETS_KEY = ['secrets'] as const
 
@@ -41,9 +44,22 @@ export function SettingsPage() {
   )
 }
 
+const VARIANT_LABELS: Record<ThemeVariant, string> = {
+  'khaki': 'Khaki',
+  'crt': 'CRT',
+  'gradient': 'Gradient',
+  'high-contrast': 'High Contrast',
+}
+
 function AppearanceSection() {
-  const {choice, setTheme} = useTheme()
+  const {choice, effectiveVariant, setTheme, setVariant} = useTheme()
   const {accent, customColor, setAccent, setCustomColor} = useAccent()
+  const {enabled: animationsOn, setEnabled: setAnimations} = useAnimations()
+
+  // Show mode-specific variants
+  const variants = choice === 'dark' || (choice === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)')?.matches)
+    ? DARK_VARIANTS
+    : LIGHT_VARIANTS
   return (
     <section className="space-y-3">
       <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
@@ -61,6 +77,15 @@ function AppearanceSection() {
               {id: 'dark', label: 'Dark'},
               {id: 'system', label: 'System'},
             ]}
+          />
+        </Field>
+        <Field label="Style">
+          <SelectField
+            aria-label="Theme variant"
+            value={effectiveVariant}
+            onChange={(v) => setVariant(v as ThemeVariant)}
+            className="w-40"
+            items={variants.map((v) => ({id: v, label: VARIANT_LABELS[v]}))}
           />
         </Field>
         <div className="flex items-center gap-2 pt-5">
@@ -97,6 +122,29 @@ function AppearanceSection() {
             />
             Custom
           </label>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center justify-between rounded-xl border border-zinc-200/80 bg-white/60 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+          <div>
+            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              Animations
+            </p>
+            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              Enable motion effects and transitions
+            </p>
+          </div>
+          <Switch
+            isSelected={animationsOn}
+            onChange={setAnimations}
+            aria-label="Toggle animations"
+          >
+            <Switch.Content>
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+            </Switch.Content>
+          </Switch>
         </div>
       </div>
     </section>
@@ -241,25 +289,18 @@ function ToggleRow({
           </p>
         )}
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
+      <Switch
+        isSelected={checked}
+        isDisabled={disabled}
+        onChange={onChange}
         aria-label={label}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring disabled:cursor-not-allowed disabled:opacity-50 ${
-          checked
-            ? 'bg-accent'
-            : 'bg-zinc-300 dark:bg-zinc-600'
-        }`}
       >
-        <span
-          className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-            checked ? 'translate-x-6' : 'translate-x-1'
-          }`}
-        />
-      </button>
+        <Switch.Content>
+          <Switch.Control>
+            <Switch.Thumb />
+          </Switch.Control>
+        </Switch.Content>
+      </Switch>
     </div>
   )
 }

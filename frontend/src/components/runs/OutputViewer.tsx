@@ -1,4 +1,5 @@
 import {useState} from 'react'
+import {Tabs} from '@heroui/react'
 import type {Run} from '../../lib/api'
 
 function formatDuration(ms?: number) {
@@ -35,30 +36,23 @@ export function OutputViewer({run}: {run: Run}) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <div className="flex overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
-          <button
-            type="button"
-            onClick={() => setTab('stdout')}
-            className={`px-3 py-1 text-xs font-medium outline-none ${
-              tab === 'stdout'
-                ? 'bg-accent text-accent-contrast'
-                : 'bg-white/70 text-zinc-600 hover:bg-zinc-100 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:bg-zinc-800'
-            }`}
-          >
-            STDOUT
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('stderr')}
-            className={`px-3 py-1 text-xs font-medium outline-none ${
-              tab === 'stderr'
-                ? 'bg-accent text-accent-contrast'
-                : 'bg-white/70 text-zinc-600 hover:bg-zinc-100 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:bg-zinc-800'
-            }`}
-          >
-            STDERR
-          </button>
-        </div>
+        <Tabs
+          selectedKey={tab}
+          onSelectionChange={(key) => setTab(key as 'stdout' | 'stderr')}
+        >
+          <Tabs.ListContainer>
+            <Tabs.List aria-label="Output stream">
+              <Tabs.Tab id="stdout">
+                STDOUT
+                <Tabs.Indicator />
+              </Tabs.Tab>
+              <Tabs.Tab id="stderr">
+                STDERR
+                <Tabs.Indicator />
+              </Tabs.Tab>
+            </Tabs.List>
+          </Tabs.ListContainer>
+        </Tabs>
         <button
           type="button"
           onClick={handleCopy}

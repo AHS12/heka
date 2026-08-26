@@ -2,18 +2,19 @@
 // type, runtime, enabled toggle, last run status/time, Run + delete actions.
 // Row click opens the editor; delete is a two-step inline confirm.
 import {useState} from 'react'
+import {Chip} from '@heroui/react'
 import {Toggle} from '../controls'
 import type {TaskSummary} from '../../lib/api'
 
-const STATUS_STYLES: Record<string, string> = {
-  success: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-  failed: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
-  timed_out: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-  cancelled: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-  running: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-  queued: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-  skipped: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
-  missed: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
+const STATUS_COLOR: Record<string, 'success' | 'danger' | 'warning' | 'accent' | 'default'> = {
+  success: 'success',
+  failed: 'danger',
+  timed_out: 'warning',
+  cancelled: 'default',
+  running: 'accent',
+  queued: 'default',
+  skipped: 'default',
+  missed: 'default',
 }
 
 /** Statuses that render a spinning run indicator (SPEC-13 §3). */
@@ -25,9 +26,10 @@ export function StatusChip({status}: {status?: string}) {
   }
   const active = RUN_ACTIVE.has(status)
   return (
-    <span
+    <Chip
+      color={STATUS_COLOR[status] ?? 'default'}
+      size="sm"
       data-status={status}
-      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[status] ?? 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'}`}
     >
       {active && (
         <span data-testid="run-indicator" className="relative flex size-2">
@@ -36,7 +38,7 @@ export function StatusChip({status}: {status?: string}) {
         </span>
       )}
       {status.replace(/_/g, ' ')}
-    </span>
+    </Chip>
   )
 }
 

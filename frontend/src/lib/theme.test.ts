@@ -24,30 +24,34 @@ async function loadTheme() {
 beforeEach(() => {
   localStorage.clear()
   document.documentElement.removeAttribute('data-theme')
+  document.documentElement.classList.remove('dark')
   setPrefersDark(false)
 })
 
 describe('theme store', () => {
-  it('defaults to system (light here) and applies data-theme', async () => {
+  it('defaults to system (light here) and applies data-theme as khaki', async () => {
     const {useTheme, resolveTheme} = await loadTheme()
     expect(useTheme.getState().choice).toBe('system')
     expect(useTheme.getState().resolved).toBe('light')
     expect(resolveTheme('light')).toBe('light')
-    expect(document.documentElement.dataset.theme).toBe('light')
+    // Default light variant is khaki
+    expect(document.documentElement.dataset.theme).toBe('khaki')
   })
 
   it('resolves system → dark when the OS prefers dark', async () => {
     setPrefersDark(true)
     const {useTheme} = await loadTheme()
     expect(useTheme.getState().resolved).toBe('dark')
-    expect(document.documentElement.dataset.theme).toBe('dark')
+    // Default dark variant is gradient (gradient-dark data-theme)
+    expect(document.documentElement.dataset.theme).toBe('gradient-dark')
   })
 
   it('persists an explicit choice to localStorage', async () => {
     const {useTheme} = await loadTheme()
     useTheme.getState().setTheme('dark')
     expect(localStorage.getItem('heka-theme')).toBe('dark')
-    expect(document.documentElement.dataset.theme).toBe('dark')
+    // Dark mode applies gradient-dark by default
+    expect(document.documentElement.dataset.theme).toBe('gradient-dark')
   })
 
   it('restores the persisted choice on next launch', async () => {
@@ -55,7 +59,7 @@ describe('theme store', () => {
     const {useTheme} = await loadTheme()
     expect(useTheme.getState().choice).toBe('dark')
     expect(useTheme.getState().resolved).toBe('dark')
-    expect(document.documentElement.dataset.theme).toBe('dark')
+    expect(document.documentElement.dataset.theme).toBe('gradient-dark')
   })
 
   it('ignores garbage in localStorage', async () => {
@@ -70,6 +74,7 @@ describe('theme store', () => {
     useTheme.getState().setTheme('neon')
     expect(localStorage.getItem('heka-theme')).toBeNull()
     expect(useTheme.getState().choice).toBe('system')
-    expect(document.documentElement.dataset.theme).toBe(resolveTheme('system'))
+    // Default light variant is khaki
+    expect(document.documentElement.dataset.theme).toBe('khaki')
   })
 })

@@ -76,7 +76,7 @@ export function TopNav() {
   return (
     <header className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-4">
       <div className="mr-2 flex items-baseline gap-1.5">
-        <span className="text-sm font-semibold tracking-tight">Heka</span>
+        <span className="font-brand text-sm font-bold tracking-wider">Heka</span>
         <span className="text-xs text-zinc-400 dark:text-zinc-500">
           v{APP_VERSION}
         </span>

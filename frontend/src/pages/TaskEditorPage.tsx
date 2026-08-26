@@ -22,6 +22,7 @@ import {
 } from '../lib/taskForm'
 import {TaskForm} from '../components/tasks/TaskForm'
 import {YamlEditor} from '../components/tasks/YamlEditor'
+import {Tabs} from '@heroui/react'
 import {pillBtn, primaryBtn} from '../components/controls'
 
 type Tab = 'form' | 'yaml'
@@ -237,36 +238,27 @@ return (
         </div>
       )}
 
-      <div
-        role="tablist"
-        aria-label="Editor view"
-        className="inline-flex items-center gap-1 rounded-full border border-zinc-200/80 bg-white/70 p-1 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60"
+      <Tabs
+        selectedKey={tab}
+        onSelectionChange={(key) => {
+          const k = key as Tab
+          if (k === 'yaml') switchToYAML()
+          else if (k === 'form') switchToForm()
+        }}
       >
-        <button
-          role="tab"
-          aria-selected={tab === 'form'}
-          onClick={() => void (tab === 'yaml' ? switchToForm() : undefined)}
-          className={`rounded-full px-4 py-1.5 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent-ring ${
-            tab === 'form'
-              ? 'bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900'
-              : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50'
-          }`}
-        >
-          Visual
-        </button>
-        <button
-          role="tab"
-          aria-selected={tab === 'yaml'}
-          onClick={switchToYAML}
-          className={`rounded-full px-4 py-1.5 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent-ring ${
-            tab === 'yaml'
-              ? 'bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900'
-              : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50'
-          }`}
-        >
-          YAML
-        </button>
-      </div>
+        <Tabs.ListContainer>
+          <Tabs.List aria-label="Editor view">
+            <Tabs.Tab id="form">
+              Visual
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="yaml">
+              YAML
+              <Tabs.Indicator />
+            </Tabs.Tab>
+          </Tabs.List>
+        </Tabs.ListContainer>
+      </Tabs>
 
       {tab === 'form' ? (
         <TaskForm

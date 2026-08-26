@@ -38,7 +38,8 @@ describe('SettingsPage appearance', () => {
     expect(screen.getAllByText('System').length).toBeGreaterThanOrEqual(1)
     useTheme.getState().setTheme('dark')
     expect(useTheme.getState().choice).toBe('dark')
-    expect(document.documentElement.dataset.theme).toBe('dark')
+    // Default dark variant is gradient (gradient-dark data-theme)
+    expect(document.documentElement.dataset.theme).toBe('gradient-dark')
   })
 
   it('repoints the accent via swatches', async () => {

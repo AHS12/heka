@@ -1,6 +1,7 @@
 // components/DaemonStatusIcon.tsx — compact daemon status: a small colored
 // dot in the top chrome (green healthy / red not running / amber starting).
 // Hover reveals the label + live health detail (core, scheduler, uptime).
+import {Tooltip} from '@heroui/react'
 import {useHealth} from '../lib/query'
 import type {DaemonMode} from '../lib/query'
 
@@ -34,26 +35,25 @@ export function DaemonStatusIcon({mode}: {mode: DaemonMode}) {
       : null
 
   return (
-    <span className="group relative inline-flex items-center">
+    <Tooltip delay={300}>
       <span
         role="status"
         data-mode={mode}
         aria-label={LABEL[mode]}
         className={`inline-block size-2.5 rounded-full ring-2 ring-zinc-200/80 ring-offset-1 ring-offset-white transition-colors dark:ring-zinc-700/80 dark:ring-offset-zinc-950 ${DOT[mode]}`}
       />
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden whitespace-nowrap rounded-lg border border-zinc-200 bg-white/95 px-3 py-2 text-xs text-zinc-700 shadow-lg backdrop-blur group-hover:block dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-200"
-      >
-        <span className="font-medium text-zinc-900 dark:text-zinc-50">
-          {LABEL[mode]}
-        </span>
-        {detail && (
-          <span className="mt-0.5 block text-zinc-500 dark:text-zinc-400">
-            {detail.join(' · ')}
+      <Tooltip.Content showArrow placement="bottom">
+        <div className="flex flex-col gap-0.5 py-0.5">
+          <span className="text-xs font-medium text-zinc-900 dark:text-zinc-50">
+            {LABEL[mode]}
           </span>
-        )}
-      </span>
-    </span>
+          {detail && (
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              {detail.join(' · ')}
+            </span>
+          )}
+        </div>
+      </Tooltip.Content>
+    </Tooltip>
   )
 }

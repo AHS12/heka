@@ -1,4 +1,4 @@
-import {SelectField, TextInput, Field} from '../controls'
+import {SelectField, TextInput, Field, DatePickerField} from '../controls'
 import type {RunFilters as RunFilterState} from '../../lib/runs'
 import type {TaskSummary} from '../../lib/api'
 
@@ -47,26 +47,18 @@ export function RunFilters({
           items={STATUS_ITEMS}
         />
       </Field>
-      <Field label="From">
-        <TextInput
-          type="date"
-          value={filters.from ? filters.from.slice(0, 10) : ''}
-          onChange={(e) =>
-            onChange({...filters, from: e.target.value ? e.target.value + 'T00:00:00Z' : undefined})
-          }
-          className="w-40"
-        />
-      </Field>
-      <Field label="To">
-        <TextInput
-          type="date"
-          value={filters.to ? filters.to.slice(0, 10) : ''}
-          onChange={(e) =>
-            onChange({...filters, to: e.target.value ? e.target.value + 'T23:59:59Z' : undefined})
-          }
-          className="w-40"
-        />
-      </Field>
+      <DatePickerField
+        label="From"
+        value={filters.from ?? null}
+        onChange={(iso) => onChange({...filters, from: iso ? iso + 'T00:00:00Z' : undefined})}
+        className="w-48"
+      />
+      <DatePickerField
+        label="To"
+        value={filters.to ?? null}
+        onChange={(iso) => onChange({...filters, to: iso ? iso + 'T23:59:59Z' : undefined})}
+        className="w-48"
+      />
       {showSearch && (
         <Field label="Search">
           <TextInput

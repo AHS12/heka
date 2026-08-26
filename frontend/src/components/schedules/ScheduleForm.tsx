@@ -1,5 +1,5 @@
 import {useState} from 'react'
-import {SelectField, Field, TextInput, pillBtn, primaryBtn} from '../controls'
+import {SelectField, Field, TextInput, pillBtn, primaryBtn, DateTimePickerField} from '../controls'
 import {RecurrenceBuilder, emptyRecurrence, recurrenceToCron} from './RecurrenceBuilder'
 import type {RecurrenceValue} from './RecurrenceBuilder'
 import type {TaskSummary} from '../../lib/api'
@@ -106,17 +106,12 @@ export function ScheduleForm({
           onChange={(r) => update({recurrence: r})}
         />
       ) : (
-        <Field label="Run at">
-          <TextInput
-            type="datetime-local"
-            value={draft.runAt ? draft.runAt.slice(0, 16) : ''}
-            onChange={(e) => {
-              const v = e.target.value
-              update({runAt: v ? new Date(v).toISOString() : ''})
-            }}
-            className="w-64"
-          />
-        </Field>
+        <DateTimePickerField
+          label="Run at"
+          value={draft.runAt}
+          onChange={(iso) => update({runAt: iso ?? ''})}
+          className="w-72"
+        />
       )}
 
       <div className="flex items-center gap-2 pt-2">

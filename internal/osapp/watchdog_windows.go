@@ -61,6 +61,10 @@ func (i *schtasksInstaller) Install(interval time.Duration, hekaPath string) err
 		"/TR", fmt.Sprintf(`"%s" daemon watch --once`, hekaPath),
 		"/F") // overwrite existing
 	if out, err := cmd.CombinedOutput(); err != nil {
+		output := string(out)
+		if strings.Contains(output, "Access is denied") || strings.Contains(err.Error(), "Access is denied") {
+			return fmt.Errorf("insufficient privileges — run Heka as administrator to manage the watchdog, or create it manually via Task Scheduler")
+		}
 		return fmt.Errorf("schtasks create: %w: %s", err, out)
 	}
 	return nil
@@ -69,7 +73,15 @@ func (i *schtasksInstaller) Install(interval time.Duration, hekaPath string) err
 func (i *schtasksInstaller) Uninstall() error {
 	cmd := hiddenCmd("schtasks", "/Delete", "/TN", watchdogTaskName, "/F")
 	if out, err := cmd.CombinedOutput(); err != nil {
+		output := string(out)
 		// Missing task = already uninstalled.
+		if strings.Contains(output, "cannot find") || strings.Contains(output, "The system cannot find") {
+			return nil
+		}
+		// Access denied = insufficient privileges to manage scheduled tasks.
+		if strings.Contains(output, "Access is denied") || strings.Contains(err.Error(), "Access is denied") {
+			return fmt.Errorf("insufficient privileges — run Heka as administrator to manage the watchdog, or remove it manually via Task Scheduler")
+		}
 		return fmt.Errorf("schtasks delete: %w: %s", err, out)
 	}
 	return nil

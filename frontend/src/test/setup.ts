@@ -80,6 +80,20 @@ if (typeof Range !== 'undefined') {
     }) as DOMRect
 }
 
+// HeroUI Tabs uses useScrollShadow which depends on ResizeObserver.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as any
+}
+
+// HeroUI Tabs/Tooltip use SharedElementTransition which calls getAnimations().
+if (typeof Element !== 'undefined' && !Element.prototype.getAnimations) {
+  Element.prototype.getAnimations = () => []
+}
+
 // Sane defaults so pages render without "query data undefined" noise; tests
 // override per-case. Missing tasks reject as the daemon does.
 const bindings = await import('@wailsjs/go/app/App')

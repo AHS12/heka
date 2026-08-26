@@ -2,7 +2,10 @@
 // sections (SPEC-13 §4). Tailwind-styled to match the shell's floating look;
 // focus states use the accent-ring token (accent foundation).
 import type {ReactNode, InputHTMLAttributes} from 'react'
-import {Select, Label, ListBox} from '@heroui/react'
+import {Select, Label, ListBox, DatePicker, DateField, Calendar, TimeField} from '@heroui/react'
+import type {TimeValue} from '@heroui/react'
+import type {DateValue, CalendarDateTime} from '@internationalized/date'
+import {parseDate, parseDateTime} from '@internationalized/date'
 
 export const inputCls =
   'w-full rounded-lg border border-zinc-200 bg-white/70 px-2.5 py-1.5 text-sm ' +
@@ -148,6 +151,173 @@ export const primaryBtn =
   'text-sm font-medium text-accent-contrast shadow-sm outline-none ' +
   'transition-opacity focus-visible:ring-2 focus-visible:ring-accent-ring ' +
   'hover:opacity-90 disabled:opacity-50'
+
+/** Convert an ISO date/datetime string to a DateValue, or null. */
+export function isoToDateValue(iso: string | null | undefined): DateValue | null {
+  if (!iso) return null
+  try {
+    if (iso.includes('T')) {
+      // Strip timezone suffix (Z or +HH:MM) so parseDateTime gets a clean format
+      const cleaned = iso.replace(/Z$/, '').replace(/\+\d{2}:\d{2}$/, '')
+      return parseDateTime(cleaned)
+    }
+    return parseDate(iso)
+  } catch {
+    return null
+  }
+}
+
+/** Convert a DateValue/CalendarDateTime to an ISO date string, or null. */
+export function dateValueToISO(v: DateValue | CalendarDateTime | null): string | null {
+  if (!v) return null
+  const s = v.toString()
+  // If it's a datetime (contains T), return the full ISO without timezone
+  return s.includes('T') ? s : s
+}
+
+/** Shared className for date/time input groups — matches SelectField styling
+ *  so all form controls look consistent across every theme. */
+const dateFieldGroupCls =
+  'w-full rounded-lg border border-zinc-200 bg-white/70 px-2.5 py-1.5 text-sm ' +
+  'text-zinc-900 shadow-sm outline-none transition-colors ' +
+  'data-[hovered=true]:border-zinc-300 ' +
+  'data-[focus-within=true]:border-accent data-[focus-within=true]:ring-1 data-[focus-within=true]:ring-accent-ring ' +
+  'data-[disabled=true]:opacity-50 ' +
+  'dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100 ' +
+  'dark:data-[hovered=true]:border-zinc-600'
+
+/** A styled DatePicker field that works with ISO string values. */
+export function DatePickerField({
+  label,
+  value,
+  onChange,
+  granularity = 'day',
+  className,
+}: {
+  label: string
+  value: string | null | undefined
+  onChange: (iso: string | null) => void
+  granularity?: 'day' | 'hour' | 'minute' | 'second'
+  className?: string
+}) {
+  const dateValue = isoToDateValue(value)
+  return (
+    <DatePicker
+      granularity={granularity}
+      value={dateValue}
+      onChange={(v) => onChange(dateValueToISO(v as DateValue | CalendarDateTime | null))}
+      className={className}
+    >
+      <Label>{label}</Label>
+      <DateField.Group fullWidth className={dateFieldGroupCls}>
+        <DateField.Input>{(segment) => <DateField.Segment segment={segment} />}</DateField.Input>
+        <DateField.Suffix>
+          <DatePicker.Trigger>
+            <DatePicker.TriggerIndicator />
+          </DatePicker.Trigger>
+        </DateField.Suffix>
+      </DateField.Group>
+      <DatePicker.Popover>
+        <Calendar aria-label={label}>
+          <Calendar.Header>
+            <Calendar.YearPickerTrigger>
+              <Calendar.YearPickerTriggerHeading />
+              <Calendar.YearPickerTriggerIndicator />
+            </Calendar.YearPickerTrigger>
+            <Calendar.NavButton slot="previous" />
+            <Calendar.NavButton slot="next" />
+          </Calendar.Header>
+          <Calendar.Grid>
+            <Calendar.GridHeader>
+              {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+            </Calendar.GridHeader>
+            <Calendar.GridBody>{(date) => <Calendar.Cell date={date} />}</Calendar.GridBody>
+          </Calendar.Grid>
+          <Calendar.YearPickerGrid>
+            <Calendar.YearPickerGridBody>
+              {({year}) => <Calendar.YearPickerCell year={year} />}
+            </Calendar.YearPickerGridBody>
+          </Calendar.YearPickerGrid>
+        </Calendar>
+      </DatePicker.Popover>
+    </DatePicker>
+  )
+}
+
+/** A styled DatePicker + TimeField that works with ISO datetime strings. */
+export function DateTimePickerField({
+  label,
+  value,
+  onChange,
+  className,
+}: {
+  label: string
+  value: string | null | undefined
+  onChange: (iso: string | null) => void
+  className?: string
+}) {
+  const dateValue = isoToDateValue(value)
+  return (
+    <DatePicker
+      granularity="minute"
+      value={dateValue}
+      onChange={(v) => onChange(dateValueToISO(v as DateValue | CalendarDateTime | null))}
+      className={className}
+    >
+      {({state}) => (
+        <>
+          <Label>{label}</Label>
+          <DateField.Group fullWidth className={dateFieldGroupCls}>
+            <DateField.Input>{(segment) => <DateField.Segment segment={segment} />}</DateField.Input>
+            <DateField.Suffix>
+              <DatePicker.Trigger>
+                <DatePicker.TriggerIndicator />
+              </DatePicker.Trigger>
+            </DateField.Suffix>
+          </DateField.Group>
+          <DatePicker.Popover className="flex flex-col gap-3">
+            <Calendar aria-label={label}>
+              <Calendar.Header>
+                <Calendar.YearPickerTrigger>
+                  <Calendar.YearPickerTriggerHeading />
+                  <Calendar.YearPickerTriggerIndicator />
+                </Calendar.YearPickerTrigger>
+                <Calendar.NavButton slot="previous" />
+                <Calendar.NavButton slot="next" />
+              </Calendar.Header>
+              <Calendar.Grid>
+                <Calendar.GridHeader>
+                  {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+                </Calendar.GridHeader>
+                <Calendar.GridBody>{(date) => <Calendar.Cell date={date} />}</Calendar.GridBody>
+              </Calendar.Grid>
+              <Calendar.YearPickerGrid>
+                <Calendar.YearPickerGridBody>
+                  {({year}) => <Calendar.YearPickerCell year={year} />}
+                </Calendar.YearPickerGridBody>
+              </Calendar.YearPickerGrid>
+            </Calendar>
+            <div className="flex items-center justify-between border-t border-zinc-200 pt-2 dark:border-zinc-700">
+              <Label>Time</Label>
+              <TimeField
+                aria-label="Time"
+                granularity="minute"
+                value={state.timeValue as TimeValue | null}
+                onChange={(v) => state.setTimeValue(v as TimeValue)}
+              >
+                <TimeField.Group variant="secondary">
+                  <TimeField.Input>
+                    {(segment) => <TimeField.Segment segment={segment} />}
+                  </TimeField.Input>
+                </TimeField.Group>
+              </TimeField>
+            </div>
+          </DatePicker.Popover>
+        </>
+      )}
+    </DatePicker>
+  )
+}
 
 /** Icon-only cross used to delete list rows (env vars, webhooks). */
 export function RemoveRow({label, onClick, className}: {label: string; onClick: () => void; className?: string}) {

@@ -7,30 +7,135 @@
 
 /*
  * HeroUI theme tokens: override the library defaults so our app's palette
- * stays consistent across light / dark / future themes.  The selectors
- * mirror HeroUI's own convention (`.dark` for dark, `[data-theme="…"]` for
- * named themes).  Each block re-declares only the tokens we care about;
- * everything else inherits from HeroUI's defaults.
+ * stays consistent across all theme variants.  Each [data-theme="…"] block
+ * re-declares only the tokens we care about; everything else inherits from
+ * HeroUI's defaults.
  */
 
-/* ---------- Light (default) ---------- */
-:root {
+/* ======================== LIGHT (default) ======================== */
+[data-theme="light"] {
   color-scheme: light;
-  --foreground: oklch(0.21 0.006 286);     /* near-black */
-  --background: oklch(0.98 0 0);            /* near-white */
+
+  --foreground: oklch(0.18 0.008 50);         /* warm near-black */
+  --background: oklch(0.99 0.002 80);          /* warm off-white */
+
+  --surface: oklch(1.0 0 0);
+  --surface-secondary: oklch(0.97 0.003 80);
+  --field-background: oklch(1.0 0 0);
   --field-foreground: var(--foreground);
-  --field-background: var(--background);
+  --field-border: oklch(0.88 0.01 70);
+
+  --border: oklch(0.88 0.012 70);
+
+  --gradient-start: oklch(0.99 0.002 80);
+  --gradient-mid: oklch(0.99 0.001 80);
+  --gradient-end: oklch(0.98 0.003 80);
 }
 
-/* ---------- Dark ---------- */
+/* ======================== DARK ======================== */
 .dark,
 [data-theme="dark"] {
   color-scheme: dark;
-  --foreground: oklch(0.95 0 0);            /* near-white */
-  --background: oklch(0.14 0.005 286);      /* near-black */
+
+  --foreground: oklch(0.95 0 0);               /* near-white */
+  --background: oklch(0.14 0.005 286);         /* near-black */
+
+  --surface: oklch(0.18 0.004 286);
+  --surface-secondary: oklch(0.22 0.004 286);
+  --field-background: var(--surface);
   --field-foreground: var(--foreground);
-  --field-background: var(--background);
+  --field-border: oklch(0.30 0.005 286);
+
+  --border: oklch(0.28 0.005 286);
+
+  --gradient-start: oklch(0.14 0.005 286);
+  --gradient-mid: oklch(0.13 0.004 286);
+  --gradient-end: oklch(0.15 0.005 286);
 }
+
+/* ======================== KHAKI (light) ======================== */
+[data-theme="khaki"] {
+  color-scheme: light;
+
+  --foreground: oklch(0.22 0.015 70);          /* dark warm brown */
+  --background: oklch(0.97 0.015 85);          /* warm cream */
+
+  --surface: oklch(0.99 0.008 80);
+  --surface-secondary: oklch(0.95 0.02 80);
+  --field-background: oklch(0.99 0.008 80);
+  --field-foreground: var(--foreground);
+  --field-border: oklch(0.82 0.03 75);
+
+  --border: oklch(0.80 0.03 70);
+
+  --gradient-start: oklch(0.97 0.015 85);
+  --gradient-mid: oklch(0.95 0.02 82);
+  --gradient-end: oklch(0.93 0.018 78);
+}
+
+/* ======================== CRT (light) — accent-tinted with scanlines ======================== */
+[data-theme="crt"] {
+  color-scheme: light;
+
+  --foreground: oklch(0.18 0.008 50);
+  --background: oklch(0.98 0.003 80);
+
+  --surface: oklch(1.0 0 0);
+  --surface-secondary: oklch(0.97 0.003 80);
+  --field-background: oklch(1.0 0 0);
+  --field-foreground: var(--foreground);
+  --field-border: oklch(0.86 0.015 70);
+
+  --border: oklch(0.84 0.015 65);
+
+  /* Accent-tinted ambient wash — more visible than previous gradient */
+  --gradient-start: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 7%, oklch(0.98 0 0));
+  --gradient-mid: oklch(0.99 0.001 80);
+  --gradient-end: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 4%, oklch(0.97 0.002 80));
+}
+
+/* ======================== HIGH-CONTRAST (dark) — light borders, max readability ======================== */
+[data-theme="high-contrast"] {
+  color-scheme: dark;
+
+  --foreground: oklch(1.0 0 0);                /* pure white */
+  --background: oklch(0.05 0 0);               /* true near-black */
+
+  --surface: oklch(0.10 0 0);
+  --surface-secondary: oklch(0.14 0 0);
+  --field-background: oklch(0.10 0 0);
+  --field-foreground: var(--foreground);
+  --field-border: oklch(0.45 0 0);             /* LIGHT borders for contrast */
+
+  --border: oklch(0.40 0 0);                   /* LIGHT borders */
+
+  --gradient-start: oklch(0.05 0 0);
+  --gradient-mid: oklch(0.03 0 0);
+  --gradient-end: oklch(0.05 0 0);
+}
+
+/* ======================== GRADIENT-DARK ======================== */
+[data-theme="gradient-dark"] {
+  color-scheme: dark;
+
+  --foreground: oklch(0.95 0 0);
+  --background: oklch(0.14 0.005 286);
+
+  --surface: oklch(0.18 0.004 286);
+  --surface-secondary: oklch(0.22 0.004 286);
+  --field-background: var(--surface);
+  --field-foreground: var(--foreground);
+  --field-border: oklch(0.30 0.005 286);
+
+  --border: oklch(0.28 0.005 286);
+
+  /* Dark gradient tinted by accent */
+  --gradient-start: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 8%, oklch(0.14 0.005 286));
+  --gradient-mid: oklch(0.13 0.004 286);
+  --gradient-end: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 5%, oklch(0.16 0.005 286));
+}
+
+/* ======================== BASE STYLES ======================== */
 
 /* Ensure body text is always readable regardless of HeroUI's theme layer */
 body {
@@ -81,10 +186,157 @@ body {
 }
 
 @theme inline {
+  --font-display: 'Space Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-brand: 'Silkscreen', 'Space Mono', ui-monospace, monospace;
+
   --color-accent: var(--accent);
   --color-accent-contrast: var(--accent-contrast);
   --color-accent-ring: var(--accent-ring);
+
+  --color-gradient-start: var(--gradient-start, var(--background));
+  --color-gradient-mid: var(--gradient-mid, var(--background));
+  --color-gradient-end: var(--gradient-end, var(--background));
+
+  --color-surface: var(--surface, var(--background));
+  --color-surface-secondary: var(--surface-secondary, var(--background));
+  --color-field-border: var(--field-border, var(--border));
+
+  --shadow-retro: 3px 3px 0 var(--accent);
+  --shadow-retro-hover: 4px 4px 0 var(--accent);
+  --shadow-retro-active: 1px 1px 0 var(--accent);
+
+  --animate-page-in: page-in 0.25s var(--ease-out-cubic) both;
+  --animate-fade-in: fade-in 0.2s var(--ease-out-cubic) both;
+  --animate-slide-up: slide-up 0.25s var(--ease-out-quart) both;
+  --animate-scale-in: scale-in 0.2s var(--ease-out-cubic) both;
+
+  @keyframes page-in {
+    from { opacity: 0; transform: translateY(8px); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+  }
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(12px); }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.97); }
+  }
 }
+
+/* Base font stack — applied to body for the whole app */
+body {
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+
+code, pre, .font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ======================== ANIMATION SUPPRESSION ======================== */
+
+/* User kill-switch — set via data-no-animations="true" on <html> */
+[data-no-animations="true"] *,
+[data-no-animations="true"] *::before,
+[data-no-animations="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Also respect the OS-level preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ======================== RETRO ACCENT UTILITIES ======================== */
+
+/* Offset shadow — blocky, terminal-inspired depth on interactive elements */
+.retro-shadow {
+  box-shadow: 3px 3px 0 var(--accent);
+  transition: box-shadow 0.1s ease, transform 0.1s ease;
+}
+.retro-shadow:hover {
+  box-shadow: 4px 4px 0 var(--accent);
+  transform: translate(-1px, -1px);
+}
+.retro-shadow:active {
+  box-shadow: 1px 1px 0 var(--accent);
+  transform: translate(2px, 2px);
+}
+
+/* Thicker borders — retro weight, visible on all surfaces */
+.retro-border {
+  border-width: 2.5px;
+}
+
+/* Card sheen — subtle diagonal gradient overlay for depth */
+.card-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.card-sheen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    transparent 50%,
+    rgba(0, 0, 0, 0.02) 100%
+  );
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* Scanline overlay — CRT texture for crt and gradient-dark themes */
+.scanline-overlay {
+  position: relative;
+}
+.scanline-overlay::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.015) 2px,
+    rgba(0, 0, 0, 0.015) 4px
+  );
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+[data-theme="crt"] .scanline-overlay::after,
+[data-theme="gradient-dark"] .scanline-overlay::after {
+  opacity: 1;
+}
+
+/* Page entrance animation — apply to <Outlet> wrappers */
+.animate-page-in {
+  animation: var(--animate-page-in);
+}
+
+/* ======================== DATE PICKER / TIME FIELD OVERRIDES ======================== */
+
+/* No CSS overrides needed — DatePickerField/DateTimePickerField pass explicit
+   Tailwind utility classes directly on DateField.Group, matching SelectField styling. */
+
+/* ======================== SCROLLBAR ======================== */
 
 /* Scroll areas always reserve space for the scrollbar gutter so content
    doesn't shift when scrolling starts. The scrollbar itself stays invisible

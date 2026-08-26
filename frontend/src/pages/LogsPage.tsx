@@ -4,6 +4,7 @@ import {useTasks} from '../lib/tasks'
 import {usePollingRuns, filtersToParams, paramsToFilters} from '../lib/runs'
 import {RunsTable} from '../components/runs/RunsTable'
 import {RunFilters} from '../components/runs/RunFilters'
+import {SelectField} from '../components/controls'
 
 export function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -59,6 +60,7 @@ export function LogsPage() {
 
   const runs = data?.runs ?? []
   const hasCursor = !!filters.cursor
+  const hasFilters = !!(filters.task || filters.status || filters.from || filters.to || filters.q)
 
   return (
     <div className="space-y-4">
@@ -68,21 +70,22 @@ export function LogsPage() {
           {hasActive && (
             <span className="text-xs text-blue-500 dark:text-blue-400">Live</span>
           )}
-          <select
-            value={filters.limit ?? 25}
-            onChange={(e) => {
+          <SelectField
+            aria-label="Per page"
+            value={String(filters.limit ?? 25)}
+            onChange={(v) => {
               const p = filtersToParams(filters)
-              p.set('limit', e.target.value)
+              p.set('limit', v)
               p.delete('cursor')
               setSearchParams(p, {replace: true})
             }}
-            aria-label="Per page"
-            className="rounded-full border border-zinc-200/80 bg-white/80 px-2 py-0.5 text-xs font-medium shadow-sm shadow-zinc-900/5 outline-none dark:border-zinc-700/60 dark:bg-zinc-900/70 dark:text-zinc-300"
-          >
-            <option value="25">25</option>
-            <option value="50">50</option>
-            <option value="100">100</option>
-          </select>
+            className="w-20"
+            items={[
+              {id: '25', label: '25'},
+              {id: '50', label: '50'},
+              {id: '100', label: '100'},
+            ]}
+          />
           <button
             type="button"
             onClick={toggleSort}
@@ -101,6 +104,19 @@ export function LogsPage() {
               <text x="18" y="20" fill="currentColor" stroke="none" fontSize="7" fontWeight="bold">2</text>
             </svg>
           </button>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={() => {
+                const p = new URLSearchParams()
+                p.set('order', order)
+                setSearchParams(p, {replace: true})
+              }}
+              className="rounded-full border border-zinc-200/80 bg-white/80 px-2.5 py-1 text-xs font-medium shadow-sm shadow-zinc-900/5 outline-none transition-colors hover:bg-zinc-200/70 dark:border-zinc-700/60 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:bg-zinc-800/70"
+            >
+              Clear
+            </button>
+          )}
         </div>
       </div>
 

@@ -54,7 +54,12 @@ export function AppLayout() {
   }, [])
 
   return (
-    <div className="flex h-screen flex-col bg-gradient-to-b from-zinc-100 via-zinc-50 to-zinc-100 text-zinc-900 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900 dark:text-zinc-100">
+    <div
+      className="scanline-overlay flex h-screen flex-col text-foreground"
+      style={{
+        background: `linear-gradient(160deg, var(--gradient-start), var(--gradient-mid), var(--gradient-end))`,
+      }}
+    >
       <TopNav />
       <main
         ref={mainRef}
