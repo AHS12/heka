@@ -1,6 +1,6 @@
 import {useState} from 'react'
 
-const APP_VERSION = '0.1.0'
+import {APP_VERSION} from '../lib/version'
 
 function CopyButton({text}: {text: string}) {
   const [copied, setCopied] = useState(false)

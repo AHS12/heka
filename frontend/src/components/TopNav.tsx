@@ -6,7 +6,7 @@ import {useTheme} from '../lib/theme'
 import {useDaemonMode} from '../lib/query'
 import {DaemonStatusIcon} from './DaemonStatusIcon'
 
-const APP_VERSION = '0.1.0'
+import {APP_VERSION} from '../lib/version'
 
 const NAV_ITEMS = [
   {to: '/', label: 'Home', end: true},

@@ -27,7 +27,7 @@ describe('AppLayout', () => {
     expect(await screen.findByText('home-child')).toBeInTheDocument()
     expect(screen.getByRole('navigation', {name: 'Main'})).toBeInTheDocument()
     expect(screen.getByRole('link', {name: 'Tasks'})).toBeInTheDocument()
-    expect(screen.getByText(/v0\.1\.0/)).toBeInTheDocument()
+    expect(screen.getByText(/v\d+\.\d+\.\d+/)).toBeInTheDocument()
     // The banner starts visible while the first poll is in flight, then
     // disappears once the mocked status resolves (SPEC-12 §5 re-poll).
     await waitFor(() =>

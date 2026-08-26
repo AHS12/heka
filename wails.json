@@ -13,8 +13,8 @@
   "info": {
     "companyName": "Heka",
     "productName": "Heka",
-    "productVersion": "0.1.0",
-    "copyright": "© 2026 Heka",
-    "comments": "A local task runner and scheduler for programmers"
+    "productVersion": "0.5.0",
+    "copyright": "© 2026 Azizul Hakim",
+    "comments": "A local task runner & scheduler for programmers — with first-class AI agent support."
   }
 }
