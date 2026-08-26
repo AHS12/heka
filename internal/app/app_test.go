@@ -3,9 +3,11 @@ package app
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"heka/internal/config"
 	"heka/internal/ipc"
+	"heka/internal/osapp"
 )
 
 // stubCaller fakes the ipc client for the bridge tests. Task-surface methods
@@ -149,5 +151,63 @@ func TestClientIsCached(t *testing.T) {
 	}
 	if caller.calls != 1 {
 		t.Fatalf("calls = %d", caller.calls)
+	}
+}
+
+// fakeInstaller is the osapp.Installer seam for the watchdog bridge tests.
+type fakeInstaller struct {
+	installed bool
+	interval  time.Duration
+	err       error
+}
+
+func (f fakeInstaller) Install(time.Duration, string) error  { return f.err }
+func (f fakeInstaller) Uninstall() error                     { return f.err }
+func (f fakeInstaller) Status() (bool, time.Duration, error) { return f.installed, f.interval, f.err }
+
+func TestWatchdogEnabledMapsStatusDTO(t *testing.T) {
+	orig := osapp.NewInstaller
+	osapp.NewInstaller = func() osapp.Installer {
+		return fakeInstaller{installed: true, interval: 5 * time.Minute}
+	}
+	defer func() { osapp.NewInstaller = orig }()
+
+	a := NewApp("Heka", "0.1.0")
+	dto, err := a.WatchdogEnabled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !dto.Installed || dto.IntervalMinutes != 5 {
+		t.Fatalf("dto = %+v, want installed + 5m", dto)
+	}
+}
+
+func TestWatchdogEnabledNotInstalled(t *testing.T) {
+	orig := osapp.NewInstaller
+	osapp.NewInstaller = func() osapp.Installer {
+		return fakeInstaller{installed: false}
+	}
+	defer func() { osapp.NewInstaller = orig }()
+
+	a := NewApp("Heka", "0.1.0")
+	dto, err := a.WatchdogEnabled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dto.Installed || dto.IntervalMinutes != 0 {
+		t.Fatalf("dto = %+v, want not installed + 0m", dto)
+	}
+}
+
+func TestWatchdogEnabledErrorPropagates(t *testing.T) {
+	orig := osapp.NewInstaller
+	osapp.NewInstaller = func() osapp.Installer {
+		return fakeInstaller{err: errors.New("schtasks boom")}
+	}
+	defer func() { osapp.NewInstaller = orig }()
+
+	a := NewApp("Heka", "0.1.0")
+	if _, err := a.WatchdogEnabled(); err == nil || err.Error() != "schtasks boom" {
+		t.Fatalf("err = %v", err)
 	}
 }

@@ -369,6 +369,10 @@ func TestCLIEndToEnd(t *testing.T) {
 	binary := buildBinary(t)
 	dataDir := t.TempDir()
 	tasksDir := t.TempDir()
+	// Isolate the spawned daemon on its own pipe so it can never collide
+	// with the in-process daemons' TestMain pipe (both directions are one
+	// endpoint per pipe name).
+	pipe := fmt.Sprintf("heka-daemon-e2e-%d", os.Getpid())
 	// Seed a valid task so sync has something to index.
 	if err := os.WriteFile(filepath.Join(tasksDir, "hello.yaml"),
 		[]byte("version: 1\nname: Hello\nslug: hello\nscript: h.sh\ntype: script\n"), 0o600); err != nil {
@@ -379,6 +383,9 @@ func TestCLIEndToEnd(t *testing.T) {
 	cmd.Env = append(os.Environ(),
 		"HEKA_DATA_DIR="+dataDir,
 		"HEKA_TASKS_DIR="+tasksDir,
+		"HEKA_PIPE_NAME="+pipe,
+		// GUI-mode flags are irrelevant for the daemon; keep the env minimal.
+		"HEKA_NO_TRAY=1",
 	)
 	logPath := filepath.Join(dataDir, "e2e.log")
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
@@ -396,11 +403,16 @@ func TestCLIEndToEnd(t *testing.T) {
 	// locked on our side.
 	logFile.Close()
 	defer func() {
-		_ = Stop(configForDirs(t, dataDir, tasksDir))
 		_ = cmd.Process.Kill()
 	}()
 
+	// The spawned daemon reads HEKA_PIPE_NAME from its environment, so the
+	// test's client must target the same pipe (EndpointPath uses the env).
+	_ = os.Setenv("HEKA_PIPE_NAME", pipe)
 	cfg := configForDirs(t, dataDir, tasksDir)
+	defer func() {
+		_ = Stop(cfg)
+	}()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		if _, err := Status(cfg); err == nil {
@@ -433,6 +445,10 @@ func configForDirs(t *testing.T, dataDir, tasksDir string) config.Config {
 	cfg, err := config.Load(map[string]string{
 		"HEKA_DATA_DIR":  dataDir,
 		"HEKA_TASKS_DIR": tasksDir,
+		// Pipe override is inherited from the environment by config.Load's
+		// envMap; pass it explicitly so this helper never depends on the
+		// caller's ambient state.
+		"HEKA_PIPE_NAME": os.Getenv("HEKA_PIPE_NAME"),
 	}, t.TempDir())
 	if err != nil {
 		t.Fatal(err)

@@ -29,7 +29,7 @@ import (
 
 const appName = "Heka"
 
-var appVersion = "0.5.0"
+var appVersion = "0.5.1"
 
 //go:embed all:frontend/dist
 var assets embed.FS
@@ -98,11 +98,19 @@ func runGUI() {
 }
 
 // runDaemon runs the daemon in the foreground with a system tray (SPEC-15).
+// HEKA_NO_TRAY=1 (tests, headless runs) skips the tray and runs the core only.
 func runDaemon() {
 	cfg, err := config.LoadDefault()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "heka:", err)
 		os.Exit(1)
+	}
+	if os.Getenv("HEKA_NO_TRAY") == "1" {
+		if err := daemon.Run(cfg, appVersion); err != nil {
+			fmt.Fprintln(os.Stderr, "heka:", err)
+			os.Exit(1)
+		}
+		return
 	}
 	fmt.Printf("heka daemon v%s starting (tray)\n", appVersion)
 	fmt.Printf("  data dir:  %s\n", cfg.DataDir)

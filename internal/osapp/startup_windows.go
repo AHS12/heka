@@ -4,6 +4,7 @@ package osapp
 
 import (
 	"fmt"
+	"strings"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -15,6 +16,26 @@ const startupValueName = "Heka"
 type registryStartupRegistrar struct{}
 
 func newStartupRegistrar() StartupRegistrar { return &registryStartupRegistrar{} }
+
+// startupPointsAtImpl reports whether the startup Run value references the
+// given binary path. A Run value pointing elsewhere (old install dir) must be
+// rewritten on upgrade.
+func startupPointsAtImpl(exe string) bool {
+	key, err := registry.OpenKey(
+		registry.CURRENT_USER,
+		`Software\Microsoft\Windows\CurrentVersion\Run`,
+		registry.READ,
+	)
+	if err != nil {
+		return false
+	}
+	defer key.Close()
+	val, _, err := key.GetStringValue(startupValueName)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(val, exe)
+}
 
 func (r *registryStartupRegistrar) Enable(exePath string) error {
 	key, _, err := registry.CreateKey(

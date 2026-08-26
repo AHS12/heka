@@ -1,6 +1,6 @@
 # Heka build tooling — single entry point for dev, build, and checks (SPEC-01 §4).
 
-VERSION   ?= 0.5.0
+VERSION   ?= 0.5.1
 BIN_DIR   := build
 DIST_DIR  := $(BIN_DIR)/dist
 LDFLAGS   := -X main.appVersion=$(VERSION)
@@ -16,6 +16,15 @@ endif
 
 BIN     := $(BIN_DIR)/bin/heka$(EXE)
 GUI_BIN := $(BIN_DIR)/bin/heka-gui$(EXE)
+
+# Go tool binaries (wails, …) install to GOPATH/bin; prepend it so every
+# target resolves them even when the ambient PATH predates the install.
+GOBIN := $(shell go env GOPATH)/bin
+ifeq ($(OS),Windows_NT)
+PATH := $(GOBIN);$(PATH)
+else
+PATH := $(GOBIN):$(PATH)
+endif
 
 ## dev: run the daemon and GUI together for development (Ctrl-C stops both)
 dev:

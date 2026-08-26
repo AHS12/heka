@@ -111,6 +111,18 @@ ShowInstDetails show # This will always show the installation details.
 
 Function .onInit
    !insertmacro wails.checkArchitecture
+
+   # An upgrade must not race a running app: close the GUI and daemon, and drop
+   # the watchdog scheduled task so it cannot re-launch a stale binary mid-install.
+   # The task/startup entries are re-created after install (see Section below).
+   ${IfNot} ${Silent}
+       MessageBox MB_YESNO|MB_ICONQUESTION "Heka is running. Setup will close it to continue. Continue?" IDYES +2
+       Abort
+   ${EndIf}
+
+   nsExec::ExecToLog 'taskkill /IM heka.exe /F /T'
+   nsExec::ExecToLog 'taskkill /IM Heka.exe /F /T'
+   nsExec::ExecToLog 'schtasks /Delete /TN "Heka Watchdog" /F'
 FunctionEnd
 
 Section
@@ -158,10 +170,21 @@ Section
     ${EndIf}
 
     !insertmacro wails.writeUninstaller
+
+    # --- Restore watchdog + startup entries with the new install path ---
+    # The watchdog scheduled task was deleted above; re-create it (same name,
+    # default 5-minute interval) so the daemon is guarded with the new binary.
+    # The startup Run key is rewritten so it points at the new path.
+    nsExec::ExecToLog '"$INSTDIR\${PRODUCT_EXECUTABLE}" daemon watchdog install'
+    nsExec::ExecToLog '"$INSTDIR\${PRODUCT_EXECUTABLE}" daemon startup on'
 SectionEnd
 
 Section "uninstall"
     !insertmacro wails.setShellContext
+
+    # --- Remove OS entries BEFORE deleting files ---
+    nsExec::ExecToLog 'schtasks /Delete /TN "Heka Watchdog" /F'
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Heka"
 
     # --- Remove from PATH FIRST (before deleting files) ---
     ReadRegStr $0 HKCU "Environment" "Path"

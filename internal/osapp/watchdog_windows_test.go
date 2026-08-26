@@ -31,8 +31,29 @@ func fakeRunnerCommand(t *testing.T, cans []string) *[]string {
 	return &calls
 }
 
+// fakeHiddenCommand replaces hiddenCmd: records invocations, emits canned
+// output, exits 0.
+func fakeHiddenCommand(t *testing.T, cans []string) *[]string {
+	t.Helper()
+	orig := hiddenCmd
+	var calls []string
+	var mu sync.Mutex
+	hiddenCmd = func(name string, args ...string) *exec.Cmd {
+		mu.Lock()
+		calls = append(calls, strings.Join(append([]string{name}, args...), " "))
+		mu.Unlock()
+		out := "exit 0"
+		if len(cans) > 0 {
+			out = cans[len(calls)-1]
+		}
+		return exec.Command("cmd", "/c", "echo "+out)
+	}
+	t.Cleanup(func() { hiddenCmd = orig })
+	return &calls
+}
+
 func TestSchtasksInstall(t *testing.T) {
-	calls := fakeRunnerCommand(t, nil)
+	calls := fakeHiddenCommand(t, nil)
 	inst := &schtasksInstaller{}
 	if err := inst.Install(5*time.Minute, `C:\heka\heka.exe`); err != nil {
 		t.Fatal(err)
@@ -50,7 +71,7 @@ func TestSchtasksInstall(t *testing.T) {
 }
 
 func TestSchtasksIntervalClipped(t *testing.T) {
-	calls := fakeRunnerCommand(t, nil)
+	calls := fakeHiddenCommand(t, nil)
 	inst := &schtasksInstaller{}
 	if err := inst.Install(2*time.Second, "heka.exe"); err != nil {
 		t.Fatal(err)
@@ -61,7 +82,7 @@ func TestSchtasksIntervalClipped(t *testing.T) {
 }
 
 func TestSchtasksStatus(t *testing.T) {
-	calls := fakeRunnerCommand(t, []string{"Repeat: Every 5 minute(s)"})
+	calls := fakeHiddenCommand(t, []string{"Repeat: Every 5 minute(s)"})
 	inst := &schtasksInstaller{}
 	installed, interval, err := inst.Status()
 	if err != nil || !installed {
@@ -77,9 +98,9 @@ func TestSchtasksStatus(t *testing.T) {
 
 func TestSchtasksNotInstalled(t *testing.T) {
 	// A nonzero exit means the task doesn't exist.
-	orig := runCommand
-	defer func() { runCommand = orig }()
-	runCommand = func(name string, args ...string) *exec.Cmd {
+	orig := hiddenCmd
+	defer func() { hiddenCmd = orig }()
+	hiddenCmd = func(name string, args ...string) *exec.Cmd {
 		return exec.Command("cmd", "/c", "exit 1")
 	}
 	inst := &schtasksInstaller{}
@@ -90,7 +111,7 @@ func TestSchtasksNotInstalled(t *testing.T) {
 }
 
 func TestSchtasksUninstall(t *testing.T) {
-	calls := fakeRunnerCommand(t, nil)
+	calls := fakeHiddenCommand(t, nil)
 	inst := &schtasksInstaller{}
 	if err := inst.Uninstall(); err != nil {
 		t.Fatal(err)

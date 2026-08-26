@@ -10,6 +10,19 @@ $logErr = Join-Path $root ".heka-dev-daemon.log.err"
 
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 
+# Locate the wails CLI: on PATH, or in the Go tools bin (GOPATH/bin) where
+# `go install github.com/wailsapp/wails/v2/cmd/wails@latest` drops it.
+$wails = Get-Command wails -ErrorAction SilentlyContinue
+if (-not $wails) {
+    $goBin = Join-Path (go env GOPATH) "bin"
+    if (Test-Path (Join-Path $goBin "wails.exe")) {
+        $wails = Get-Command (Join-Path $goBin "wails.exe")
+    }
+}
+if (-not $wails) {
+    throw "wails CLI not found. Install it with: go install github.com/wailsapp/wails/v2/cmd/wails@latest"
+}
+
 # main.go embeds all:frontend/dist, so it must exist before `go build`.
 $dist = Join-Path $root "frontend\dist"
 if (-not (Test-Path $dist)) {
@@ -29,7 +42,8 @@ $daemon = Start-Process -FilePath $bin -ArgumentList "daemon" `
 Write-Host "Daemon pid $($daemon.Id) started."
 
 try {
-    wails dev
+    Push-Location $root
+    try { & $wails.Source dev } finally { Pop-Location }
 }
 finally {
     if (-not $daemon.HasExited) {

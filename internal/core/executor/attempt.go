@@ -18,6 +18,10 @@ import (
 	"heka/internal/db"
 )
 
+// taskkillCmd is the Windows tree killer seam (CREATE_NO_WINDOW so cancel
+// never flashes a console). Defined on Windows only; nil elsewhere.
+var taskkillCmd func(args ...string) *exec.Cmd
+
 const truncationMarker = "\n…[truncated]\n"
 
 // attemptResult is what one attempt produced; runGroup decides about retries.
@@ -45,7 +49,7 @@ func (e *Executor) runAttempt(ctx context.Context, t *task.Task, opt Options, tr
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = resolved.WorkingDir
 	cmd.Env = env
-	setProcessGroup(cmd)
+	setProcessGroup(cmd) // Windows: CREATE_NO_WINDOW + new process group (SPEC-05 §4)
 
 	stdout := newCappedWriter(e.maxOutput)
 	stderr := newCappedWriter(e.maxOutput)
@@ -200,11 +204,15 @@ func (e *Executor) terminate(cmd *exec.Cmd, force bool) {
 	}
 	pid := cmd.Process.Pid
 	if runtime.GOOS == "windows" {
-		args := []string{"/PID", strconv.Itoa(pid), "/T"}
-		if force {
-			args = append(args, "/F")
+		// The taskkill seam stays nil on non-Windows builds, so guard here;
+		// the platform init installs it for real processes.
+		if taskkillCmd != nil {
+			args := []string{"/PID", strconv.Itoa(pid), "/T"}
+			if force {
+				args = append(args, "/F")
+			}
+			_ = taskkillCmd(args...).Run()
 		}
-		_ = exec.Command("taskkill", args...).Run()
 		return
 	}
 	sig := syscall.SIGTERM

@@ -38,6 +38,55 @@ type Installer interface {
 	Status() (Installed bool, Interval time.Duration, err error)
 }
 
+// RepairEntries reconciles OS registration (watchdog + startup) with the
+// currently running binary. After an upgrade the recorded exe path can point
+// at a deleted/renamed binary, so entries whose path differs are re-created
+// with the current executable path. Runs once at daemon startup (SPEC-10 §3).
+func RepairEntries() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	repairWatchdog(exe)
+	repairStartup(exe)
+}
+
+func repairWatchdog(exe string) {
+	installed, interval, err := NewInstaller().Status()
+	if err != nil || !installed {
+		return
+	}
+	// The task points at this same binary? Nothing to do.
+	if taskPointsAt(exe) {
+		return
+	}
+	_ = NewInstaller().Install(interval, exe)
+}
+
+func repairStartup(exe string) {
+	enabled, err := NewStartupRegistrar().Enabled()
+	if err != nil || !enabled {
+		return
+	}
+	// The Run value points at this same binary? Nothing to do.
+	if startupPointsAt(exe) {
+		return
+	}
+	_ = NewStartupRegistrar().Enable(exe)
+}
+
+// taskPointsAt reports whether the watchdog scheduled task's command line
+// references the given binary path. Platform-specific (parses `schtasks /Query`).
+var taskPointsAt = func(exe string) bool {
+	return taskPointsAtImpl(exe)
+}
+
+// startupPointsAt reports whether the startup Run value references the given
+// binary path. Platform-specific (reads the registry).
+var startupPointsAt = func(exe string) bool {
+	return startupPointsAtImpl(exe)
+}
+
 // WatchOnce is the whole `heka daemon watch --once` command (SPEC-10 §1):
 //
 //  1. daemon alive?        → exit 0

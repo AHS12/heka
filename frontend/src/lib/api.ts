@@ -494,10 +494,15 @@ export async function startupSet(on: boolean): Promise<void> {
 
 export async function watchdogEnabled(): Promise<{installed: boolean; intervalMinutes: number}> {
   try {
-    const result = await WatchdogEnabled()
-    // Wails flattens (bool, time.Duration, error) — result is [boolean, number].
-    const [installed, intervalMs] = result as unknown as [boolean, number]
-    return {installed, intervalMinutes: Math.round((intervalMs ?? 0) / 60000)}
+    // The binding returns a WatchdogStatusDTO struct: {installed, interval_minutes}.
+    const result = (await WatchdogEnabled()) as unknown as {
+      installed: boolean
+      interval_minutes: number
+    }
+    return {
+      installed: !!result?.installed,
+      intervalMinutes: result?.interval_minutes ?? 0,
+    }
   } catch (err) {
     throw toAPIError(err)
   }

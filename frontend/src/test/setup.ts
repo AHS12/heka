@@ -44,7 +44,7 @@ vi.mock('@wailsjs/go/app/App', () => ({
   CancelRun: vi.fn(),
   StartupEnabled: vi.fn().mockResolvedValue(false),
   StartupSet: vi.fn(),
-  WatchdogEnabled: vi.fn().mockResolvedValue([false, 0]),
+  WatchdogEnabled: vi.fn().mockResolvedValue({installed: false, interval_minutes: 0}),
   WatchdogSet: vi.fn(),
   PauseScheduler: vi.fn(),
   ResumeScheduler: vi.fn(),

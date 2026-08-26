@@ -116,6 +116,109 @@ func TestStateFileSurvives(t *testing.T) {
 	}
 }
 
+// ---- RepairEntries (path-change reconciliation on daemon start) ----
+
+type fakeInstaller struct {
+	installed bool
+	interval  time.Duration
+	install   []string
+	uninstall []string
+}
+
+func (f *fakeInstaller) Install(interval time.Duration, hekaPath string) error {
+	f.install = append(f.install, hekaPath)
+	return nil
+}
+func (f *fakeInstaller) Uninstall() error {
+	f.uninstall = append(f.uninstall, "x")
+	return nil
+}
+func (f *fakeInstaller) Status() (bool, time.Duration, error) {
+	return f.installed, f.interval, nil
+}
+
+type fakeRegistrar struct {
+	enabled bool
+	enable  []string
+	disable []string
+}
+
+func (f *fakeRegistrar) Enable(exePath string) error {
+	f.enable = append(f.enable, exePath)
+	return nil
+}
+func (f *fakeRegistrar) Disable() error {
+	f.disable = append(f.disable, "x")
+	return nil
+}
+func (f *fakeRegistrar) Enabled() (bool, error) {
+	return f.enabled, nil
+}
+
+// swapSeams points the package-level constructor/path vars at fakes.
+func swapSeams(t *testing.T, inst *fakeInstaller, reg *fakeRegistrar, taskPoints, startupPoints bool) {
+	t.Helper()
+	origInst := NewInstaller
+	origReg := NewStartupRegistrar
+	origTask := taskPointsAt
+	origStartup := startupPointsAt
+	NewInstaller = func() Installer { return inst }
+	NewStartupRegistrar = func() StartupRegistrar { return reg }
+	taskPointsAt = func(string) bool { return taskPoints }
+	startupPointsAt = func(string) bool { return startupPoints }
+	t.Cleanup(func() {
+		NewInstaller = origInst
+		NewStartupRegistrar = origReg
+		taskPointsAt = origTask
+		startupPointsAt = origStartup
+	})
+}
+
+func TestRepairEntriesNoopWhenPathsMatch(t *testing.T) {
+	inst := &fakeInstaller{installed: true, interval: 5 * time.Minute}
+	reg := &fakeRegistrar{enabled: true}
+	swapSeams(t, inst, reg, true, true) // both entries already point at exe
+
+	RepairEntries()
+
+	if len(inst.install) != 0 || len(inst.uninstall) != 0 {
+		t.Fatalf("watchdog touched when paths match: %+v", inst)
+	}
+	if len(reg.enable) != 0 || len(reg.disable) != 0 {
+		t.Fatalf("startup touched when paths match: %+v", reg)
+	}
+}
+
+func TestRepairEntriesReinstallsOnPathChange(t *testing.T) {
+	inst := &fakeInstaller{installed: true, interval: 5 * time.Minute}
+	reg := &fakeRegistrar{enabled: true}
+	swapSeams(t, inst, reg, false, false) // entries point at old install dir
+
+	RepairEntries()
+
+	if len(inst.install) != 1 {
+		t.Fatalf("watchdog re-registrations = %d, want 1", len(inst.install))
+	}
+	if len(reg.enable) != 1 {
+		t.Fatalf("startup re-registrations = %d, want 1", len(reg.enable))
+	}
+}
+
+func TestRepairEntriesSkipsDisabled(t *testing.T) {
+	inst := &fakeInstaller{installed: false}
+	reg := &fakeRegistrar{enabled: false}
+	swapSeams(t, inst, reg, false, false)
+
+	RepairEntries()
+
+	if len(inst.install) != 0 {
+		t.Fatalf("disabled watchdog must not be installed: %+v", inst)
+	}
+	if len(reg.enable) != 0 {
+		t.Fatalf("disabled startup must not be enabled: %+v", reg)
+	}
+}
+
 var (
 	errDaemonFake = errorFake("daemon down")
 	errStartFake  = errorFake("start failed")

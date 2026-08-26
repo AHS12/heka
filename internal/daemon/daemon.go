@@ -227,12 +227,15 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 	return d, handler, nil
 }
 
-// noteStartup records daemon identity in kv (SPEC-06 §3).
+// noteStartup records daemon identity in kv (SPEC-06 §3) and reconciles OS
+// registration (watchdog + startup) with the currently running binary so an
+// upgrade never leaves entries pointing at a deleted install path.
 func (d *Daemon) noteStartup() {
 	p := strconv.Itoa(os.Getpid())
 	_ = d.db.KV().Set("daemon_pid", p)
 	_ = d.db.KV().Set("daemon_version", d.version)
 	_ = d.db.KV().Set("heartbeat", db.Now())
+	osapp.RepairEntries()
 }
 
 // heartbeatLoop keeps the heartbeat fresh while running.

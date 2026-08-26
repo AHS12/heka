@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	stdruntime "runtime"
 	"sync"
-	"time"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -597,10 +596,24 @@ func (a *App) StartupSet(on bool) error {
 	return osapp.NewStartupRegistrar().Disable()
 }
 
+// WatchdogStatusDTO is the shell's view of the OS watchdog (SPEC-10 §3):
+// installed plus the check interval, so the Settings toggle can render
+// "Checks every Nm" without guessing.
+type WatchdogStatusDTO struct {
+	Installed       bool  `json:"installed"`
+	IntervalMinutes int64 `json:"interval_minutes"`
+}
+
 // WatchdogEnabled reports whether the OS-level watchdog is installed.
-func (a *App) WatchdogEnabled() (bool, time.Duration, error) {
-	installer := osapp.NewInstaller()
-	return installer.Status()
+func (a *App) WatchdogEnabled() (WatchdogStatusDTO, error) {
+	installed, interval, err := osapp.NewInstaller().Status()
+	if err != nil {
+		return WatchdogStatusDTO{}, err
+	}
+	return WatchdogStatusDTO{
+		Installed:       installed,
+		IntervalMinutes: int64(interval.Minutes()),
+	}, nil
 }
 
 // WatchdogSet installs or uninstalls the OS-level watchdog.

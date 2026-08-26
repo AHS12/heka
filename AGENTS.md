@@ -68,6 +68,10 @@ make build          # wails build → build/bin/heka.exe
 **Critical:** `main.go` embeds `all:frontend/dist`. The frontend MUST be built before any
 `go build` or `go test`. The Makefile handles this automatically.
 
+**Version bumps:** run `node scripts/bump-version.js <version>` — it updates all six
+version sources (see [docs/version-bump.md](docs/version-bump.md)). Never hand-edit
+`main.go` / `wails.json` / `Makefile` / `frontend` version fields for a release.
+
 **Daily flow:**
 1. `make dev` — starts daemon + Wails GUI
 2. Edit frontend code → Vite HMR updates live
