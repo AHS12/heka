@@ -539,6 +539,145 @@ func (s *RunStore) Prune(before time.Time) error {
 	return err
 }
 
+// Stats aggregates dashboard counters and chart data (SPEC-16 §1).
+func (s *RunStore) Stats() (StatsResult, error) {
+	var out StatsResult
+
+	// Task counts
+	s.db.sql.QueryRow(`SELECT COUNT(*) FROM tasks`).Scan(&out.Tasks)
+	s.db.sql.QueryRow(`SELECT COUNT(*) FROM tasks WHERE enabled = 1`).Scan(&out.TasksEnabled)
+
+	// Schedule counts
+	s.db.sql.QueryRow(`SELECT COUNT(*) FROM schedules WHERE enabled = 1`).Scan(&out.SchedulesEnabled)
+
+	// Currently running
+	s.db.sql.QueryRow(`SELECT COUNT(*) FROM runs WHERE status IN ('queued','running')`).Scan(&out.Running)
+
+	// Today counts (local midnight boundary)
+	today := time.Now().UTC().Format("2006-01-02")
+	s.db.sql.QueryRow(`SELECT COUNT(*) FROM runs WHERE date(created_at) = ?`, today).Scan(&out.RunsToday)
+	s.db.sql.QueryRow(`SELECT COUNT(*) FROM runs WHERE date(created_at) = ? AND status = 'success'`, today).Scan(&out.SuccessToday)
+	s.db.sql.QueryRow(`SELECT COUNT(*) FROM runs WHERE date(created_at) = ? AND status IN ('failed','timed_out')`, today).Scan(&out.FailedToday)
+
+	// Run history: last 7 days aggregated by date+status
+	rows, err := s.db.sql.Query(`
+		SELECT date(created_at) AS d, status, COUNT(*) AS n
+		FROM runs
+		WHERE created_at >= date('now', '-7 days')
+		GROUP BY d, status
+		ORDER BY d`)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	type dayStatus struct {
+		Date   string
+		Status string
+		Count  int
+	}
+	var ds []dayStatus
+	for rows.Next() {
+		var d dayStatus
+		if err := rows.Scan(&d.Date, &d.Status, &d.Count); err != nil {
+			return out, err
+		}
+		ds = append(ds, d)
+	}
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+
+	// Build run_history map
+	historyMap := map[string]*DayStats{}
+	for _, d := range ds {
+		if _, ok := historyMap[d.Date]; !ok {
+			historyMap[d.Date] = &DayStats{Date: d.Date}
+		}
+		entry := historyMap[d.Date]
+		entry.Total += d.Count
+		switch d.Status {
+		case "success":
+			entry.Success += d.Count
+		case "failed", "timed_out":
+			entry.Failed += d.Count
+		}
+	}
+	out.RunHistory = make([]DayStats, 0, len(historyMap))
+	for _, v := range historyMap {
+		out.RunHistory = append(out.RunHistory, *v)
+	}
+
+	// Status distribution (all time)
+	sRows, err := s.db.sql.Query(`SELECT status, COUNT(*) AS n FROM runs GROUP BY status`)
+	if err != nil {
+		return out, err
+	}
+	defer sRows.Close()
+	for sRows.Next() {
+		var s struct {
+			Status string
+			Count  int
+		}
+		if err := sRows.Scan(&s.Status, &s.Count); err != nil {
+			return out, err
+		}
+		out.StatusDistribution = append(out.StatusDistribution, StatusCount{
+			Status: s.Status, Count: s.Count,
+		})
+	}
+
+	// Recent activity (last 10 runs)
+	aRows, err := s.db.sql.Query(`
+		SELECT run_id, task_slug, status, created_at
+		FROM runs ORDER BY created_at DESC LIMIT 10`)
+	if err != nil {
+		return out, err
+	}
+	defer aRows.Close()
+	for aRows.Next() {
+		var a ActivityItem
+		if err := aRows.Scan(&a.RunID, &a.TaskSlug, &a.Status, &a.At); err != nil {
+			return out, err
+		}
+		out.RecentActivity = append(out.RecentActivity, a)
+	}
+
+	return out, nil
+}
+
+// StatsResult is the full dashboard payload.
+type StatsResult struct {
+	Tasks              int             `json:"tasks"`
+	TasksEnabled       int             `json:"tasks_enabled"`
+	SchedulesEnabled   int             `json:"schedules_enabled"`
+	Running            int             `json:"running"`
+	RunsToday          int             `json:"runs_today"`
+	SuccessToday       int             `json:"success_today"`
+	FailedToday        int             `json:"failed_today"`
+	RunHistory         []DayStats      `json:"run_history"`
+	StatusDistribution []StatusCount   `json:"status_distribution"`
+	RecentActivity     []ActivityItem  `json:"recent_activity"`
+}
+
+type DayStats struct {
+	Date    string `json:"date"`
+	Success int    `json:"success"`
+	Failed  int    `json:"failed"`
+	Total   int    `json:"total"`
+}
+
+type StatusCount struct {
+	Status string `json:"status"`
+	Count  int    `json:"count"`
+}
+
+type ActivityItem struct {
+	RunID    string `json:"run_id"`
+	TaskSlug string `json:"task_slug"`
+	Status   string `json:"status"`
+	At       string `json:"at"`
+}
+
 // SecretStore is the secrets vault (SPEC-11). Values are AES-GCM-sealed with
 // the per-install key at rest; names stay plaintext (they are references in
 // task YAML). Get decrypts on read with a legacy-plaintext fallback.

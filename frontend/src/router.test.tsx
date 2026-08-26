@@ -24,10 +24,9 @@ describe('router', () => {
     window.location.hash = '#/'
   })
 
-  it('renders Dashboard as placeholder', async () => {
-    const {findByTestId, findByRole} = await renderAt('#/')
-    expect(await findByTestId('placeholder-page')).toBeInTheDocument()
-    expect(await findByRole('heading', {level: 2, name: 'Dashboard'})).toBeInTheDocument()
+  it('renders Home', async () => {
+    const {findByText} = await renderAt('#/')
+    expect(await findByText('Tasks')).toBeInTheDocument()
   })
 
   it.each([
@@ -55,17 +54,15 @@ describe('router', () => {
     ).toBeInTheDocument()
   })
 
-  it('redirects unknown routes to Dashboard', async () => {
-    const {findByRole} = await renderAt('#/nope')
-    expect(
-      await findByRole('heading', {level: 2, name: 'Dashboard'})
-    ).toBeInTheDocument()
+  it('redirects unknown routes to Home', async () => {
+    const {findByText} = await renderAt('#/nope')
+    expect(await findByText('Tasks')).toBeInTheDocument()
     expect(window.location.hash).toBe('#/')
   })
 
   it('navigates between routes through the sidebar', async () => {
-    const {findByRole} = await renderAt('#/')
-    await findByRole('heading', {level: 2, name: 'Dashboard'})
+    const {findByText, findByRole} = await renderAt('#/')
+    await findByText('Tasks')
     ;(await findByRole('link', {name: 'Tasks'})).click()
     expect(
       await findByRole('heading', {level: 2, name: 'Tasks'})

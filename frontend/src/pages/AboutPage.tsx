@@ -419,9 +419,18 @@ const CLI_COMMANDS = [
       {cmd: 'heka daemon start', desc: 'Start background daemon'},
       {cmd: 'heka daemon stop', desc: 'Stop gracefully'},
       {cmd: 'heka daemon status', desc: 'Health & uptime'},
-      {cmd: 'heka daemon watch', desc: 'Watchdog loop'},
+      {cmd: 'heka daemon startup on', desc: 'Start with system'},
+      {cmd: 'heka daemon startup off', desc: 'Remove from startup'},
+      {cmd: 'heka daemon startup status', desc: 'Check startup state'},
       {cmd: 'heka daemon watchdog install', desc: 'Register OS watchdog'},
       {cmd: 'heka daemon watchdog status', desc: 'Check watchdog state'},
+    ],
+  },
+  {
+    title: 'Info',
+    commands: [
+      {cmd: 'heka --version', desc: 'Print version'},
+      {cmd: 'heka --help', desc: 'Show help'},
     ],
   },
 ]

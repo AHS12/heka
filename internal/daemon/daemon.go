@@ -204,6 +204,7 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 	d.noteStartup()
 	go d.heartbeatLoop()
 	go d.syncLoop()
+	go d.retentionLoop()
 
 	handler := ipc.NewServer(ipc.Deps{
 		Health:        d.health,
@@ -219,6 +220,8 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 		Pause:         d.Pause,
 		Resume:        d.Resume,
 		IsPaused:      d.SchedulerPaused,
+		GetSettings:   d.getSettings,
+		UpdateSettings: d.updateSettings,
 	}).Handler()
 
 	return d, handler, nil
@@ -258,6 +261,52 @@ func (d *Daemon) syncLoop() {
 			return
 		}
 	}
+}
+
+// retentionLoop prunes old runs on a nightly schedule (SPEC-16 §3). It also
+// runs once at startup to catch anything missed while the daemon was down.
+func (d *Daemon) retentionLoop() {
+	// Prune once at startup.
+	d.prune()
+
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			d.prune()
+		case <-d.shutdown:
+			return
+		}
+	}
+}
+
+func (d *Daemon) prune() {
+	cutoff := time.Now().UTC().AddDate(0, 0, -d.cfg.LogRetentionDays)
+	if err := d.db.Runs().Prune(cutoff); err != nil {
+		fmt.Fprintf(os.Stderr, "heka: prune runs: %v\n", err)
+	}
+}
+
+func (d *Daemon) getSettings() ipc.SettingsDTO {
+	days := d.cfg.LogRetentionDays
+	if v, ok, _ := d.db.KV().Get("log_retention_days"); ok && v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			days = n
+		}
+	}
+	return ipc.SettingsDTO{LogRetentionDays: days}
+}
+
+func (d *Daemon) updateSettings(s ipc.SettingsDTO) error {
+	if s.LogRetentionDays <= 0 {
+		return fmt.Errorf("log_retention_days must be > 0")
+	}
+	if err := d.db.KV().Set("log_retention_days", strconv.Itoa(s.LogRetentionDays)); err != nil {
+		return err
+	}
+	d.cfg.LogRetentionDays = s.LogRetentionDays
+	return nil
 }
 
 // health assembles the Health snapshot the IPC layer serves.

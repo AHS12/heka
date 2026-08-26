@@ -40,6 +40,12 @@ import {
   WatchdogSet,
   PauseScheduler,
   ResumeScheduler,
+  Stats,
+  GetSettings,
+  UpdateSettings,
+  DataDir,
+  TasksDir,
+  OpenDataDir,
 } from '@wailsjs/go/app/App'
 import type {task} from '@wailsjs/go/models'
 
@@ -516,6 +522,77 @@ export async function pauseScheduler(): Promise<void> {
 export async function resumeScheduler(): Promise<void> {
   try {
     await ResumeScheduler()
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+// ---- Dashboard stats (SPEC-16 §1).
+
+export interface StatsResult {
+  tasks: number
+  tasks_enabled: number
+  schedules_enabled: number
+  running: number
+  runs_today: number
+  success_today: number
+  failed_today: number
+  run_history: {date: string; success: number; failed: number; total: number}[]
+  status_distribution: {status: string; count: number}[]
+  recent_activity: {run_id: string; task_slug: string; status: string; at: string}[]
+}
+
+export async function getStats(): Promise<StatsResult> {
+  try {
+    return await Stats()
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+// ---- Data directory (SPEC-16 §2).
+
+export async function getDataDir(): Promise<string> {
+  try {
+    return await DataDir()
+  } catch (err) {
+    return ''
+  }
+}
+
+export async function getTasksDir(): Promise<string> {
+  try {
+    return await TasksDir()
+  } catch (err) {
+    return ''
+  }
+}
+
+export async function openDataDir(): Promise<void> {
+  try {
+    await OpenDataDir()
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+// ---- Settings (SPEC-16 §2).
+
+export interface Settings {
+  log_retention_days: number
+}
+
+export async function getSettings(): Promise<Settings> {
+  try {
+    return await GetSettings()
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function updateSettings(s: Settings): Promise<void> {
+  try {
+    await UpdateSettings(s)
   } catch (err) {
     throw toAPIError(err)
   }

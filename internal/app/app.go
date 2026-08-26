@@ -9,10 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	stdruntime "runtime"
 	"sync"
 	"time"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"heka/internal/config"
 	"heka/internal/core/task"
@@ -64,6 +66,9 @@ type ipcCaller interface {
 	Cancel(slug string) error
 	PauseScheduler() error
 	ResumeScheduler() error
+	Stats() (ipc.Stats, error)
+	GetSettings() (ipc.SettingsDTO, error)
+	UpdateSettings(s ipc.SettingsDTO) error
 }
 
 // ErrDialogCanceled is the sentinel for a user canceling an open/save dialog;
@@ -356,9 +361,9 @@ func (a *App) PickScriptFile() (string, error) {
 	if a.ctx == nil {
 		return "", errors.New("dialog unavailable before startup")
 	}
-	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+	path, err := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
 		Title: "Choose script",
-		Filters: []runtime.FileFilter{
+		Filters: []wruntime.FileFilter{
 			{DisplayName: "All files", Pattern: "*.*"},
 		},
 	})
@@ -376,7 +381,7 @@ func (a *App) PickWorkingDir() (string, error) {
 	if a.ctx == nil {
 		return "", errors.New("dialog unavailable before startup")
 	}
-	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+	dir, err := wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
 		Title: "Choose working directory",
 	})
 	if err != nil {
@@ -394,9 +399,9 @@ func (a *App) ImportTaskFromFile() (TaskDTO, error) {
 	if a.ctx == nil {
 		return TaskDTO{}, errors.New("dialog unavailable before startup")
 	}
-	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+	path, err := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
 		Title: "Import task YAML",
-		Filters: []runtime.FileFilter{
+		Filters: []wruntime.FileFilter{
 			{DisplayName: "YAML files", Pattern: "*.yaml"},
 		},
 	})
@@ -426,10 +431,10 @@ func (a *App) ExportTaskYAML(slug string) error {
 	if err != nil {
 		return err
 	}
-	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+	path, err := wruntime.SaveFileDialog(a.ctx, wruntime.SaveDialogOptions{
 		Title:           "Export task",
 		DefaultFilename: slug + ".yaml",
-		Filters:         []runtime.FileFilter{{DisplayName: "YAML files", Pattern: "*.yaml"}},
+		Filters:         []wruntime.FileFilter{{DisplayName: "YAML files", Pattern: "*.yaml"}},
 	})
 	if err != nil {
 		return err
@@ -626,6 +631,92 @@ func (a *App) ResumeScheduler() error {
 		return err
 	}
 	return wrapIPCError(client.ResumeScheduler())
+}
+
+// Stats returns dashboard statistics (SPEC-16 §1).
+func (a *App) Stats() (ipc.Stats, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return ipc.Stats{}, err
+	}
+	s, err := client.Stats()
+	if err != nil {
+		return ipc.Stats{}, wrapIPCError(err)
+	}
+	return s, nil
+}
+
+// GetSettings returns daemon settings (SPEC-16 §2).
+func (a *App) GetSettings() (ipc.SettingsDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return ipc.SettingsDTO{}, err
+	}
+	s, err := client.GetSettings()
+	if err != nil {
+		return ipc.SettingsDTO{}, wrapIPCError(err)
+	}
+	return s, nil
+}
+
+// UpdateSettings persists daemon settings (SPEC-16 §2).
+func (a *App) UpdateSettings(s ipc.SettingsDTO) error {
+	client, err := a.cfgClient()
+	if err != nil {
+		return err
+	}
+	return wrapIPCError(client.UpdateSettings(s))
+}
+
+// OpenDataDir opens the data directory in the OS file manager (SPEC-16 §2).
+func (a *App) OpenDataDir() error {
+	a.mu.Lock()
+	cfg := a.cfg
+	a.mu.Unlock()
+	if cfg == nil {
+		c, err := a.loadCfg()
+		if err != nil {
+			return err
+		}
+		cfg = &c
+	}
+	dir := cfg.DataDir
+	switch stdruntime.GOOS {
+	case "windows":
+		return exec.Command("explorer", dir).Start()
+	case "darwin":
+		return exec.Command("open", dir).Start()
+	default:
+		return exec.Command("xdg-open", dir).Start()
+	}
+}
+
+// DataDir returns the data directory path for display in Settings.
+func (a *App) DataDir() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cfg != nil {
+		return a.cfg.DataDir
+	}
+	cfg, err := a.loadCfg()
+	if err != nil {
+		return ""
+	}
+	return cfg.DataDir
+}
+
+// TasksDir returns the tasks directory path for display in Settings.
+func (a *App) TasksDir() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cfg != nil {
+		return a.cfg.TasksDir
+	}
+	cfg, err := a.loadCfg()
+	if err != nil {
+		return ""
+	}
+	return cfg.TasksDir
 }
 
 // cfgClient lazily resolves the configuration and IPC client. Cached so

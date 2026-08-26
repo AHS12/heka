@@ -393,3 +393,20 @@ func (c *Client) PauseScheduler() error {
 func (c *Client) ResumeScheduler() error {
 	return c.do("POST", "/v1/scheduler/resume", nil, nil)
 }
+
+// Stats returns the dashboard statistics (SPEC-16 §1).
+func (c *Client) Stats() (Stats, error) {
+	var s Stats
+	return s, c.do("GET", "/v1/stats", nil, &s)
+}
+
+// GetSettings returns the daemon settings (SPEC-16 §2).
+func (c *Client) GetSettings() (SettingsDTO, error) {
+	var s SettingsDTO
+	return s, c.do("GET", "/v1/settings", nil, &s)
+}
+
+// UpdateSettings persists daemon settings (SPEC-16 §2).
+func (c *Client) UpdateSettings(s SettingsDTO) error {
+	return c.do("PUT", "/v1/settings", s, nil)
+}

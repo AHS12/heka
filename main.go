@@ -68,7 +68,7 @@ func main() {
 	case modeDaemon:
 		runDaemon()
 	case modeCLI:
-		if err := cli.Run(os.Args[1:]); err != nil {
+		if err := cli.RunWithVersion(os.Args[1:], appVersion); err != nil {
 			os.Exit(1)
 		}
 	}
@@ -78,9 +78,11 @@ func main() {
 func runGUI() {
 	a := app.NewApp(appName, appVersion)
 	err := wails.Run(&options.App{
-		Title:  appName,
-		Width:  1024,
-		Height: 768,
+		Title:     appName,
+		Width:     1024,
+		Height:    768,
+		MinWidth:  800,
+		MinHeight: 560,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

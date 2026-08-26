@@ -98,6 +98,44 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Message }
 
+// Stats is the dashboard payload from GET /v1/stats (SPEC-16 §1).
+type Stats struct {
+	Tasks              int             `json:"tasks"`
+	TasksEnabled       int             `json:"tasks_enabled"`
+	SchedulesEnabled   int             `json:"schedules_enabled"`
+	Running            int             `json:"running"`
+	RunsToday          int             `json:"runs_today"`
+	SuccessToday       int             `json:"success_today"`
+	FailedToday        int             `json:"failed_today"`
+	RunHistory         []DayStats      `json:"run_history"`
+	StatusDistribution []StatusCount   `json:"status_distribution"`
+	RecentActivity     []ActivityItem  `json:"recent_activity"`
+}
+
+type DayStats struct {
+	Date    string `json:"date"`
+	Success int    `json:"success"`
+	Failed  int    `json:"failed"`
+	Total   int    `json:"total"`
+}
+
+type StatusCount struct {
+	Status string `json:"status"`
+	Count  int    `json:"count"`
+}
+
+type ActivityItem struct {
+	RunID    string `json:"run_id"`
+	TaskSlug string `json:"task_slug"`
+	Status   string `json:"status"`
+	At       string `json:"at"`
+}
+
+// SettingsDTO is the wire shape for daemon settings (SPEC-16 §2).
+type SettingsDTO struct {
+	LogRetentionDays int `json:"log_retention_days"`
+}
+
 // errEnvelope is the wire shape for errors.
 type errEnvelope struct {
 	Error *Error `json:"error"`

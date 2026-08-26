@@ -334,3 +334,43 @@ func (s *Server) handleSchedulerResume(w http.ResponseWriter, r *http.Request) {
 	}
 	respondOK(w)
 }
+
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, "GET") {
+		return
+	}
+	stats, err := s.deps.Runs.Stats()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		if s.deps.GetSettings == nil {
+			writeError(w, http.StatusNotImplemented, "not_implemented", "settings not available")
+			return
+		}
+		writeJSON(w, http.StatusOK, s.deps.GetSettings())
+	case "PUT":
+		if s.deps.UpdateSettings == nil {
+			writeError(w, http.StatusNotImplemented, "not_implemented", "settings not available")
+			return
+		}
+		var dto SettingsDTO
+		if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON: "+err.Error())
+			return
+		}
+		if err := s.deps.UpdateSettings(dto); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		respondOK(w)
+	default:
+		requireMethod(w, r, "GET")
+	}
+}

@@ -13,6 +13,11 @@ import {
   startupSet,
   watchdogEnabled,
   watchdogSet,
+  getDataDir,
+  getTasksDir,
+  openDataDir,
+  getSettings,
+  updateSettings,
 } from '../lib/api'
 import {useTheme} from '../lib/theme'
 import {useAccent, ACCENT_COLORS, ACCENT_PRESETS} from '../lib/accent'
@@ -27,8 +32,10 @@ export function SettingsPage() {
     <div className="mx-auto max-w-2xl space-y-8">
       <h2 className="text-lg font-semibold">Settings</h2>
       <AppearanceSection />
+      <DataDirSection />
       <StartupSection />
       <ReliabilitySection />
+      <RetentionSection />
       <SecretsSection />
     </div>
   )
@@ -91,6 +98,46 @@ function AppearanceSection() {
             Custom
           </label>
         </div>
+      </div>
+    </section>
+  )
+}
+
+const DATA_DIRS_KEY = ['data-dirs'] as const
+
+function DataDirSection() {
+  const dirs = useQuery({
+    queryKey: DATA_DIRS_KEY,
+    queryFn: async () => ({data: await getDataDir(), tasks: await getTasksDir()}),
+  })
+  return (
+    <section className="space-y-3">
+      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Data</h3>
+      <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+        <div className="space-y-2">
+          <div>
+            <div className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Data directory</div>
+            <code className="mt-0.5 block truncate font-mono text-xs text-zinc-700 dark:text-zinc-200">
+              {dirs.data?.data ?? '—'}
+            </code>
+          </div>
+          <div>
+            <div className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Tasks directory</div>
+            <code className="mt-0.5 block truncate font-mono text-xs text-zinc-700 dark:text-zinc-200">
+              {dirs.data?.tasks ?? '—'}
+            </code>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => openDataDir()}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/80 px-3 py-1 text-xs font-medium shadow-sm transition-colors hover:border-accent hover:text-accent dark:border-zinc-700/60 dark:bg-zinc-900/70"
+        >
+          <svg className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+          Open data directory
+        </button>
       </div>
     </section>
   )
@@ -214,6 +261,66 @@ function ToggleRow({
         />
       </button>
     </div>
+  )
+}
+
+const SETTINGS_KEY = ['settings'] as const
+
+function RetentionSection() {
+  const qc = useQueryClient()
+  const settings = useQuery({queryKey: SETTINGS_KEY, queryFn: getSettings})
+  const [days, setDays] = useState(90)
+  const [saved, setSaved] = useState(false)
+  const initialized = useState(false)
+
+  // Sync from server once loaded.
+  if (settings.data && !initialized[0]) {
+    setDays(settings.data.log_retention_days)
+    initialized[1](true)
+  }
+
+  const mutation = useMutation({
+    mutationFn: (v: number) => updateSettings({log_retention_days: v}),
+    onSuccess: () => {
+      qc.invalidateQueries({queryKey: SETTINGS_KEY})
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1500)
+    },
+  })
+
+  return (
+    <section className="space-y-3">
+      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Retention</h3>
+      <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+        <Field label="Log retention (days)">
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              value={days}
+              onChange={(e) => setDays(Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-20 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent/30 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+            <span className="text-[11px] text-zinc-400">days</span>
+            <button
+              type="button"
+              disabled={mutation.isPending || days === settings.data?.log_retention_days}
+              onClick={() => mutation.mutate(days)}
+              className={`ml-auto rounded-full px-3 py-1 text-xs font-medium shadow-sm transition-opacity ${
+                saved
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                  : 'bg-accent text-accent-contrast hover:opacity-90'
+              } disabled:opacity-50`}
+            >
+              {saved ? 'Saved' : 'Save'}
+            </button>
+          </div>
+        </Field>
+        <p className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
+          Run history older than this is automatically pruned. Requires daemon restart to take full effect.
+        </p>
+      </div>
+    </section>
   )
 }
 

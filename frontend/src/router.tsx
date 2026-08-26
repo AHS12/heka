@@ -3,7 +3,7 @@
 // redirect to Dashboard.
 import {HashRouter, Navigate, Route, Routes} from 'react-router-dom'
 import {AppLayout} from './layouts/AppLayout'
-import {Placeholder} from './pages/Placeholder'
+import {DashboardPage} from './pages/DashboardPage'
 import {TasksPage} from './pages/TasksPage'
 import {TaskEditorPage} from './pages/TaskEditorPage'
 import {SettingsPage} from './pages/SettingsPage'
@@ -17,7 +17,7 @@ export function AppRouter() {
     <HashRouter>
       <Routes>
         <Route element={<AppLayout />}>
-          <Route index element={<Placeholder title="Dashboard" />} />
+          <Route index element={<DashboardPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="tasks/new" element={<TaskEditorPage />} />
           <Route path="tasks/:slug" element={<TaskEditorPage />} />

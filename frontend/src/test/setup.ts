@@ -48,6 +48,16 @@ vi.mock('@wailsjs/go/app/App', () => ({
   WatchdogSet: vi.fn(),
   PauseScheduler: vi.fn(),
   ResumeScheduler: vi.fn(),
+  Stats: vi.fn().mockResolvedValue({
+    tasks: 0, tasks_enabled: 0, schedules_enabled: 0, running: 0,
+    runs_today: 0, success_today: 0, failed_today: 0,
+    run_history: [], status_distribution: [], recent_activity: [],
+  }),
+  GetSettings: vi.fn().mockResolvedValue({log_retention_days: 90}),
+  UpdateSettings: vi.fn(),
+  DataDir: vi.fn().mockResolvedValue(''),
+  TasksDir: vi.fn().mockResolvedValue(''),
+  OpenDataDir: vi.fn(),
 }))
 
 // CodeMirror measures text with Range.getClientRects on every animation

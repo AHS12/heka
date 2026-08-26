@@ -9,7 +9,7 @@ import {DaemonStatusIcon} from './DaemonStatusIcon'
 const APP_VERSION = '0.1.0'
 
 const NAV_ITEMS = [
-  {to: '/', label: 'Dashboard', end: true},
+  {to: '/', label: 'Home', end: true},
   {to: '/tasks', label: 'Tasks'},
   {to: '/schedules', label: 'Schedules'},
   {to: '/logs', label: 'Logs'},

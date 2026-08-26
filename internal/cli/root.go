@@ -50,6 +50,17 @@ func Run(args []string) error {
 	return NewApp(cfg, ipc.NewClient(cfg)).RunErr(args)
 }
 
+// RunWithVersion is like Run but sets the version string for --version.
+func RunWithVersion(args []string, version string) error {
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		return err
+	}
+	a := NewApp(cfg, ipc.NewClient(cfg))
+	a.root.Version = version
+	return a.RunErr(args)
+}
+
 // RunErr executes the tree and reports command errors in the current output
 // mode. Package Run and the tests both go through here, so error rendering is
 // covered either way.

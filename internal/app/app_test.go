@@ -55,8 +55,11 @@ func (s *stubCaller) ListRuns(ipc.RunFilters) (ipc.RunListResult, error) {
 }
 func (s *stubCaller) Run(string) (ipc.Run, error)    { return ipc.Run{}, s.err }
 func (s *stubCaller) Cancel(string) error            { return s.err }
-func (s *stubCaller) PauseScheduler() error          { return s.err }
-func (s *stubCaller) ResumeScheduler() error         { return s.err }
+func (s *stubCaller) PauseScheduler() error              { return s.err }
+func (s *stubCaller) ResumeScheduler() error             { return s.err }
+func (s *stubCaller) Stats() (ipc.Stats, error)          { return ipc.Stats{}, s.err }
+func (s *stubCaller) GetSettings() (ipc.SettingsDTO, error)  { return ipc.SettingsDTO{}, s.err }
+func (s *stubCaller) UpdateSettings(ipc.SettingsDTO) error   { return s.err }
 
 func newAppWith(caller ipcCaller, started *int, startErr error) *App {
 	a := NewApp("Heka", "0.1.0")

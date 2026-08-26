@@ -26,7 +26,7 @@ describe('TopNav', () => {
   it('renders every route as a floating pill', () => {
     renderAt('/')
     for (const label of [
-      'Dashboard',
+      'Home',
       'Tasks',
       'Schedules',
       'Logs',
@@ -39,7 +39,7 @@ describe('TopNav', () => {
     renderAt('/tasks')
     const tasks = screen.getByRole('link', {name: 'Tasks'})
     expect(tasks).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('link', {name: 'Dashboard'})).not.toHaveAttribute(
+    expect(screen.getByRole('link', {name: 'Home'})).not.toHaveAttribute(
       'aria-current'
     )
     // Active pill + focus ring are driven by the accent tokens (Settings will
