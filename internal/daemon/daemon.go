@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gen2brain/beeep"
+
 	"heka/internal/config"
 	"heka/internal/core/executor"
 	"heka/internal/core/scheduler"
@@ -167,10 +169,21 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 	d.exec = executor.New(database, cfg.MaxOutputBytes, 5*time.Second, resolver, cfg.RunArtifactsDir)
 
 	// Notifications (SPEC-11).
+	beeep.AppName = "Heka"
 	notifier := notify.New(
+		notify.WithDesktop(func(title, message string) error {
+			return beeep.Notify(title, message, "")
+		}),
 		notify.WithResolver(resolver),
 		notify.WithLogger(func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format+"\n", args...)
+		}),
+		notify.WithSoundResolver(func(eventType string) string {
+			key := "sound_" + eventType
+			if v, ok, _ := database.KV().Get(key); ok && v != "" {
+				return v
+			}
+			return "system"
 		}),
 	)
 	d.exec.OnGroupFinished(func(r executor.GroupResult) {
@@ -182,7 +195,13 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 		if err := json.Unmarshal([]byte(row.ParsedJSON), &t); err != nil {
 			return
 		}
-		notifier.NotifyTaskResult(&t, r.FinalStatus)
+		notifier.NotifyTaskResult(notify.TaskResult{
+			Task:     &t,
+			Status:   r.FinalStatus,
+			Trigger:  "manual",
+			Duration: r.Duration,
+			ExitCode: r.ExitCode,
+		})
 	})
 
 	// Scheduler (SPEC-09).
@@ -220,8 +239,9 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 		Pause:         d.Pause,
 		Resume:        d.Resume,
 		IsPaused:      d.SchedulerPaused,
-		GetSettings:   d.getSettings,
+		GetSettings:    d.getSettings,
 		UpdateSettings: d.updateSettings,
+		PreviewSound:   func(preset string) error { return notify.PlaySound(preset, preset) },
 	}).Handler()
 
 	return d, handler, nil
@@ -298,14 +318,49 @@ func (d *Daemon) getSettings() ipc.SettingsDTO {
 			days = n
 		}
 	}
-	return ipc.SettingsDTO{LogRetentionDays: days}
+	soundSuccess, _, _ := d.db.KV().Get("sound_success")
+	soundFailure, _, _ := d.db.KV().Get("sound_failure")
+	soundTimeout, _, _ := d.db.KV().Get("sound_timeout")
+	if soundSuccess == "" {
+		soundSuccess = "system"
+	}
+	if soundFailure == "" {
+		soundFailure = "system"
+	}
+	if soundTimeout == "" {
+		soundTimeout = "system"
+	}
+	return ipc.SettingsDTO{
+		LogRetentionDays: days,
+		SoundSuccess:     soundSuccess,
+		SoundFailure:     soundFailure,
+		SoundTimeout:     soundTimeout,
+	}
 }
 
 func (d *Daemon) updateSettings(s ipc.SettingsDTO) error {
 	if s.LogRetentionDays <= 0 {
 		return fmt.Errorf("log_retention_days must be > 0")
 	}
+	if err := notify.ValidatePreset(s.SoundSuccess); err != nil {
+		return fmt.Errorf("sound_success: %w", err)
+	}
+	if err := notify.ValidatePreset(s.SoundFailure); err != nil {
+		return fmt.Errorf("sound_failure: %w", err)
+	}
+	if err := notify.ValidatePreset(s.SoundTimeout); err != nil {
+		return fmt.Errorf("sound_timeout: %w", err)
+	}
 	if err := d.db.KV().Set("log_retention_days", strconv.Itoa(s.LogRetentionDays)); err != nil {
+		return err
+	}
+	if err := d.db.KV().Set("sound_success", s.SoundSuccess); err != nil {
+		return err
+	}
+	if err := d.db.KV().Set("sound_failure", s.SoundFailure); err != nil {
+		return err
+	}
+	if err := d.db.KV().Set("sound_timeout", s.SoundTimeout); err != nil {
 		return err
 	}
 	d.cfg.LogRetentionDays = s.LogRetentionDays

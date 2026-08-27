@@ -94,6 +94,9 @@ func testNotifier(t *testing.T) (*Notifier, *recorded) {
 			rec.recordPost(url, contentType, b)
 			return nil
 		},
+		soundResolver: func(eventType string) string {
+			return string(SoundSilent)
+		},
 		timeout: time.Second,
 	}
 	return n, rec
@@ -102,6 +105,15 @@ func testNotifier(t *testing.T) (*Notifier, *recorded) {
 func mkTask(notifyOn []string, webhooks ...task.Webhook) *task.Task {
 	return &task.Task{
 		Name: "Alpha", Slug: "alpha", NotifyOn: notifyOn, Notify: task.Notify{Webhooks: webhooks},
+	}
+}
+
+func mkResult(t *task.Task, status string) TaskResult {
+	return TaskResult{
+		Task:     t,
+		Status:   status,
+		Trigger:  "manual",
+		Duration: 5 * time.Second,
 	}
 }
 
@@ -120,7 +132,7 @@ func TestPolicyTable(t *testing.T) {
 		{[]string{"success"}, "success", 1},
 	} {
 		n, rec := testNotifier(t)
-		n.NotifyTaskResult(mkTask(tt.notifyOn), tt.status)
+		n.NotifyTaskResult(mkResult(mkTask(tt.notifyOn), tt.status))
 		if got := len(rec.desktopSends()); got != tt.want {
 			t.Fatalf("notify_on=%v status=%s: desktop sends = %d, want %d",
 				tt.notifyOn, tt.status, got, tt.want)
@@ -130,7 +142,7 @@ func TestPolicyTable(t *testing.T) {
 
 func TestDesktopTitle(t *testing.T) {
 	n, rec := testNotifier(t)
-	n.NotifyTaskResult(mkTask([]string{"failure"}), "failed")
+	n.NotifyTaskResult(mkResult(mkTask([]string{"failure"}), "failed"))
 	sends := rec.desktopSends()
 	if len(sends) != 1 || !strings.Contains(sends[0], "Alpha") ||
 		!strings.Contains(sends[0], "Failed") {
@@ -146,7 +158,7 @@ func TestWebhookPayloads(t *testing.T) {
 		{Format: "generic", URL: "${URL}"},
 	}
 	n, rec := testNotifier(t)
-	n.NotifyTaskResult(mkTask([]string{"failure"}, webhooks...), "failed")
+	n.NotifyTaskResult(mkResult(mkTask([]string{"failure"}, webhooks...), "failed"))
 
 	posts := rec.waitPosts(t, 4, 2*time.Second)
 
@@ -176,7 +188,7 @@ func TestWebhookPayloads(t *testing.T) {
 func TestUnresolvableWebhookSkipped(t *testing.T) {
 	webhooks := []task.Webhook{{Format: "slack", URL: "${MISSING}"}}
 	n, rec := testNotifier(t)
-	n.NotifyTaskResult(mkTask([]string{"failure"}, webhooks...), "failed")
+	n.NotifyTaskResult(mkResult(mkTask([]string{"failure"}, webhooks...), "failed"))
 	time.Sleep(100 * time.Millisecond)
 	if len(rec.postSnapshot()) != 0 {
 		t.Fatalf("unresolvable webhook was sent: %v", rec.postSnapshot())
@@ -201,9 +213,12 @@ func TestSlowWebhookDoesNotBlockOrCrash(t *testing.T) {
 			<-ctx.Done() // hang past the timeout
 			return errors.New("timeout")
 		},
+		soundResolver: func(eventType string) string {
+			return string(SoundSilent)
+		},
 		timeout: 50 * time.Millisecond,
 	}
-	n.NotifyTaskResult(mkTask([]string{"failure"}, webhooks...), "failed")
+	n.NotifyTaskResult(mkResult(mkTask([]string{"failure"}, webhooks...), "failed"))
 	// Notify returns immediately even though the delivery hangs.
 	deadline := time.Now().Add(time.Second)
 	for {
@@ -223,8 +238,42 @@ func TestSlowWebhookDoesNotBlockOrCrash(t *testing.T) {
 
 func TestCancelledStatusNeverNotifies(t *testing.T) {
 	n, rec := testNotifier(t)
-	n.NotifyTaskResult(mkTask([]string{"failure", "success", "timeout"}), "cancelled")
+	n.NotifyTaskResult(mkResult(mkTask([]string{"failure", "success", "timeout"}), "cancelled"))
 	if len(rec.desktopSends()) != 0 {
 		t.Fatalf("cancelled must not notify: %v", rec.desktopSends())
+	}
+}
+
+func TestBuildMessage(t *testing.T) {
+	r := TaskResult{
+		Task:     mkTask([]string{"failure"}),
+		Status:   "failed",
+		Trigger:  "schedule",
+		Duration: 5*time.Second + 123*time.Millisecond,
+		ExitCode: 1,
+	}
+	msg := buildMessage(r)
+	if !strings.Contains(msg, "Trigger: schedule") {
+		t.Fatalf("message missing trigger: %s", msg)
+	}
+	if !strings.Contains(msg, "Duration: 5.123s") {
+		t.Fatalf("message missing duration: %s", msg)
+	}
+	if !strings.Contains(msg, "Exit code: 1") {
+		t.Fatalf("message missing exit code: %s", msg)
+	}
+}
+
+func TestBuildMessageSuccessNoExitCode(t *testing.T) {
+	r := TaskResult{
+		Task:     mkTask([]string{"success"}),
+		Status:   "success",
+		Trigger:  "manual",
+		Duration: 2 * time.Second,
+		ExitCode: 0,
+	}
+	msg := buildMessage(r)
+	if strings.Contains(msg, "Exit code") {
+		t.Fatalf("success message should not include exit code: %s", msg)
 	}
 }

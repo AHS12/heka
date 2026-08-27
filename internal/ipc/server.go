@@ -27,8 +27,9 @@ type Deps struct {
 	Pause         func()            // scheduler pause (SPEC-15 §2)
 	Resume        func()            // scheduler resume (SPEC-15 §2)
 	IsPaused      func() bool       // scheduler paused query (SPEC-15 §2)
-	GetSettings   func() SettingsDTO
+	GetSettings    func() SettingsDTO
 	UpdateSettings func(SettingsDTO) error
+	PreviewSound   func(preset string) error
 }
 
 // TaskFilesystem is the filesystem half of task CRUD (SPEC-13 §1). The daemon
@@ -100,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Settings (SPEC-16 §2).
 	mux.HandleFunc("/v1/settings", s.handleSettings)
+	mux.HandleFunc("/v1/settings/sound-preview", s.handleSoundPreview)
 
 	// Unknown routes → JSON 404 envelope.
 	mux.HandleFunc("/", notFound)

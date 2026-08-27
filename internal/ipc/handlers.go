@@ -374,3 +374,27 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		requireMethod(w, r, "GET")
 	}
 }
+
+func (s *Server) handleSoundPreview(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, "POST") {
+		return
+	}
+	if s.deps.PreviewSound == nil {
+		writeError(w, http.StatusNotImplemented, "not_implemented", "sound preview not available")
+		return
+	}
+	var req SoundPreviewRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON: "+err.Error())
+		return
+	}
+	if req.Preset == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "preset required")
+		return
+	}
+	if err := s.deps.PreviewSound(req.Preset); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	respondOK(w)
+}

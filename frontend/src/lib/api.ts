@@ -43,6 +43,7 @@ import {
   Stats,
   GetSettings,
   UpdateSettings,
+  PreviewSound,
   DataDir,
   TasksDir,
   OpenDataDir,
@@ -585,11 +586,14 @@ export async function openDataDir(): Promise<void> {
 
 export interface Settings {
   log_retention_days: number
+  sound_success: string
+  sound_failure: string
+  sound_timeout: string
 }
 
 export async function getSettings(): Promise<Settings> {
   try {
-    return await GetSettings()
+    return await GetSettings() as Settings
   } catch (err) {
     throw toAPIError(err)
   }
@@ -598,6 +602,14 @@ export async function getSettings(): Promise<Settings> {
 export async function updateSettings(s: Settings): Promise<void> {
   try {
     await UpdateSettings(s)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function previewSound(preset: string): Promise<void> {
+  try {
+    await PreviewSound(preset)
   } catch (err) {
     throw toAPIError(err)
   }

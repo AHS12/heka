@@ -410,3 +410,8 @@ func (c *Client) GetSettings() (SettingsDTO, error) {
 func (c *Client) UpdateSettings(s SettingsDTO) error {
 	return c.do("PUT", "/v1/settings", s, nil)
 }
+
+// PreviewSound plays a sound preview (POST /v1/settings/sound-preview).
+func (c *Client) PreviewSound(preset string) error {
+	return c.do("POST", "/v1/settings/sound-preview", SoundPreviewRequest{Preset: preset}, nil)
+}

@@ -133,7 +133,15 @@ type ActivityItem struct {
 
 // SettingsDTO is the wire shape for daemon settings (SPEC-16 §2).
 type SettingsDTO struct {
-	LogRetentionDays int `json:"log_retention_days"`
+	LogRetentionDays int    `json:"log_retention_days"`
+	SoundSuccess     string `json:"sound_success"`
+	SoundFailure     string `json:"sound_failure"`
+	SoundTimeout     string `json:"sound_timeout"`
+}
+
+// SoundPreviewRequest is the request body for POST /v1/settings/sound-preview.
+type SoundPreviewRequest struct {
+	Preset string `json:"preset"`
 }
 
 // errEnvelope is the wire shape for errors.

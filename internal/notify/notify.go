@@ -17,8 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gen2brain/beeep"
-
 	"heka/internal/core/task"
 )
 
@@ -29,14 +27,23 @@ const defaultTimeout = 10 * time.Second
 // daemon provides the same resolver the executor uses (env → secrets).
 type Resolver func(name string) (string, bool)
 
+// TaskResult carries the information needed for a notification.
+type TaskResult struct {
+	Task     *task.Task
+	Status   string // "success" | "failed" | "timed_out" | "cancelled"
+	Trigger  string // "manual" | "schedule" | "retry"
+	Duration time.Duration
+	ExitCode int
+}
+
 // Notifier dispatches to channels. All seams are injectable for tests.
 type Notifier struct {
-	desktop func(title, message string) error
-	beep    func() error
-	resolve Resolver
-	log     func(format string, args ...any)
-	post    func(ctx context.Context, url, contentType string, body io.Reader) error
-	timeout time.Duration
+	desktop       func(title, message string) error
+	resolve       Resolver
+	log           func(format string, args ...any)
+	post          func(ctx context.Context, url, contentType string, body io.Reader) error
+	soundResolver func(eventType string) string // returns preset for event type
+	timeout       time.Duration
 }
 
 // Option configures a Notifier.
@@ -45,11 +52,6 @@ type Option func(*Notifier)
 // WithDesktop swaps the native toast sender (default: beeep.Notify).
 func WithDesktop(fn func(title, message string) error) Option {
 	return func(n *Notifier) { n.desktop = fn }
-}
-
-// WithBeep swaps the beep sound sender (default: beeep.Beep).
-func WithBeep(fn func() error) Option {
-	return func(n *Notifier) { n.beep = fn }
 }
 
 // WithResolver sets ${VAR} lookup (default: os environment).
@@ -72,20 +74,26 @@ func WithTimeout(d time.Duration) Option {
 	return func(n *Notifier) { n.timeout = d }
 }
 
+// WithSoundResolver sets the function that maps event types to sound presets.
+func WithSoundResolver(fn func(eventType string) string) Option {
+	return func(n *Notifier) { n.soundResolver = fn }
+}
+
 // New builds a Notifier with production defaults.
 func New(opts ...Option) *Notifier {
 	n := &Notifier{
 		desktop: func(title, message string) error {
-			return beeep.Notify(title, message, "")
-		},
-		beep: func() error {
-			return beeep.Beep(beeep.DefaultFreq, beeep.DefaultDuration)
+			// Production default: no-op; daemon wires beeep.Notify.
+			return nil
 		},
 		resolve: func(name string) (string, bool) {
 			return os.LookupEnv(name)
 		},
-		log:     func(string, ...any) {},
-		post:    defaultPost,
+		log:  func(string, ...any) {},
+		post: defaultPost,
+		soundResolver: func(eventType string) string {
+			return string(SoundSystem)
+		},
 		timeout: defaultTimeout,
 	}
 	for _, opt := range opts {
@@ -100,28 +108,47 @@ func New(opts ...Option) *Notifier {
 // The task schema names events `success|failure|timeout` while executor
 // statuses are `success|failed|timed_out`; eventName bridges the two so the
 // policy compares apples to apples.
-func (n *Notifier) NotifyTaskResult(t *task.Task, finalStatus string) {
-	if !allows(t.NotifyOn, eventName(finalStatus)) {
+func (n *Notifier) NotifyTaskResult(r TaskResult) {
+	if !allows(r.Task.NotifyOn, eventName(r.Status)) {
 		return
 	}
-	title := fmt.Sprintf("%s — %s", t.Name, displayStatus(finalStatus))
-	message := title
+	event := eventName(r.Status)
+	title := fmt.Sprintf("%s — %s", r.Task.Name, displayStatus(r.Status))
+	message := buildMessage(r)
 
-	if n.beep != nil {
-		if err := n.beep(); err != nil {
-			n.log("heka: beep for %s: %v", t.Slug, err)
-		}
+	// Play notification sound.
+	preset := n.soundResolver(event)
+	if err := PlaySound(preset, event); err != nil {
+		n.log("heka: sound for %s: %v", r.Task.Slug, err)
 	}
 
+	// Desktop toast.
 	if n.desktop != nil {
-		if err := n.desktop(title, ""); err != nil {
-			n.log("heka: desktop notification for %s: %v", t.Slug, err)
+		if err := n.desktop(title, message); err != nil {
+			n.log("heka: desktop notification for %s: %v", r.Task.Slug, err)
 		}
 	}
 
-	for _, wb := range t.Notify.Webhooks {
+	for _, wb := range r.Task.Notify.Webhooks {
 		n.deliverWebhook(wb, message)
 	}
+}
+
+// buildMessage constructs a richer notification message.
+func buildMessage(r TaskResult) string {
+	parts := []string{}
+
+	parts = append(parts, fmt.Sprintf("Trigger: %s", r.Trigger))
+
+	if r.Duration > 0 {
+		parts = append(parts, fmt.Sprintf("Duration: %s", r.Duration.Round(time.Millisecond)))
+	}
+
+	if r.ExitCode != 0 {
+		parts = append(parts, fmt.Sprintf("Exit code: %d", r.ExitCode))
+	}
+
+	return strings.Join(parts, " • ")
 }
 
 // eventName maps a terminal status onto the notify_on vocabulary.
@@ -200,6 +227,8 @@ func displayStatus(s string) string {
 		return "Failed"
 	case "timed_out":
 		return "Timed out"
+	case "cancelled":
+		return "Cancelled"
 	}
 	return s
 }

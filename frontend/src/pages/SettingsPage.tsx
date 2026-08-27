@@ -18,6 +18,7 @@ import {
   openDataDir,
   getSettings,
   updateSettings,
+  previewSound,
 } from '../lib/api'
 import {useTheme, LIGHT_VARIANTS, DARK_VARIANTS} from '../lib/theme'
 import type {ThemeVariant} from '../lib/theme'
@@ -39,6 +40,7 @@ export function SettingsPage() {
       <StartupSection />
       <ReliabilitySection />
       <RetentionSection />
+      <NotificationSection />
       <SecretsSection />
     </div>
   )
@@ -321,7 +323,12 @@ function RetentionSection() {
   }
 
   const mutation = useMutation({
-    mutationFn: (v: number) => updateSettings({log_retention_days: v}),
+    mutationFn: (v: number) => updateSettings({
+      log_retention_days: v,
+      sound_success: settings.data?.sound_success ?? 'system',
+      sound_failure: settings.data?.sound_failure ?? 'system',
+      sound_timeout: settings.data?.sound_timeout ?? 'system',
+    }),
     onSuccess: () => {
       qc.invalidateQueries({queryKey: SETTINGS_KEY})
       setSaved(true)
@@ -362,6 +369,155 @@ function RetentionSection() {
         </p>
       </div>
     </section>
+  )
+}
+
+const SOUND_OPTIONS = [
+  {id: 'system', label: 'System default'},
+  {id: 'silent', label: 'Silent'},
+  {id: 'chime', label: 'Chime'},
+  {id: 'alert', label: 'Alert'},
+  {id: 'bell', label: 'Bell'},
+]
+
+function NotificationSection() {
+  const qc = useQueryClient()
+  const settings = useQuery({queryKey: SETTINGS_KEY, queryFn: getSettings})
+  const [success, setSuccess] = useState('system')
+  const [failure, setFailure] = useState('system')
+  const [timeoutSound, setTimeoutSound] = useState('system')
+  const [saved, setSaved] = useState(false)
+  const initialized = useState(false)
+
+  if (settings.data && !initialized[0]) {
+    setSuccess(settings.data.sound_success ?? 'system')
+    setFailure(settings.data.sound_failure ?? 'system')
+    setTimeoutSound(settings.data.sound_timeout ?? 'system')
+    initialized[1](true)
+  }
+
+  const mutation = useMutation({
+    mutationFn: (s: {sound_success: string; sound_failure: string; sound_timeout: string}) =>
+      updateSettings({
+        log_retention_days: settings.data?.log_retention_days ?? 90,
+        ...s,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({queryKey: SETTINGS_KEY})
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1500)
+    },
+  })
+
+  const [previewing, setPreviewing] = useState<string | null>(null)
+
+  const handlePreview = async (preset: string) => {
+    setPreviewing(preset)
+    try {
+      await previewSound(preset)
+    } catch {
+      // Preview errors are non-critical
+    }
+    setPreviewing(null)
+  }
+
+  return (
+    <section className="space-y-3">
+      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+        Notification Sounds
+      </h3>
+      <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+        <div className="space-y-3">
+          <SoundRow
+            label="Success sound"
+            value={success}
+            onChange={setSuccess}
+            onPreview={() => handlePreview(success)}
+            isPreviewing={previewing === success}
+          />
+          <SoundRow
+            label="Failure sound"
+            value={failure}
+            onChange={setFailure}
+            onPreview={() => handlePreview(failure)}
+            isPreviewing={previewing === failure}
+          />
+          <SoundRow
+            label="Timeout sound"
+            value={timeoutSound}
+            onChange={setTimeoutSound}
+            onPreview={() => handlePreview(timeoutSound)}
+            isPreviewing={previewing === timeoutSound}
+          />
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={
+              mutation.isPending ||
+              (success === (settings.data?.sound_success ?? 'system') &&
+                failure === (settings.data?.sound_failure ?? 'system') &&
+                timeoutSound === (settings.data?.sound_timeout ?? 'system'))
+            }
+            onClick={() => mutation.mutate({sound_success: success, sound_failure: failure, sound_timeout: timeoutSound})}
+            className={`rounded-full px-3 py-1 text-xs font-medium shadow-sm transition-opacity ${
+              saved
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                : 'bg-accent text-accent-contrast hover:opacity-90'
+            } disabled:opacity-50`}
+          >
+            {saved ? 'Saved' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function SoundRow({
+  label,
+  value,
+  onChange,
+  onPreview,
+  isPreviewing,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  onPreview: () => void
+  isPreviewing: boolean
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <Field label={label}>
+        <SelectField
+          aria-label={label}
+          value={value}
+          onChange={onChange}
+          className="w-44"
+          items={SOUND_OPTIONS}
+        />
+      </Field>
+      <button
+        type="button"
+        aria-label={`Preview ${label}`}
+        onClick={onPreview}
+        disabled={isPreviewing || value === 'silent'}
+        className="mt-5 inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-zinc-200/80 bg-white/80 text-zinc-500 shadow-sm transition-colors hover:border-accent hover:text-accent focus-visible:ring-2 focus-visible:ring-accent-ring dark:border-zinc-700/60 dark:bg-zinc-900/70 dark:text-zinc-400 disabled:opacity-50"
+      >
+        {isPreviewing ? (
+          <svg className="size-4 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        ) : (
+          <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+            <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" />
+          </svg>
+        )}
+      </button>
+    </div>
   )
 }
 

@@ -68,6 +68,7 @@ type ipcCaller interface {
 	Stats() (ipc.Stats, error)
 	GetSettings() (ipc.SettingsDTO, error)
 	UpdateSettings(s ipc.SettingsDTO) error
+	PreviewSound(preset string) error
 }
 
 // ErrDialogCanceled is the sentinel for a user canceling an open/save dialog;
@@ -686,6 +687,15 @@ func (a *App) UpdateSettings(s ipc.SettingsDTO) error {
 		return err
 	}
 	return wrapIPCError(client.UpdateSettings(s))
+}
+
+// PreviewSound plays a sound preview (SPEC-16 §2).
+func (a *App) PreviewSound(preset string) error {
+	client, err := a.cfgClient()
+	if err != nil {
+		return err
+	}
+	return wrapIPCError(client.PreviewSound(preset))
 }
 
 // OpenDataDir opens the data directory in the OS file manager (SPEC-16 §2).
