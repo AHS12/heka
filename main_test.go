@@ -16,8 +16,11 @@ func TestResolveMode(t *testing.T) {
 		{"daemon status", []string{"daemon", "status"}, modeCLI},
 		{"cli list", []string{"list"}, modeCLI},
 		{"cli run with args", []string{"run", "daily-research"}, modeCLI},
+		{"help command", []string{"help"}, modeCLI},
 		{"help short", []string{"-h"}, modeCLI},
 		{"help long", []string{"--help"}, modeCLI},
+		{"version short", []string{"-v"}, modeCLI},
+		{"version long", []string{"--version"}, modeCLI},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

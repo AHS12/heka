@@ -32,8 +32,22 @@ Unicode true
 ####
 ## Include the wails tools + nsDialogs for PATH checkbox
 ####
+!define PRODUCT_EXECUTABLE "heka-gui.exe"
+!define HEKA_CONSOLE_EXECUTABLE "heka.exe"
 !include "wails_tools.nsh"
 !include "nsDialogs.nsh"
+
+!ifndef ARG_HEKA_AMD64_BINARY
+    !error "Heka: ARG_HEKA_AMD64_BINARY is required"
+!endif
+
+!macro heka.files
+    !ifdef SUPPORTS_AMD64
+        ${If} ${IsNativeAMD64}
+            File "/oname=${HEKA_CONSOLE_EXECUTABLE}" "${ARG_HEKA_AMD64_BINARY}"
+        ${EndIf}
+    !endif
+!macroend
 
 # The version information for this two must consist of 4 parts
 VIProductVersion "${INFO_PRODUCTVERSION}.0"
@@ -121,6 +135,7 @@ Function .onInit
        Abort
    ${EndIf}
 
+   nsExec::ExecToLog 'taskkill /IM heka-gui.exe /F /T'
    nsExec::ExecToLog 'taskkill /IM heka.exe /F /T'
    nsExec::ExecToLog 'taskkill /IM Heka.exe /F /T'
    nsExec::ExecToLog 'schtasks /Delete /TN "Heka Watchdog" /F'
@@ -134,6 +149,7 @@ Section
     SetOutPath $INSTDIR
 
     !insertmacro wails.files
+    !insertmacro heka.files
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
@@ -176,12 +192,16 @@ Section
     # The watchdog scheduled task was deleted above; re-create it (same name,
     # default 5-minute interval) so the daemon is guarded with the new binary.
     # The startup Run key is rewritten so it points at the new path.
-    nsExec::ExecToLog '"$INSTDIR\${PRODUCT_EXECUTABLE}" daemon watchdog install'
-    nsExec::ExecToLog '"$INSTDIR\${PRODUCT_EXECUTABLE}" daemon startup on'
+    nsExec::ExecToLog '"$INSTDIR\${HEKA_CONSOLE_EXECUTABLE}" daemon watchdog install'
+    nsExec::ExecToLog '"$INSTDIR\${HEKA_CONSOLE_EXECUTABLE}" daemon startup on'
 SectionEnd
 
 Section "uninstall"
     !insertmacro wails.setShellContext
+
+    nsExec::ExecToLog 'taskkill /IM heka-gui.exe /F /T'
+    nsExec::ExecToLog 'taskkill /IM heka.exe /F /T'
+    nsExec::ExecToLog 'taskkill /IM Heka.exe /F /T'
 
     # --- Remove OS entries BEFORE deleting files ---
     nsExec::ExecToLog 'schtasks /Delete /TN "Heka Watchdog" /F'

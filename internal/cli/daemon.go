@@ -139,7 +139,7 @@ func (a *App) watchdogCmd() *cobra.Command {
 		Short: "Register the watchdog with the operating system",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			exe, err := os.Executable()
+			exe, err := osapp.ConsoleExecutable()
 			if err != nil {
 				return err
 			}
@@ -228,7 +228,7 @@ func (a *App) startupCmd() *cobra.Command {
 		Short: "Register the daemon to start with the OS",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			exe, err := os.Executable()
+			exe, err := osapp.ConsoleExecutable()
 			if err != nil {
 				return err
 			}

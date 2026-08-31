@@ -10,6 +10,7 @@ import (
 
 	"heka/internal/config"
 	"heka/internal/ipc"
+	"heka/internal/osapp"
 )
 
 // Start spawns a detached daemon and returns once it answers a health ping
@@ -21,7 +22,7 @@ func Start(cfg config.Config) error {
 		return nil // already running
 	}
 
-	binary, err := os.Executable()
+	binary, err := osapp.ConsoleExecutable()
 	if err != nil {
 		return err
 	}

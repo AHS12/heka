@@ -1,6 +1,6 @@
 # Heka build tooling — single entry point for dev, build, and checks (SPEC-01 §4).
 
-VERSION   ?= 0.6.3
+VERSION   ?= 0.6.4
 BIN_DIR   := build
 DIST_DIR  := $(BIN_DIR)/dist
 LDFLAGS   := -X main.appVersion=$(VERSION)
@@ -36,9 +36,11 @@ dev-core: frontend/dist
 
 ## build: build the console binary; on Windows also the GUI-subsystem flavor
 build:
-	wails build -ldflags "$(LDFLAGS)"
 ifeq ($(OS),Windows_NT)
-	wails build -o heka-gui$(EXE) -ldflags "$(LDFLAGS) -H windowsgui"
+	wails build -o heka-gui$(EXE) -ldflags "$(LDFLAGS)"
+	wails build -windowsconsole -o heka$(EXE) -ldflags "$(LDFLAGS)"
+else
+	wails build -ldflags "$(LDFLAGS)"
 endif
 
 ## test: Go tests + frontend suite (builds the frontend first so the go:embed works)
@@ -96,9 +98,11 @@ endif
 ## release-dev: quick build for current platform with dev version tag
 release-dev: frontend/dist
 	$(call MKDIR_P,$(DIST_DIR))
-	wails build -clean -ldflags "$(LDFLAGS)"
 ifeq ($(OS),Windows_NT)
-	wails build -ldflags "$(LDFLAGS) -H windowsgui" -o heka-gui$(EXE)
+	wails build -clean -o heka-gui$(EXE) -ldflags "$(LDFLAGS)"
+	wails build -windowsconsole -o heka$(EXE) -ldflags "$(LDFLAGS)"
+else
+	wails build -clean -nopackage -ldflags "$(LDFLAGS)"
 endif
 	powershell -NoProfile -Command "Copy-Item build\bin\heka$(EXE) $(DIST_DIR)\heka$(EXE) -Force"
 ifeq ($(OS),Windows_NT)
@@ -113,18 +117,15 @@ release: release-windows release-linux release-mac
 	@echo   All platforms built ^> $(DIST_DIR)/
 	@echo.
 
-## release-windows: NSIS installer (finds makensis automatically)
+## release-windows: NSIS installer containing console and GUI executables
 release-windows: frontend/dist
 	@echo ^> Windows...
 	$(call MKDIR_P,$(DIST_DIR))
-	set "PATH=C:\Program Files (x86)\NSIS;$(PATH)" && wails build -clean -nsis -ldflags "$(LDFLAGS)"
-	@if exist "build\bin\Heka-amd64-installer.exe" ( \
-		powershell -NoProfile -Command "Copy-Item build\bin\Heka-amd64-installer.exe $(DIST_DIR)\heka-$(VERSION)-amd64-setup.exe -Force" & \
-		echo   OK $(DIST_DIR)/heka-$(VERSION)-amd64-setup.exe \
-	) else ( \
-		powershell -NoProfile -Command "Copy-Item build\bin\heka.exe $(DIST_DIR)\heka-$(VERSION)-amd64.exe -Force" & \
-		echo   OK $(DIST_DIR)/heka-$(VERSION)-amd64.exe (binary only^) \
-	)
+	wails build -clean -o heka-gui$(EXE) -ldflags "$(LDFLAGS)"
+	wails build -windowsconsole -o heka$(EXE) -ldflags "$(LDFLAGS)"
+	cd build\windows\installer && set "PATH=C:\Program Files (x86)\NSIS;$(PATH)" && makensis -DINFO_PRODUCTVERSION=$(VERSION) -DARG_WAILS_AMD64_BINARY=..\..\bin\heka-gui.exe -DARG_HEKA_AMD64_BINARY=..\..\bin\heka.exe project.nsi
+	powershell -NoProfile -Command "Copy-Item build\bin\Heka-amd64-installer.exe $(DIST_DIR)\heka-$(VERSION)-amd64-setup.exe -Force"
+	@echo   OK $(DIST_DIR)/heka-$(VERSION)-amd64-setup.exe
 
 ## release-linux: binary + .deb package (cross-compiled from Windows)
 release-linux: frontend/dist

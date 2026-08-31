@@ -3,7 +3,6 @@ package osapp
 import (
 	_ "embed"
 	"fmt"
-	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -29,9 +28,9 @@ type TrayDeps struct {
 }
 
 const (
-	maxTaskItems     = 10
-	maxActiveItems   = 5
-	maxRecentItems   = 5
+	maxTaskItems   = 10
+	maxActiveItems = 5
+	maxRecentItems = 5
 )
 
 // RunTray starts the system tray lifecycle on the main thread (SPEC-15 §1).
@@ -170,7 +169,7 @@ func onReady(deps TrayDeps) {
 				_ = startupRegistrar.Disable()
 				startupItem.Uncheck()
 			} else {
-				exe, err := os.Executable()
+				exe, err := ConsoleExecutable()
 				if err == nil {
 					_ = startupRegistrar.Enable(exe)
 					startupItem.Check()
@@ -183,7 +182,7 @@ func onReady(deps TrayDeps) {
 				_ = watchdogInstaller.Uninstall()
 				watchdogItem.Uncheck()
 			} else {
-				exe, err := os.Executable()
+				exe, err := ConsoleExecutable()
 				if err == nil {
 					_ = watchdogInstaller.Install(DefaultWatchdogInterval, exe)
 					watchdogItem.Check()
@@ -203,9 +202,9 @@ func onReady(deps TrayDeps) {
 // ---- Slot refresh helpers
 
 type slotInfo struct {
-	Label  string
+	Label   string
 	Tooltip string
-	Slug   string
+	Slug    string
 }
 
 func refreshSlots(
@@ -302,9 +301,9 @@ func statusIcon(status string) string {
 	}
 }
 
-// spawnGUI launches `heka gui` via the same executable (SPEC-15 §1).
+// spawnGUI launches `heka gui` via the GUI executable (SPEC-15 §1).
 func spawnGUI(cfg config.Config) {
-	binary, err := os.Executable()
+	binary, err := GUIExecutable()
 	if err != nil {
 		return
 	}
@@ -316,7 +315,7 @@ func spawnGUI(cfg config.Config) {
 
 // triggerRun runs a task via the CLI binary (SPEC-15 §1).
 func triggerRun(slug string) {
-	binary, err := os.Executable()
+	binary, err := ConsoleExecutable()
 	if err != nil {
 		return
 	}

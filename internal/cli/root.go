@@ -45,6 +45,7 @@ type App struct {
 func Run(args []string) error {
 	cfg, err := config.LoadDefault()
 	if err != nil {
+		fmt.Fprintln(os.Stderr, "heka:", err)
 		return err
 	}
 	return NewApp(cfg, ipc.NewClient(cfg)).RunErr(args)
@@ -54,6 +55,7 @@ func Run(args []string) error {
 func RunWithVersion(args []string, version string) error {
 	cfg, err := config.LoadDefault()
 	if err != nil {
+		fmt.Fprintln(os.Stderr, "heka:", err)
 		return err
 	}
 	a := NewApp(cfg, ipc.NewClient(cfg))
@@ -97,6 +99,8 @@ func NewApp(cfg config.Config, client APIClient) *App {
 
 // Execute runs the tree with the given args.
 func (a *App) Execute(args []string) error {
+	a.root.SetOut(a.stdout)
+	a.root.SetErr(a.stderr)
 	a.root.SetArgs(args)
 	return a.root.Execute()
 }

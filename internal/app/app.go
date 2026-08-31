@@ -588,7 +588,7 @@ func (a *App) StartupEnabled() (bool, error) {
 // StartupSet enables or disables OS-level startup registration for the daemon.
 func (a *App) StartupSet(on bool) error {
 	if on {
-		exe, err := os.Executable()
+		exe, err := osapp.ConsoleExecutable()
 		if err != nil {
 			return err
 		}
@@ -627,7 +627,7 @@ func (a *App) WatchdogEnabled() (WatchdogStatusDTO, error) {
 // WatchdogSet installs or uninstalls the OS-level watchdog.
 func (a *App) WatchdogSet(on bool) error {
 	if on {
-		exe, err := os.Executable()
+		exe, err := osapp.ConsoleExecutable()
 		if err != nil {
 			return err
 		}

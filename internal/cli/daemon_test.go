@@ -68,6 +68,35 @@ func runArgs(t *testing.T, a *App, args ...string) error {
 	return a.RunErr(args)
 }
 
+func TestHelpAndVersionOutput(t *testing.T) {
+	for _, args := range [][]string{{"help"}, {"--help"}} {
+		a, out, errOut := newTestApp(&stubClient{})
+		if err := runArgs(t, a, args...); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if !strings.Contains(out.String(), "Available Commands:") {
+			t.Fatalf("%v output:\n%s", args, out.String())
+		}
+		if errOut.Len() != 0 {
+			t.Fatalf("%v stderr:\n%s", args, errOut.String())
+		}
+	}
+
+	for _, args := range [][]string{{"-v"}, {"--version"}} {
+		a, out, errOut := newTestApp(&stubClient{})
+		a.root.Version = "9.9.9"
+		if err := runArgs(t, a, args...); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if got := strings.TrimSpace(out.String()); got != "heka version 9.9.9" {
+			t.Fatalf("%v output = %q", args, got)
+		}
+		if errOut.Len() != 0 {
+			t.Fatalf("%v stderr:\n%s", args, errOut.String())
+		}
+	}
+}
+
 func TestList(t *testing.T) {
 	stub := &stubClient{tasks: []ipc.TaskSummary{
 		{Slug: "alpha", Name: "Alpha", Type: "script", Runtime: "custom", Enabled: true},
