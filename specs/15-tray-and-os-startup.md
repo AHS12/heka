@@ -49,7 +49,7 @@ Quit                     → graceful shutdown (same sequence as SPEC-06)
 
 | Platform | Mechanism | Value registered |
 |---|---|---|
-| Windows | HKCU `Software\Microsoft\Windows\CurrentVersion\Run` → `Heka` | `"<abs path>\heka.exe" daemon start` (console exe; `daemon start` already detaches with `CREATE_NO_WINDOW`) |
+| Windows | HKCU `Software\Microsoft\Windows\CurrentVersion\Run` → `Heka` | `"<abs path>\heka.exe" daemon` (direct long-lived daemon launch; the binary is built as a Windows GUI executable, so no console opens) |
 | Linux | systemd **user** unit `heka-daemon.service` (WantedBy=default.target, `systemctl --user enable`) | `ExecStart=<abs path>/heka daemon` (fallback to autostart `.desktop` if systemd unavailable) |
 | macOS | LaunchAgent `com.heka.daemon.plist` (RunAtLoad) | `<abs path>/heka daemon` |
 
@@ -84,7 +84,7 @@ WatchdogEnabled() (bool, error)  WatchdogSet(on bool) error   // SPEC-10 install
 
 1. Menu builder: db rows → menu structure (pure function). Unit-test Run Task submenu contents, Recent Runs order/cap, Active Jobs contents.
 2. Pause/Resume: paused → ticks stop, `next_run_at` frozen, health shows `paused`; resume → ticks restart (ticker-based engine test with `@every 1s`).
-3. Windows registrar behind an interface: enable writes the expected command string (`"…\heka.exe" daemon start`), status reads it — registry access abstracted into an injectable reader/writer so unit tests don't touch HKCU. One *real* HKCU write happens only in manual acceptance.
+3. Windows registrar command generation is unit-tested without touching HKCU: enable writes the direct command string (`"…\heka.exe" daemon`), matching accepts path case differences, and the former `daemon start` wrapper is treated as stale. One *real* HKCU write happens only in manual acceptance.
 4. Linux/macOS: unit + plist/systemd string assertions (verified-on-CI only, per SPEC-10 precedent).
 5. Manual (with user): daemon shows tray; **Open** spawns the GUI; **Run Task** runs; **Pause** freezes next run; **Quit** exits cleanly; `startup on` then reading the Run key shows the entry.
 6. `make check` green.

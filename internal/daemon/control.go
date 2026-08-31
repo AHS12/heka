@@ -13,8 +13,14 @@ import (
 )
 
 // Start spawns a detached daemon and returns once it answers a health ping
-// (readiness ≤ 5 s). Windows: no console window. POSIX: new session.
+// (readiness ≤ 15 s). If a daemon is already running, returns nil immediately.
+// Windows: no console window. POSIX: new session.
 func Start(cfg config.Config) error {
+	client := ipc.NewClient(cfg)
+	if _, err := client.Health(); err == nil {
+		return nil // already running
+	}
+
 	binary, err := os.Executable()
 	if err != nil {
 		return err
@@ -40,15 +46,14 @@ func Start(cfg config.Config) error {
 	}
 	_ = cmd.Process.Release() // hand the process to the OS
 
-	client := ipc.NewClient(cfg)
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := client.Health(); err == nil {
 			return nil
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond)
 	}
-	return fmt.Errorf("daemon did not become ready within 5s")
+	return fmt.Errorf("daemon did not become ready within 15s")
 }
 
 // Stop asks the daemon to shut down gracefully and waits until the endpoint

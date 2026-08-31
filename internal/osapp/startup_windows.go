@@ -17,9 +17,9 @@ type registryStartupRegistrar struct{}
 
 func newStartupRegistrar() StartupRegistrar { return &registryStartupRegistrar{} }
 
-// startupPointsAtImpl reports whether the startup Run value references the
-// given binary path. A Run value pointing elsewhere (old install dir) must be
-// rewritten on upgrade.
+// startupPointsAtImpl reports whether the startup Run value contains the
+// current direct-daemon command. Old paths and the former "daemon start"
+// wrapper command are rewritten on startup.
 func startupPointsAtImpl(exe string) bool {
 	key, err := registry.OpenKey(
 		registry.CURRENT_USER,
@@ -34,7 +34,15 @@ func startupPointsAtImpl(exe string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.Contains(val, exe)
+	return startupCommandPointsAt(val, exe)
+}
+
+func startupCommand(exePath string) string {
+	return fmt.Sprintf(`"%s" daemon`, exePath)
+}
+
+func startupCommandPointsAt(command, exePath string) bool {
+	return strings.EqualFold(strings.TrimSpace(command), startupCommand(exePath))
 }
 
 func (r *registryStartupRegistrar) Enable(exePath string) error {
@@ -47,9 +55,7 @@ func (r *registryStartupRegistrar) Enable(exePath string) error {
 		return fmt.Errorf("open Run key: %w", err)
 	}
 	defer key.Close()
-	// daemon start already detaches with CREATE_NO_WINDOW (control_windows.go).
-	cmd := fmt.Sprintf(`"%s" daemon start`, exePath)
-	return key.SetStringValue(startupValueName, cmd)
+	return key.SetStringValue(startupValueName, startupCommand(exePath))
 }
 
 func (r *registryStartupRegistrar) Disable() error {
