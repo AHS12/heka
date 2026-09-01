@@ -24,7 +24,7 @@ OS schedulers run a check on a cadence (default 5 minutes):
 
 | Platform | Entry | Action |
 |---|---|---|
-| Windows | Task Scheduler task `Heka Watchdog`, `schtasks /SC MINUTE /MO 5` | `<heka> daemon watch --once` |
+| Windows | Task Scheduler task `Heka Watchdog`, `schtasks /SC MINUTE /MO 5` | `<heka-gui> daemon watch --once` (GUI-subsystem binary, so no console window flashes) |
 | Linux | systemd **user** timer `heka-watchdog.{service,timer}` (OnUnitActiveSec=5min); fallback: user crontab `*/5 * * * *` (documented in the spec's README notes) | same |
 | macOS | launchd LaunchAgent `heka.watchdog.plist` (StartInterval=300) | same |
 

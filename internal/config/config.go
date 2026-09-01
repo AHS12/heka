@@ -32,6 +32,7 @@ type Config struct {
 	SocketDir        string // POSIX IPC unix-socket dir; empty on Windows (named pipes)
 	LogRetentionDays int
 	MaxOutputBytes   int64
+	RunArtifactsDir  string // per-run output folders; empty disables file capture
 }
 
 // fileConfig is the schema of the optional YAML config file. Pointers
@@ -42,6 +43,7 @@ type fileConfig struct {
 	TasksDir         string `yaml:"tasks_dir"`
 	LogRetentionDays *int   `yaml:"log_retention_days"`
 	MaxOutputBytes   *int64 `yaml:"max_output_bytes"`
+	RunArtifactsDir  string `yaml:"run_artifacts_dir"`
 }
 
 // Load resolves configuration from an environment map and a home directory.
@@ -73,6 +75,9 @@ func Load(env map[string]string, home string) (Config, error) {
 	if v := env["HEKA_TASKS_DIR"]; v != "" {
 		cfg.TasksDir = v
 	}
+	if v := env["HEKA_RUN_ARTIFACTS_DIR"]; v != "" {
+		cfg.RunArtifactsDir = v
+	}
 	cfg.SocketDir = socketDir(env, cfg.DataDir, runtime.GOOS)
 
 	if err := cfg.absolutize(); err != nil {
@@ -103,6 +108,7 @@ func defaults(env map[string]string, home string) Config {
 		TasksDir:         filepath.Join(dataDir, "tasks"),
 		LogRetentionDays: DefaultLogRetentionDays,
 		MaxOutputBytes:   DefaultMaxOutputBytes,
+		RunArtifactsDir:  filepath.Join(dataDir, "runs"),
 	}
 }
 
@@ -160,19 +166,25 @@ func applyFile(cfg *Config, data []byte) error {
 	if fc.MaxOutputBytes != nil {
 		cfg.MaxOutputBytes = *fc.MaxOutputBytes
 	}
+	if fc.RunArtifactsDir != "" {
+		cfg.RunArtifactsDir = fc.RunArtifactsDir
+	}
 	return nil
 }
 
 func (cfg *Config) absolutize() error {
-	for name, p := range map[string]string{"data_dir": cfg.DataDir, "tasks_dir": cfg.TasksDir} {
+	for name, p := range map[string]string{"data_dir": cfg.DataDir, "tasks_dir": cfg.TasksDir, "run_artifacts_dir": cfg.RunArtifactsDir} {
 		abs, err := filepath.Abs(p)
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
-		if name == "data_dir" {
+		switch name {
+		case "data_dir":
 			cfg.DataDir = abs
-		} else {
+		case "tasks_dir":
 			cfg.TasksDir = abs
+		default:
+			cfg.RunArtifactsDir = abs
 		}
 	}
 	return nil

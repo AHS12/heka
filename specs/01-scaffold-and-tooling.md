@@ -85,7 +85,7 @@ Replaces the current file (which references `dockless-deploy` and `internal/web/
 ```text
 make dev        → scripts/dev.ps1   (start daemon bg + wails dev; stop daemon on exit)
 make dev-core   → go run . daemon   (foreground daemon, own terminal)
-make build      → wails build -o build/heka  (+ on Windows: build/heka-gui.exe w/ -H windowsgui)
+make build      → Wails build (+ on Windows: `heka.exe` with `-windowsconsole`, `heka-gui.exe` with the GUI subsystem)
 make test       → go test ./...
 make check      → vet + lint + test (quality gate; lint skips if golangci-lint missing)
 make format     → gofmt + goimports (no -local flag)
@@ -100,7 +100,7 @@ Note: `dev` initially just starts the daemon and GUI together; the "wait for dae
 
 ## 6. Acceptance criteria
 
-1. `make build` succeeds; artifacts land in `build/` (`heka.exe`, and `heka-gui.exe` on Windows).
+1. `make build` succeeds; on Windows `build/bin/heka.exe` is a console-subsystem binary and `build/bin/heka-gui.exe` is a GUI-subsystem binary.
 2. `make test` passes — dispatcher tests cover `gui`, `daemon`, `daemon start|stop|status`, unknown mode, `--help`.
 3. `make dev` opens a window titled *Heka* showing name, version, "Daemon: not running"; closing dev stops the spawned daemon (no orphan process).
 4. `heka daemon` runs in the foreground, prints startup line, exits cleanly on Ctrl-C.

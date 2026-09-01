@@ -1,0 +1,14 @@
+version: 1
+name: Example PowerShell Task
+slug: example
+type: script
+runtime: powershell
+script: ./scripts/example.ps1
+working_directory: ./scripts
+timeout: 300
+capture_output: true
+notify_on: [failure]
+notify:
+  webhooks:
+    - format: slack
+      url: ${SLACK_WEBHOOK_URL}
