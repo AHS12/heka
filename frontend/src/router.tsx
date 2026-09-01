@@ -14,7 +14,7 @@ import {AboutPage} from './pages/AboutPage'
 
 export function AppRouter() {
   return (
-    <HashRouter>
+    <HashRouter future={{v7_startTransition: true, v7_relativeSplatPath: true}}>
       <Routes>
         <Route element={<AppLayout />}>
           <Route index element={<DashboardPage />} />

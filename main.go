@@ -29,7 +29,7 @@ import (
 
 const appName = "Heka"
 
-var appVersion = "0.6.4"
+var appVersion = "0.6.5"
 
 //go:embed all:frontend/dist
 var assets embed.FS

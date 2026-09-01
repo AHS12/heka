@@ -16,10 +16,10 @@ import (
 
 // attemptMeta is one entry in the run manifest.
 type attemptMeta struct {
-	Attempt    int   `json:"attempt"`
+	Attempt    int    `json:"attempt"`
 	Status     string `json:"status"`
-	DurationMs int64 `json:"duration_ms,omitempty"`
-	ExitCode   int   `json:"exit_code,omitempty"`
+	DurationMs int64  `json:"duration_ms,omitempty"`
+	ExitCode   int    `json:"exit_code,omitempty"`
 }
 
 // runManifest is written when the group finishes.
@@ -36,13 +36,6 @@ type runManifest struct {
 type groupArtifacts struct {
 	stdout *os.File
 	stderr *os.File
-}
-
-// openGroupArtifacts creates the group folder and both log streams under the
-// default artifacts root. Returns nil on any failure so the run continues
-// with DB-only capture.
-func (e *Executor) openGroupArtifacts(groupID string) *groupArtifacts {
-	return e.openGroupArtifactsAt(e.artifactsDir, groupID)
 }
 
 // openGroupArtifactsAt creates the group folder and both log streams at the

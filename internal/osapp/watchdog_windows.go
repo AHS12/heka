@@ -13,9 +13,6 @@ import (
 
 const watchdogTaskName = "Heka Watchdog"
 
-// runCommand is the exec seam (tests swap it for a fake).
-var runCommand = exec.Command
-
 // hiddenCmd is the CREATE_NO_WINDOW exec seam: schtasks and taskkill must
 // never flash a console window (Settings-page queries, tray opens, and
 // cancellations all route through here — SPEC-10 §3).

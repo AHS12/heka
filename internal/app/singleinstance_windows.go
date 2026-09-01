@@ -19,7 +19,14 @@ var guiMutex windows.Handle
 // TryLockGUI attempts to take the GUI single-instance mutex. It reports
 // whether this process is the one that owns it.
 func TryLockGUI() bool {
-	h, err := windows.CreateMutex(nil, false, windows.StringToUTF16Ptr(guiMutexName))
+	return tryLockGUI(guiMutexName)
+}
+
+func tryLockGUI(name string) bool {
+	if guiMutex != 0 {
+		return false
+	}
+	h, err := windows.CreateMutex(nil, false, windows.StringToUTF16Ptr(name))
 	if err != nil {
 		// ERROR_ALREADY_EXISTS: another GUI holds the mutex. The returned
 		// handle is still valid — close it so it doesn't keep the object alive.

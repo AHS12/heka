@@ -84,7 +84,7 @@ export function SelectField({
 
   return (
     <Select
-      value={value || undefined}
+      value={value}
       onChange={(key) => {
         if (key != null) onChange(String(key))
       }}

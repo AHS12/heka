@@ -201,12 +201,6 @@ func onReady(deps TrayDeps) {
 
 // ---- Slot refresh helpers
 
-type slotInfo struct {
-	Label   string
-	Tooltip string
-	Slug    string
-}
-
 func refreshSlots(
 	database *db.DB,
 	parent *systray.MenuItem,
@@ -248,7 +242,7 @@ func refreshActiveJobs(database *db.DB, slots []*systray.MenuItem) {
 	for i, slot := range slots {
 		if i < len(result.Runs) {
 			r := result.Runs[i]
-			slot.SetTitle(fmt.Sprintf("%s", r.TaskSlug))
+			slot.SetTitle(r.TaskSlug)
 			slot.SetTooltip(fmt.Sprintf("Run %s", r.RunID))
 			slot.Show()
 			slot.Enable()
@@ -320,5 +314,5 @@ func triggerRun(slug string) {
 		return
 	}
 	cmd := exec.Command(binary, "run", slug)
-	cmd.Run()
+	_ = cmd.Run()
 }

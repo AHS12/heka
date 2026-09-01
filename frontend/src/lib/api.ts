@@ -343,6 +343,12 @@ export interface Schedule {
   next_run_at?: string
   last_run_at?: string
   last_status?: string
+  latest_run_id?: string
+  latest_run_status?: string
+  latest_run_started_at?: string
+  latest_run_finished_at?: string
+  skipped_count: number
+  missed_count: number
 }
 
 export async function listSchedules(kind?: string): Promise<Schedule[]> {

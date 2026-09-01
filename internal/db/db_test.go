@@ -189,6 +189,49 @@ func TestScheduleStoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestScheduleListWithLatestRunExcludesManualRuns(t *testing.T) {
+	d := openTest(t)
+	if err := d.Tasks().Save(Task{
+		ID: "t1", Slug: "backup", Name: "Backup", YAMLPath: "/x.yaml", ParsedJSON: "{}", CreatedAt: Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Schedules().Save(Schedule{
+		ID: "s1", Slug: "nightly-backup", TaskSlug: "backup", Kind: "recurring",
+		Cron: "@daily", Enabled: true, MissedPolicy: "skip", CreatedAt: Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	started := "2026-08-24T08:00:01Z"
+	finished := "2026-08-24T08:00:02Z"
+	manualStarted := "2026-08-24T09:00:01Z"
+	for _, run := range []Run{
+		{RunID: "run-scheduled", GroupID: "group-scheduled", TaskSlug: "backup", ScheduleID: "s1", Trigger: "schedule", Status: "success", StartedAt: &started, FinishedAt: &finished, CreatedAt: Now()},
+		{RunID: "run-skipped", GroupID: "group-skipped", TaskSlug: "backup", ScheduleID: "s1", Trigger: "schedule", Status: "skipped", StartedAt: &finished, FinishedAt: &finished, CreatedAt: Now()},
+		{RunID: "run-missed", GroupID: "group-missed", TaskSlug: "backup", ScheduleID: "s1", Trigger: "schedule", Status: "missed", StartedAt: &started, FinishedAt: &started, CreatedAt: Now()},
+		{RunID: "run-manual", GroupID: "group-manual", TaskSlug: "backup", Trigger: "manual", Status: "success", StartedAt: &manualStarted, FinishedAt: &manualStarted, CreatedAt: Now()},
+	} {
+		if err := d.Runs().Create(run); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rows, err := d.Schedules().ListWithLatestRun()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(rows))
+	}
+	row := rows[0]
+	if row.LastRunID != "run-skipped" || row.LastRunStatus != "skipped" {
+		t.Fatalf("latest scheduled run = %q/%q", row.LastRunID, row.LastRunStatus)
+	}
+	if row.SkippedCount != 1 || row.MissedCount != 1 {
+		t.Fatalf("counts = skipped %d, missed %d", row.SkippedCount, row.MissedCount)
+	}
+}
+
 func TestRunStoreGroupAndAttempt(t *testing.T) {
 	d := openTest(t)
 	store := d.Runs()

@@ -4,22 +4,24 @@ package notify
 
 import (
 	"fmt"
-	"os/exec"
 	"syscall"
 	"time"
 	"unsafe"
 )
 
 var (
-	winmm            = syscall.NewLazyDLL("winmm.dll")
-	mciSendStringW   = winmm.NewProc("mciSendStringW")
-	mciGetErrorStringW = winmm.NewProc("mciGetErrorStringW")
+	winmm          = syscall.NewLazyDLL("winmm.dll")
+	mciSendStringW = winmm.NewProc("mciSendStringW")
 )
 
 // mciSendString sends a command string to the MCI interface.
 func mciSendString(command string) error {
+	commandPtr, err := syscall.UTF16PtrFromString(command)
+	if err != nil {
+		return err
+	}
 	ret, _, _ := mciSendStringW.Call(
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(command))),
+		uintptr(unsafe.Pointer(commandPtr)),
 		0, 0, 0,
 	)
 	if ret != 0 {
@@ -38,7 +40,7 @@ func playWAV(path string) error {
 	if err := mciSendString(openCmd); err != nil {
 		return fmt.Errorf("MCI open: %w", err)
 	}
-	defer mciSendString(fmt.Sprintf("close %s", alias))
+	defer func() { _ = mciSendString(fmt.Sprintf("close %s", alias)) }()
 
 	playCmd := fmt.Sprintf("play %s wait", alias)
 	if err := mciSendString(playCmd); err != nil {
@@ -73,11 +75,4 @@ func resolveSoundPath(preset, eventType string) string {
 	default:
 		return mediaDir + `\Windows Notify System Generic.wav`
 	}
-}
-
-// playWAVCLI is a fallback using PowerShell if MCI fails.
-func playWAVCLI(path string) error {
-	cmd := exec.Command("powershell", "-NoProfile", "-Command",
-		fmt.Sprintf(`(New-Object Media.SoundPlayer '%s').PlaySync()`, path))
-	return cmd.Run()
 }

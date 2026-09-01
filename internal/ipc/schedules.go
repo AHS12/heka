@@ -31,24 +31,32 @@ func toSchedule(s db.Schedule) Schedule {
 	}
 }
 
+func toScheduleWithRun(s db.ScheduleWithRun) Schedule {
+	out := toSchedule(s.Schedule)
+	out.LatestRunID = s.LastRunID
+	out.LatestRunStatus = s.LastRunStatus
+	out.LatestRunStart = s.LastRunStarted
+	out.LatestRunFinish = s.LastRunFinished
+	out.SkippedCount = s.SkippedCount
+	out.MissedCount = s.MissedCount
+	return out
+}
+
 func (s *Server) handleSchedules(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
 		kind := r.URL.Query().Get("kind")
-		var rows []db.Schedule
-		var err error
-		if kind == "recurring" || kind == "onetime" {
-			rows, err = s.deps.Schedules.ListByKind(kind)
-		} else {
-			rows, err = s.deps.Schedules.List()
-		}
+		rows, err := s.deps.Schedules.ListWithLatestRun()
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal", err.Error())
 			return
 		}
 		out := make([]Schedule, 0, len(rows))
 		for _, row := range rows {
-			out = append(out, toSchedule(row))
+			if kind != "" && kind != row.Kind {
+				continue
+			}
+			out = append(out, toScheduleWithRun(row))
 		}
 		writeJSON(w, http.StatusOK, out)
 	case "POST":

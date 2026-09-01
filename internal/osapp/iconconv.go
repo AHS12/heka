@@ -39,19 +39,33 @@ func pngToICO(pngBytes []byte) ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// ICO header
-	binary.Write(buf, binary.LittleEndian, uint16(0))      // Reserved
-	binary.Write(buf, binary.LittleEndian, uint16(1))      // Type: 1 = ICO
-	binary.Write(buf, binary.LittleEndian, uint16(1))      // Image count
+	if err := binary.Write(buf, binary.LittleEndian, uint16(0)); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, uint16(1)); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, uint16(1)); err != nil {
+		return nil, err
+	}
 
 	// Directory entry
-	buf.WriteByte(byte(size))                                // Width
-	buf.WriteByte(byte(size))                                // Height
-	buf.WriteByte(0)                                         // Color palette
-	buf.WriteByte(0)                                         // Reserved
-	binary.Write(buf, binary.LittleEndian, uint16(1))       // Color planes
-	binary.Write(buf, binary.LittleEndian, uint16(32))      // Bits per pixel
-	binary.Write(buf, binary.LittleEndian, uint32(len(imgData))) // Image data size
-	binary.Write(buf, binary.LittleEndian, uint32(6+16))    // Offset to image data
+	buf.WriteByte(byte(size)) // Width
+	buf.WriteByte(byte(size)) // Height
+	buf.WriteByte(0)          // Color palette
+	buf.WriteByte(0)          // Reserved
+	if err := binary.Write(buf, binary.LittleEndian, uint16(1)); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, uint16(32)); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, uint32(len(imgData))); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, uint32(6+16)); err != nil {
+		return nil, err
+	}
 
 	// Image data (PNG-compressed)
 	buf.Write(imgData)

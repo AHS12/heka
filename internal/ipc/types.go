@@ -20,17 +20,23 @@ type Health struct {
 
 // Schedule is the wire shape for the schedules surface (SPEC-09 §4).
 type Schedule struct {
-	ID           string `json:"id"`
-	Slug         string `json:"slug"`
-	TaskSlug     string `json:"task_slug"`
-	Kind         string `json:"kind"` // "recurring" | "onetime"
-	Cron         string `json:"cron,omitempty"`
-	RunAt        string `json:"run_at,omitempty"`
-	Enabled      bool   `json:"enabled"`
-	MissedPolicy string `json:"missed_policy"`
-	NextRunAt    string `json:"next_run_at,omitempty"`
-	LastRunAt    string `json:"last_run_at,omitempty"`
-	LastStatus   string `json:"last_status,omitempty"`
+	ID              string `json:"id"`
+	Slug            string `json:"slug"`
+	TaskSlug        string `json:"task_slug"`
+	Kind            string `json:"kind"` // "recurring" | "onetime"
+	Cron            string `json:"cron,omitempty"`
+	RunAt           string `json:"run_at,omitempty"`
+	Enabled         bool   `json:"enabled"`
+	MissedPolicy    string `json:"missed_policy"`
+	NextRunAt       string `json:"next_run_at,omitempty"`
+	LastRunAt       string `json:"last_run_at,omitempty"`
+	LastStatus      string `json:"last_status,omitempty"`
+	LatestRunID     string `json:"latest_run_id,omitempty"`
+	LatestRunStatus string `json:"latest_run_status,omitempty"`
+	LatestRunStart  string `json:"latest_run_started_at,omitempty"`
+	LatestRunFinish string `json:"latest_run_finished_at,omitempty"`
+	SkippedCount    int    `json:"skipped_count"`
+	MissedCount     int    `json:"missed_count"`
 }
 
 // TaskSummary is a list row for GET /v1/tasks (SPEC-07 §3, extended SPEC-13).
@@ -66,8 +72,8 @@ type RunList struct {
 
 // RunListWithTotal is the paginated envelope for GET /v1/runs (SPEC-14 §1).
 type RunListWithTotal struct {
-	Runs       []Run `json:"runs"`
-	Total      int   `json:"total"`
+	Runs       []Run  `json:"runs"`
+	Total      int    `json:"total"`
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
@@ -100,16 +106,16 @@ func (e *Error) Error() string { return e.Message }
 
 // Stats is the dashboard payload from GET /v1/stats (SPEC-16 §1).
 type Stats struct {
-	Tasks              int             `json:"tasks"`
-	TasksEnabled       int             `json:"tasks_enabled"`
-	SchedulesEnabled   int             `json:"schedules_enabled"`
-	Running            int             `json:"running"`
-	RunsToday          int             `json:"runs_today"`
-	SuccessToday       int             `json:"success_today"`
-	FailedToday        int             `json:"failed_today"`
-	RunHistory         []DayStats      `json:"run_history"`
-	StatusDistribution []StatusCount   `json:"status_distribution"`
-	RecentActivity     []ActivityItem  `json:"recent_activity"`
+	Tasks              int            `json:"tasks"`
+	TasksEnabled       int            `json:"tasks_enabled"`
+	SchedulesEnabled   int            `json:"schedules_enabled"`
+	Running            int            `json:"running"`
+	RunsToday          int            `json:"runs_today"`
+	SuccessToday       int            `json:"success_today"`
+	FailedToday        int            `json:"failed_today"`
+	RunHistory         []DayStats     `json:"run_history"`
+	StatusDistribution []StatusCount  `json:"status_distribution"`
+	RecentActivity     []ActivityItem `json:"recent_activity"`
 }
 
 type DayStats struct {

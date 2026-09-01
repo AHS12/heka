@@ -28,7 +28,7 @@ const STATUS_COLORS: Record<string, string> = {
 function getAccentHex(accent: PresetAccent | 'custom', customColor: string): string {
   if (accent === 'custom') return customColor
   const raw = ACCENT_COLORS[accent] ?? '#2563eb'
-  // Convert oklch(...) to hex via canvas
+  if (typeof document === 'undefined' || /jsdom/i.test(navigator.userAgent)) return '#2563eb'
   try {
     const ctx = document.createElement('canvas').getContext('2d')
     if (ctx) {

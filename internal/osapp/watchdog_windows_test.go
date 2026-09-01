@@ -10,27 +10,6 @@ import (
 	"time"
 )
 
-// fakeRunnerCommand replaces runCommand: records invocations, emits canned
-// output, exits 0.
-func fakeRunnerCommand(t *testing.T, cans []string) *[]string {
-	t.Helper()
-	orig := runCommand
-	var calls []string
-	var mu sync.Mutex
-	runCommand = func(name string, args ...string) *exec.Cmd {
-		mu.Lock()
-		calls = append(calls, strings.Join(append([]string{name}, args...), " "))
-		mu.Unlock()
-		out := "exit 0"
-		if len(cans) > 0 {
-			out = cans[len(calls)-1]
-		}
-		return exec.Command("cmd", "/c", "echo "+out)
-	}
-	t.Cleanup(func() { runCommand = orig })
-	return &calls
-}
-
 // fakeHiddenCommand replaces hiddenCmd: records invocations, emits canned
 // output, exits 0.
 func fakeHiddenCommand(t *testing.T, cans []string) *[]string {

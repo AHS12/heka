@@ -2,18 +2,23 @@
 
 package app
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+	"time"
+)
 
 func TestTryLockGUISingleInstance(t *testing.T) {
-	UnlockGUI() // clean slate in case a previous test left the mutex held
-	if !TryLockGUI() {
+	UnlockGUI()
+	name := fmt.Sprintf(`Local\Heka.GUI.Test.%d`, time.Now().UnixNano())
+	if !tryLockGUI(name) {
 		t.Fatal("first lock must succeed")
 	}
-	if TryLockGUI() {
+	if tryLockGUI(name) {
 		t.Fatal("second lock in the same process must fail")
 	}
 	UnlockGUI()
-	if !TryLockGUI() {
+	if !tryLockGUI(name) {
 		t.Fatal("lock must succeed again after unlock")
 	}
 	UnlockGUI()

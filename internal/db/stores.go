@@ -49,6 +49,16 @@ type Schedule struct {
 	CreatedAt    string
 }
 
+type ScheduleWithRun struct {
+	Schedule
+	LastRunID       string
+	LastRunStatus   string
+	LastRunStarted  string
+	LastRunFinished string
+	SkippedCount    int
+	MissedCount     int
+}
+
 // Run is one attempt row. A logical run (group) may own several attempts
 // sharing GroupID (SPEC-05).
 type Run struct {
@@ -207,6 +217,38 @@ func (s *ScheduleStore) Get(id string) (Schedule, error) {
 		return Schedule{}, ErrNotFound
 	}
 	return sch, err
+}
+
+func (s *ScheduleStore) ListWithLatestRun() ([]ScheduleWithRun, error) {
+	rows, err := s.db.sql.Query(`
+SELECT s.id, s.slug, s.task_slug, s.kind, s.cron, s.run_at, s.timezone, s.enabled,
+       s.missed_policy, s.next_run_at, s.last_run_at, s.last_status, s.created_at,
+       COALESCE(r.run_id, ''), COALESCE(r.status, ''), COALESCE(r.started_at, ''),
+       COALESCE(r.finished_at, ''),
+       (SELECT COUNT(*) FROM runs sr WHERE sr.schedule_id = s.id AND sr.status = 'skipped'),
+       (SELECT COUNT(*) FROM runs mr WHERE mr.schedule_id = s.id AND mr.status = 'missed')
+  FROM schedules s
+  LEFT JOIN runs r ON r.schedule_id = s.id AND r.run_id = (
+        SELECT r2.run_id FROM runs r2
+         WHERE r2.schedule_id = s.id
+         ORDER BY r2.started_at DESC, r2.run_id DESC LIMIT 1)
+ ORDER BY s.slug`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ScheduleWithRun
+	for rows.Next() {
+		var item ScheduleWithRun
+		if err := rows.Scan(&item.ID, &item.Slug, &item.TaskSlug, &item.Kind, &item.Cron, &item.RunAt,
+			&item.Timezone, &item.Enabled, &item.MissedPolicy, &item.NextRunAt, &item.LastRunAt,
+			&item.LastStatus, &item.CreatedAt, &item.LastRunID, &item.LastRunStatus,
+			&item.LastRunStarted, &item.LastRunFinished, &item.SkippedCount, &item.MissedCount); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
 }
 
 func (s *ScheduleStore) List() ([]Schedule, error) {
@@ -376,8 +418,8 @@ type RunsFilter struct {
 
 // RunsResult is the paginated runs response (SPEC-14 §1).
 type RunsResult struct {
-	Runs      []Run
-	Total     int
+	Runs       []Run
+	Total      int
 	NextCursor string
 }
 
@@ -544,20 +586,34 @@ func (s *RunStore) Stats() (StatsResult, error) {
 	var out StatsResult
 
 	// Task counts
-	s.db.sql.QueryRow(`SELECT COUNT(*) FROM tasks`).Scan(&out.Tasks)
-	s.db.sql.QueryRow(`SELECT COUNT(*) FROM tasks WHERE enabled = 1`).Scan(&out.TasksEnabled)
+	if err := s.db.sql.QueryRow(`SELECT COUNT(*) FROM tasks`).Scan(&out.Tasks); err != nil {
+		return out, err
+	}
+	if err := s.db.sql.QueryRow(`SELECT COUNT(*) FROM tasks WHERE enabled = 1`).Scan(&out.TasksEnabled); err != nil {
+		return out, err
+	}
 
 	// Schedule counts
-	s.db.sql.QueryRow(`SELECT COUNT(*) FROM schedules WHERE enabled = 1`).Scan(&out.SchedulesEnabled)
+	if err := s.db.sql.QueryRow(`SELECT COUNT(*) FROM schedules WHERE enabled = 1`).Scan(&out.SchedulesEnabled); err != nil {
+		return out, err
+	}
 
 	// Currently running
-	s.db.sql.QueryRow(`SELECT COUNT(*) FROM runs WHERE status IN ('queued','running')`).Scan(&out.Running)
+	if err := s.db.sql.QueryRow(`SELECT COUNT(*) FROM runs WHERE status IN ('queued','running')`).Scan(&out.Running); err != nil {
+		return out, err
+	}
 
 	// Today counts (local midnight boundary)
 	today := time.Now().UTC().Format("2006-01-02")
-	s.db.sql.QueryRow(`SELECT COUNT(*) FROM runs WHERE date(created_at) = ?`, today).Scan(&out.RunsToday)
-	s.db.sql.QueryRow(`SELECT COUNT(*) FROM runs WHERE date(created_at) = ? AND status = 'success'`, today).Scan(&out.SuccessToday)
-	s.db.sql.QueryRow(`SELECT COUNT(*) FROM runs WHERE date(created_at) = ? AND status IN ('failed','timed_out')`, today).Scan(&out.FailedToday)
+	if err := s.db.sql.QueryRow(`SELECT COUNT(*) FROM runs WHERE date(created_at) = ?`, today).Scan(&out.RunsToday); err != nil {
+		return out, err
+	}
+	if err := s.db.sql.QueryRow(`SELECT COUNT(*) FROM runs WHERE date(created_at) = ? AND status = 'success'`, today).Scan(&out.SuccessToday); err != nil {
+		return out, err
+	}
+	if err := s.db.sql.QueryRow(`SELECT COUNT(*) FROM runs WHERE date(created_at) = ? AND status IN ('failed','timed_out')`, today).Scan(&out.FailedToday); err != nil {
+		return out, err
+	}
 
 	// Run history: last 7 days aggregated by date+status
 	rows, err := s.db.sql.Query(`
@@ -647,16 +703,16 @@ func (s *RunStore) Stats() (StatsResult, error) {
 
 // StatsResult is the full dashboard payload.
 type StatsResult struct {
-	Tasks              int             `json:"tasks"`
-	TasksEnabled       int             `json:"tasks_enabled"`
-	SchedulesEnabled   int             `json:"schedules_enabled"`
-	Running            int             `json:"running"`
-	RunsToday          int             `json:"runs_today"`
-	SuccessToday       int             `json:"success_today"`
-	FailedToday        int             `json:"failed_today"`
-	RunHistory         []DayStats      `json:"run_history"`
-	StatusDistribution []StatusCount   `json:"status_distribution"`
-	RecentActivity     []ActivityItem  `json:"recent_activity"`
+	Tasks              int            `json:"tasks"`
+	TasksEnabled       int            `json:"tasks_enabled"`
+	SchedulesEnabled   int            `json:"schedules_enabled"`
+	Running            int            `json:"running"`
+	RunsToday          int            `json:"runs_today"`
+	SuccessToday       int            `json:"success_today"`
+	FailedToday        int            `json:"failed_today"`
+	RunHistory         []DayStats     `json:"run_history"`
+	StatusDistribution []StatusCount  `json:"status_distribution"`
+	RecentActivity     []ActivityItem `json:"recent_activity"`
 }
 
 type DayStats struct {

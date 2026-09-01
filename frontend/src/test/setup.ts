@@ -3,8 +3,22 @@
 // fires on its own), and a project-wide mock of the generated Wails bindings
 // (regenerated at build time — tests never touch the real window['go'] bridge).
 import '@testing-library/jest-dom/vitest'
-import {afterEach, vi} from 'vitest'
+import {afterEach, beforeAll, vi} from 'vitest'
 import {cleanup} from '@testing-library/react'
+
+beforeAll(() => {
+  const warn = console.warn
+  vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+    const message = String(args[0] ?? '')
+    if (
+      message.startsWith('⚠️ React Router Future Flag Warning:') ||
+      message.startsWith('React Router Future Flag Warning:')
+    ) {
+      return
+    }
+    warn(...args)
+  })
+})
 
 afterEach(() => {
   cleanup()
@@ -14,7 +28,9 @@ afterEach(() => {
 vi.mock('@wailsjs/go/app/App', () => ({
   AppInfo: vi.fn(),
   DaemonStatus: vi.fn(),
-  Health: vi.fn(),
+  Health: vi.fn().mockResolvedValue({
+    version: 'test', uptime_seconds: 0, core: 'healthy', scheduler: 'running',
+  }),
   StartDaemon: vi.fn(),
   CreateTask: vi.fn(),
   UpdateTask: vi.fn(),

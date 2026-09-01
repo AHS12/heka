@@ -112,7 +112,7 @@ func TestRecurringFires(t *testing.T) {
 	}
 }
 
-func TestOverlapRecordsSkipped(t *testing.T) {
+func TestManualOverlapRecordsScheduledSkip(t *testing.T) {
 	database, sch, runner := setup(t)
 	runner.busy = true
 	saveSchedule(t, database, db.Schedule{
@@ -131,8 +131,8 @@ func TestOverlapRecordsSkipped(t *testing.T) {
 	for {
 		rows, _ := database.Runs().ListByTask("daily", 10)
 		if len(rows) > 0 {
-			if rows[0].Status != "skipped" {
-				t.Fatalf("status = %s, want skipped", rows[0].Status)
+			if rows[0].Status != "skipped" || rows[0].Trigger != "schedule" || rows[0].ScheduleID != "s2" {
+				t.Fatalf("scheduled overlap row = %+v, want schedule/s2 skipped", rows[0])
 			}
 			break
 		}
