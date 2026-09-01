@@ -6,6 +6,18 @@
 
 <p align="center"><strong>A local task runner and scheduler for programmers — built for AI agents.</strong></p>
 
+<p align="center">
+  <a href="https://github.com/AHS12/heka/releases">
+    <img src="https://img.shields.io/github/downloads/AHS12/heka/total" alt="Downloads">
+  </a>
+  <a href="https://github.com/AHS12/heka/stargazers">
+    <img src="https://img.shields.io/github/stars/AHS12/heka" alt="Stars">
+  </a>
+  <a href="https://github.com/AHS12/heka/releases">
+    <img src="https://img.shields.io/github/v/release/AHS12/heka" alt="Latest Release">
+  </a>
+</p>
+
 Heka is a single desktop app: a persistent background daemon that schedules and runs
 your scripts and native executables, plus a polished GUI and a terminal CLI to manage
 them. The daemon keeps working after you close the window — tasks run on time, every
