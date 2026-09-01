@@ -120,37 +120,29 @@ func Run(cfg config.Config, version string) error {
 // in a goroutine; the main thread is handed to systray.Run which blocks until
 // Quit is clicked.
 func RunTray(cfg config.Config, version string) error {
-	fmt.Fprintf(os.Stderr, "[trace] RunTray entry\n")
 	database, err := db.Open(cfg.DataDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[trace] db.Open FAILED: %v\n", err)
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer database.Close()
-	fmt.Fprintf(os.Stderr, "[trace] db.Open OK\n")
 
 	d, handler, err := startCore(cfg, version, database)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[trace] startCore FAILED: %v\n", err)
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "[trace] startCore OK\n")
 
 	// Bind IPC before starting the tray — a failure here (e.g. another
 	// daemon holding the pipe) is a clean exit, not a panic.
 	ln, err := ipc.Listen(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[trace] ipc.Listen FAILED: %v\n", err)
 		return fmt.Errorf("bind IPC endpoint: %w", err)
 	}
 	defer ln.Close()
-	fmt.Fprintf(os.Stderr, "[trace] ipc.Listen OK\n")
 
 	// IPC server in background (tray is the main-thread owner).
 	server := &http.Server{Handler: handler}
 	go func() { _ = server.Serve(ln) }()
 
-	fmt.Fprintf(os.Stderr, "[trace] calling osapp.RunTray\n")
 	// Tray blocks the main thread; core is already running in goroutines.
 	osapp.RunTray(osapp.TrayDeps{
 		Cfg:        cfg,
@@ -162,7 +154,6 @@ func RunTray(cfg config.Config, version string) error {
 		OnShutdown: func() { d.once.Do(func() { close(d.shutdown) }) },
 	})
 
-	fmt.Fprintf(os.Stderr, "[trace] osapp.RunTray returned\n")
 	// Tray exited (Quit clicked): graceful shutdown.
 	_ = server.Close()
 	d.shutdownAll()

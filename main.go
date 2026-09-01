@@ -16,8 +16,6 @@ import (
 	"embed"
 	"fmt"
 	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -109,47 +107,21 @@ func runGUI() {
 // runDaemon runs the daemon in the foreground with a system tray (SPEC-15).
 // HEKA_NO_TRAY=1 (tests, headless runs) skips the tray and runs the core only.
 func runDaemon() {
-	// Diagnostic: timestamped trace for boot-start debugging.
-	tracePath := ""
-	if exe, err := os.Executable(); err == nil {
-		tracePath = filepath.Join(filepath.Dir(exe), "daemon-trace.log")
-	}
-	trace := func(msg string) {
-		if tracePath == "" {
-			return
-		}
-		f, err := os.OpenFile(tracePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-		if err != nil {
-			return
-		}
-		fmt.Fprintf(f, "[%s] [daemon pid=%d] %s\n", time.Now().Format("15:04:05.000"), os.Getpid(), msg)
-		f.Close()
-	}
-
-	trace("=== daemon process entry point ===")
-
 	cfg, err := config.LoadDefault()
 	if err != nil {
-		trace(fmt.Sprintf("CONFIG FAILED: %v", err))
 		fmt.Fprintln(os.Stderr, "heka:", err)
 		os.Exit(1)
 	}
-	trace(fmt.Sprintf("config OK data=%s no_tray=%q", cfg.DataDir, os.Getenv("HEKA_NO_TRAY")))
 
 	if os.Getenv("HEKA_NO_TRAY") == "1" {
-		trace("calling daemon.Run (no tray)")
 		if err := daemon.Run(cfg, appVersion); err != nil {
-			trace(fmt.Sprintf("daemon.Run FAILED: %v", err))
 			fmt.Fprintln(os.Stderr, "heka:", err)
 			os.Exit(1)
 		}
 		return
 	}
-	trace("calling daemon.RunTray")
 	if err := daemon.RunTray(cfg, appVersion); err != nil {
-		trace(fmt.Sprintf("RunTray FAILED: %v", err))
 		fmt.Fprintln(os.Stderr, "heka:", err)
 		os.Exit(1)
 	}
-	trace("RunTray returned (daemon shutting down)")
 }

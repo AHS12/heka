@@ -588,7 +588,7 @@ func (a *App) StartupEnabled() (bool, error) {
 // StartupSet enables or disables OS-level startup registration for the daemon.
 func (a *App) StartupSet(on bool) error {
 	if on {
-		exe, err := osapp.ConsoleExecutable()
+		exe, err := osapp.GUIExecutable()
 		if err != nil {
 			return err
 		}

@@ -43,12 +43,12 @@ type Installer interface {
 // at a deleted/renamed binary, so entries whose path differs are re-created
 // with the current executable path. Runs once at daemon startup (SPEC-10 §3).
 func RepairEntries() {
-	exe, err := ConsoleExecutable()
-	if err != nil {
-		return
+	if consoleExe, err := ConsoleExecutable(); err == nil {
+		repairWatchdog(consoleExe)
 	}
-	repairWatchdog(exe)
-	repairStartup(exe)
+	if guiExe, err := GUIExecutable(); err == nil {
+		repairStartup(guiExe)
+	}
 }
 
 func repairWatchdog(exe string) {

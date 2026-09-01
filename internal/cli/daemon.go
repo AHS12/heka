@@ -3,8 +3,6 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -28,13 +26,6 @@ func (a *App) daemonCmd() *cobra.Command {
 			Short: "Start the daemon in the background",
 			Args:  cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, args []string) error {
-				// Diagnostic: write a marker so we can tell whether "daemon start"
-				// is actually reached when launched from the registry at boot.
-				if exe, err := os.Executable(); err == nil {
-					marker := filepath.Join(filepath.Dir(exe), "daemon-start-cli.trace")
-					_ = os.WriteFile(marker, []byte(fmt.Sprintf("daemon start called at %s from pid %d exe %s\n",
-						time.Now().Format(time.RFC3339Nano), os.Getpid(), exe)), 0o600)
-				}
 				if err := a.startDaemon(a.cfg); err != nil {
 					return err
 				}
@@ -228,7 +219,7 @@ func (a *App) startupCmd() *cobra.Command {
 		Short: "Register the daemon to start with the OS",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			exe, err := osapp.ConsoleExecutable()
+			exe, err := osapp.GUIExecutable()
 			if err != nil {
 				return err
 			}

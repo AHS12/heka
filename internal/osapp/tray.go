@@ -169,7 +169,7 @@ func onReady(deps TrayDeps) {
 				_ = startupRegistrar.Disable()
 				startupItem.Uncheck()
 			} else {
-				exe, err := ConsoleExecutable()
+				exe, err := GUIExecutable()
 				if err == nil {
 					_ = startupRegistrar.Enable(exe)
 					startupItem.Check()
