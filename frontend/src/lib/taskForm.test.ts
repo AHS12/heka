@@ -9,6 +9,7 @@ import {
   emptyDraft,
   renamePlan,
   slugify,
+  validateTaskDraft,
 } from './taskForm'
 
 function scriptTask(): task.Task {
@@ -112,6 +113,22 @@ describe('slugify', () => {
     expect(slugify('  Node   cron runner  ')).toBe('node-cron-runner')
     expect(slugify('PACK')).toBe('pack')
     expect(slugify('...')).toBe('')
+  })
+})
+
+describe('validateTaskDraft', () => {
+  it('returns actionable errors for an empty visual draft', () => {
+    const errors = validateTaskDraft(emptyDraft())
+    expect(errors).toEqual([
+      'name: Enter a task name.',
+      'slug: Enter a task slug.',
+      'runtime: Choose a runtime.',
+      'script: Choose or enter a script path.',
+    ])
+  })
+
+  it('accepts a complete script draft', () => {
+    expect(validateTaskDraft(draftFromTask(scriptTask()))).toEqual([])
   })
 })
 

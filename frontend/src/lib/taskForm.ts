@@ -194,6 +194,26 @@ export function draftToYAML(d: TaskDraft): string {
   return lines.join('\n') + '\n'
 }
 
+export function validateTaskDraft(draft: TaskDraft): string[] {
+  const errors: string[] = []
+  if (!draft.name.trim()) errors.push('name: Enter a task name.')
+  if (!draft.slug.trim()) {
+    errors.push('slug: Enter a task slug.')
+  } else if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(draft.slug.trim())) {
+    errors.push('slug: Use lowercase letters, numbers, and single dashes.')
+  }
+  if (draft.type === 'script') {
+    if (!draft.runtime) errors.push('runtime: Choose a runtime.')
+    if (!draft.script.trim()) errors.push('script: Choose or enter a script path.')
+  } else if (!draft.command.trim()) {
+    errors.push('command: Enter the binary command.')
+  }
+  if (draft.timeout < 0) errors.push('timeout: Use zero or a positive number.')
+  if (draft.maxAttempts < 1) errors.push('retry.max_attempts: Use at least one attempt.')
+  if (draft.delaySeconds < 0) errors.push('retry.delay_seconds: Use zero or a positive number.')
+  return errors
+}
+
 /** Arg-string ↔ array conversations for the form inputs. */
 export function argsFromString(s: string): string[] {
   return s

@@ -2,7 +2,8 @@
 // and unknown hashes redirect to Dashboard. AppRouter sits inside App's
 // provider stack, so the test recreates the QueryClient wrapper.
 import {beforeEach, describe, expect, it, vi} from 'vitest'
-import {render} from '@testing-library/react'
+import {render, screen} from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 import {DaemonStatus} from '@wailsjs/go/app/App'
 import {AppRouter} from './router'
@@ -44,14 +45,19 @@ describe('router', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders Settings with the vault manager at #/settings', async () => {
+  it('renders Settings with section tabs at #/settings', async () => {
     const {findByRole} = await renderAt('#/settings')
     expect(
       await findByRole('heading', {level: 2, name: 'Settings'})
     ).toBeInTheDocument()
-    expect(
-      await findByRole('heading', {level: 3, name: 'Secrets'})
-    ).toBeInTheDocument()
+    expect(await findByRole('tab', {name: /Appearance/})).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    expect(await findByRole('heading', {level: 3, name: 'Appearance'})).toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(await findByRole('tab', {name: /Secrets/}))
+    expect(await findByRole('heading', {level: 3, name: 'Secrets'})).toBeInTheDocument()
   })
 
   it('redirects unknown routes to Home', async () => {

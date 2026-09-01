@@ -2,7 +2,7 @@
 // Run Now (toasts the group_id), inline delete confirm, and the Import /
 // New task affordances. Client-side filters while the list is small.
 import {useEffect, useMemo, useState} from 'react'
-import {Link, useNavigate} from 'react-router-dom'
+import {useNavigate} from 'react-router-dom'
 import {apiErrorDetails} from '../lib/api'
 import {
   useDeleteTask,
@@ -13,6 +13,7 @@ import {
 } from '../lib/tasks'
 import {SelectField, pillBtn, primaryBtn} from '../components/controls'
 import {TaskTable} from '../components/tasks/TaskTable'
+import {TaskEditorPage} from './TaskEditorPage'
 
 function useToast(): [string | null, (text: string) => void] {
   const [text, setText] = useState<string | null>(null)
@@ -33,6 +34,7 @@ export function TasksPage() {
   const importer = useImportTask()
   const [toast, toastMsg] = useToast()
   const [errors, setErrors] = useState<string[]>([])
+  const [creating, setCreating] = useState(false)
 
   const [typeFilter, setTypeFilter] = useState<'all' | 'script' | 'binary'>('all')
   const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
@@ -91,9 +93,9 @@ export function TasksPage() {
           <button type="button" onClick={onImport} className={pillBtn}>
             Import Task
           </button>
-          <Link to="/tasks/new" className={primaryBtn}>
-            + New Task
-          </Link>
+          <button type="button" className={primaryBtn} onClick={() => setCreating(true)}>
+            + New task
+          </button>
         </div>
       </div>
 
@@ -148,6 +150,14 @@ export function TasksPage() {
           onDelete={onDelete}
           onToggle={(slug, enabled) => toggle.mutate({slug, enabled})}
           onOpen={(slug) => navigate(`/tasks/${slug}`)}
+        />
+      )}
+
+      {creating && (
+        <TaskEditorPage
+          dialog
+          onClose={() => setCreating(false)}
+          onCreated={(slug) => toastMsg(`Created ${slug}`)}
         />
       )}
 

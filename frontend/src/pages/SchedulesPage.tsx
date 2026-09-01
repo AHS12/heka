@@ -1,10 +1,18 @@
 import {useState, useMemo} from 'react'
+import {Modal} from '@heroui/react'
 import {apiErrorDetails} from '../lib/api'
 import {useSchedules, useCreateSchedule, useDeleteSchedule, useToggleSchedule} from '../lib/schedules'
 import {useTasks} from '../lib/tasks'
 import {ScheduleTable} from '../components/schedules/ScheduleTable'
-import {ScheduleForm, emptyScheduleDraft, draftToCron} from '../components/schedules/ScheduleForm'
+import {ScheduleForm, emptyScheduleDraft, draftToCron, validateScheduleDraft} from '../components/schedules/ScheduleForm'
 import {pillBtn, primaryBtn} from '../components/controls'
+import {AppDialog, dialogBodyCls, dialogFooterCls, dialogHeaderCls} from '../components/AppDialog'
+
+function toRFC3339(localDateTime: string): string {
+  if (!localDateTime) return ''
+  const date = new Date(localDateTime)
+  return Number.isNaN(date.getTime()) ? localDateTime : date.toISOString()
+}
 
 export function SchedulesPage() {
   const schedules = useSchedules()
@@ -27,13 +35,18 @@ export function SchedulesPage() {
   }, [schedules.data, search])
 
   const handleCreate = () => {
+    const validationErrors = validateScheduleDraft(draft)
+    if (validationErrors.length > 0) {
+      setErrors(validationErrors)
+      return
+    }
     create.mutate(
       {
-        slug: draft.slug,
+        slug: draft.slug.trim(),
         taskSlug: draft.taskSlug,
         kind: draft.kind,
         cron: draftToCron(draft),
-        runAt: draft.kind === 'onetime' ? draft.runAt : '',
+        runAt: draft.kind === 'onetime' ? toRFC3339(draft.runAt) : '',
         missedPolicy: draft.missedPolicy,
       },
       {
@@ -71,38 +84,13 @@ export function SchedulesPage() {
           </div>
           <button
             type="button"
-            onClick={() => setShowForm(!showForm)}
-            className={showForm ? pillBtn : primaryBtn}
+            onClick={() => setShowForm(true)}
+            className={primaryBtn}
           >
-            {showForm ? 'Cancel' : '+ New Schedule'}
+            + New schedule
           </button>
         </div>
       </div>
-
-      {errors.length > 0 && (
-        <ul
-          role="alert"
-          className="space-y-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/60 dark:text-red-300"
-        >
-          {errors.map((e) => (
-            <li key={e}>• {e}</li>
-          ))}
-        </ul>
-      )}
-
-      {showForm && (
-        <ScheduleForm
-          draft={draft}
-          onChange={setDraft}
-          tasks={tasks.data ?? []}
-          onSave={handleCreate}
-          onCancel={() => {
-            setShowForm(false)
-            setErrors([])
-          }}
-          isPending={create.isPending}
-        />
-      )}
 
       {schedules.isLoading ? (
         <p className="text-sm text-zinc-400">Loading schedules…</p>
@@ -120,6 +108,54 @@ export function SchedulesPage() {
           onToggle={(id, enabled) => toggle.mutate({id, enabled})}
           onDelete={(id) => del.mutate(id)}
         />
+      )}
+
+      {showForm && (
+        <AppDialog
+          isOpen
+          onOpenChange={(open) => {
+            if (!open && !create.isPending) {
+              setShowForm(false)
+              setErrors([])
+            }
+          }}
+          size="md"
+        >
+          <Modal.Header className={dialogHeaderCls}>
+            <div>
+              <Modal.Heading className="text-lg font-semibold">Create schedule</Modal.Heading>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Choose a task and tell Heka exactly when it should run.</p>
+            </div>
+            <Modal.CloseTrigger aria-label="Close create schedule dialog" isDisabled={create.isPending} />
+          </Modal.Header>
+          <Modal.Body className={dialogBodyCls}>
+            <ScheduleForm
+              draft={draft}
+              onChange={(next) => {
+                setDraft(next)
+                setErrors([])
+              }}
+              tasks={tasks.data ?? []}
+              errors={errors}
+            />
+          </Modal.Body>
+          <Modal.Footer className={dialogFooterCls}>
+            <button
+              type="button"
+              className={pillBtn}
+              disabled={create.isPending}
+              onClick={() => {
+                setShowForm(false)
+                setErrors([])
+              }}
+            >
+              Cancel
+            </button>
+            <button type="button" className={primaryBtn} disabled={create.isPending} onClick={handleCreate}>
+              {create.isPending ? 'Creating…' : 'Create schedule'}
+            </button>
+          </Modal.Footer>
+        </AppDialog>
       )}
 
       {toast && (

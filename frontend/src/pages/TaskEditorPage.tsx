@@ -18,16 +18,26 @@ import {
   draftToYAML,
   emptyDraft,
   renamePlan,
+  validateTaskDraft,
   type TaskDraft,
 } from '../lib/taskForm'
 import {TaskForm} from '../components/tasks/TaskForm'
 import {YamlEditor} from '../components/tasks/YamlEditor'
-import {Tabs} from '@heroui/react'
+import {Modal, Tabs} from '@heroui/react'
 import {pillBtn, primaryBtn} from '../components/controls'
+import {AppDialog, dialogBodyCls, dialogFooterCls, dialogHeaderCls} from '../components/AppDialog'
 
 type Tab = 'form' | 'yaml'
 
-export function TaskEditorPage() {
+export function TaskEditorPage({
+  dialog = false,
+  onClose,
+  onCreated,
+}: {
+  dialog?: boolean
+  onClose?: () => void
+  onCreated?: (slug: string) => void
+} = {}) {
   const {slug} = useParams()
   const navigate = useNavigate()
   const editingSlug = !slug || slug === 'new' ? undefined : slug
@@ -106,6 +116,13 @@ export function TaskEditorPage() {
   const submit = async () => {
     if (!draft) return
     setSaveErrors([])
+    if (tab === 'form') {
+      const localErrors = validateTaskDraft(draft)
+      if (localErrors.length > 0) {
+        setSaveErrors(localErrors)
+        return
+      }
+    }
     const text = tab === 'yaml' ? (yamlText ?? '') : draftToYAML(draft)
 
     // Parse through the daemon (validation included) so the saved document is
@@ -139,7 +156,12 @@ export function TaskEditorPage() {
       } else {
         await update.mutateAsync({slug: editingSlug as string, yaml: text})
       }
-      navigate(`/tasks/${dto.task.slug}`, {replace: true})
+      if (dialog) {
+        onCreated?.(dto.task.slug)
+        onClose?.()
+      } else {
+        navigate(`/tasks/${dto.task.slug}`, {replace: true})
+      }
       setYamlText(text)
       setStaleYaml(false)
     } catch (err) {
@@ -175,96 +197,43 @@ export function TaskEditorPage() {
   }
 
   const renaming = renamePlan(editingSlug, draft).isRenaming
-
-return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link to="/tasks" aria-label="Back to tasks" className={pillBtn}>
-            Back
-          </Link>
-          <h2 className="text-lg font-semibold">
-            {isNew ? 'New Task' : draft.name || draft.slug}
-          </h2>
-        </div>
-        <div className="flex items-center gap-2">
-          {!isNew && (
-            <button
-              type="button"
-              className={pillBtn}
-              onClick={() =>
-                exporter.mutate(editingSlug as string, {
-                  onError: (err) => {
-                    if (
-                      err instanceof Error &&
-                      err.message === 'dialog canceled'
-                    ) {
-                      return
-                    }
-                    const details = apiErrorDetails(err)
-                    if (tab === 'yaml') {
-                      setYamlErrors(details)
-                    } else {
-                      setSaveErrors(details)
-                    }
-                  },
-                })
-              }
-            >
-              Export
-            </button>
-          )}
-          <button type="button" onClick={() => void submit()} className={primaryBtn} disabled={create.isPending || update.isPending}>
-            Save
-          </button>
-        </div>
-      </div>
-
+  const pending = create.isPending || update.isPending
+  const editor = (
+    <div className="space-y-4">
       {switchNotice && (
         <div
           data-testid="tab-switch-notice"
           className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
         >
           <p className="font-medium">
-            The YAML tab does not validate — this form shows the last valid
-            version of the task. Your YAML text is untouched; fix it there or
-            save will re-check.
+            This form shows the last valid task. Your YAML is untouched and will be checked again when you save.
           </p>
           <ul className="list-inside list-disc">
-            {switchNotice.map((err) => (
-              <li key={err}>{err}</li>
-            ))}
+            {switchNotice.map((err) => <li key={err}>{err}</li>)}
           </ul>
         </div>
       )}
-
       <Tabs
         selectedKey={tab}
         onSelectionChange={(key) => {
-          const k = key as Tab
-          if (k === 'yaml') switchToYAML()
-          else if (k === 'form') switchToForm()
+          const next = key as Tab
+          if (next === 'yaml') switchToYAML()
+          else switchToForm()
         }}
       >
         <Tabs.ListContainer>
           <Tabs.List aria-label="Editor view">
-            <Tabs.Tab id="form">
-              Visual
-              <Tabs.Indicator />
-            </Tabs.Tab>
-            <Tabs.Tab id="yaml">
-              YAML
-              <Tabs.Indicator />
-            </Tabs.Tab>
+            <Tabs.Tab id="form">Visual<Tabs.Indicator /></Tabs.Tab>
+            <Tabs.Tab id="yaml">YAML<Tabs.Indicator /></Tabs.Tab>
           </Tabs.List>
         </Tabs.ListContainer>
       </Tabs>
-
       {tab === 'form' ? (
         <TaskForm
           draft={draft}
           onChange={(patch) => {
             setStaleYaml(true)
+            setSaveErrors([])
             setDraft({...draft, ...patch} as TaskDraft)
           }}
           errors={saveErrors}
@@ -285,12 +254,56 @@ return (
           />
           {yamlErrors.length > 0 && (
             <p className="text-xs text-red-600 dark:text-red-400">
-              Fix the YAML above — nothing was saved and your text is kept as
-              typed.
+              Fix the YAML above. Nothing was saved and your text remains exactly as typed.
             </p>
           )}
         </>
       )}
+    </div>
+  )
+
+  if (dialog) {
+    return (
+      <AppDialog isOpen onOpenChange={(open) => { if (!open && !pending) onClose?.() }}>
+        <Modal.Header className={dialogHeaderCls}>
+          <div>
+            <Modal.Heading className="text-lg font-semibold">Create task</Modal.Heading>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Define what runs, how it runs, and how Heka reports the result.</p>
+          </div>
+          <Modal.CloseTrigger aria-label="Close create task dialog" isDisabled={pending} />
+        </Modal.Header>
+        <Modal.Body className={dialogBodyCls}>{editor}</Modal.Body>
+        <Modal.Footer className={dialogFooterCls}>
+          <button type="button" className={pillBtn} onClick={onClose} disabled={pending}>Cancel</button>
+          <button type="button" onClick={() => void submit()} className={primaryBtn} disabled={pending}>
+            {pending ? 'Creating…' : 'Create task'}
+          </button>
+        </Modal.Footer>
+      </AppDialog>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Link to="/tasks" aria-label="Back to tasks" className={pillBtn}>Back</Link>
+          <h2 className="text-lg font-semibold">{isNew ? 'New Task' : draft.name || draft.slug}</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isNew && (
+            <button
+              type="button"
+              className={pillBtn}
+              onClick={() => exporter.mutate(editingSlug as string, {onError: (err) => setSaveErrors(apiErrorDetails(err))})}
+            >
+              Export
+            </button>
+          )}
+          <button type="button" onClick={() => void submit()} className={primaryBtn} disabled={pending}>Save</button>
+        </div>
+      </div>
+      {editor}
     </div>
   )
 }

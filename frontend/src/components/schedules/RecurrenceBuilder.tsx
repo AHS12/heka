@@ -111,6 +111,7 @@ export function RecurrenceBuilder({
         <div className="flex items-end gap-2">
           <Field label="Every">
             <TextInput
+              aria-label="Every number"
               type="number"
               min={1}
               value={String(value.everyN)}
@@ -140,6 +141,7 @@ export function RecurrenceBuilder({
         <div className="flex items-end gap-2">
           <Field label="Hour">
             <TextInput
+              aria-label="Daily hour"
               type="number"
               min={0}
               max={23}
@@ -150,6 +152,7 @@ export function RecurrenceBuilder({
           </Field>
           <Field label="Minute">
             <TextInput
+              aria-label="Daily minute"
               type="number"
               min={0}
               max={59}
@@ -177,6 +180,7 @@ export function RecurrenceBuilder({
           </Field>
           <Field label="Hour">
             <TextInput
+              aria-label="Weekly hour"
               type="number"
               min={0}
               max={23}
@@ -187,6 +191,7 @@ export function RecurrenceBuilder({
           </Field>
           <Field label="Minute">
             <TextInput
+              aria-label="Weekly minute"
               type="number"
               min={0}
               max={59}
@@ -205,6 +210,7 @@ export function RecurrenceBuilder({
         <div className="flex items-end gap-2">
           <Field label="Day of month">
             <TextInput
+              aria-label="Monthly day"
               type="number"
               min={1}
               max={31}
@@ -215,6 +221,7 @@ export function RecurrenceBuilder({
           </Field>
           <Field label="Hour">
             <TextInput
+              aria-label="Monthly hour"
               type="number"
               min={0}
               max={23}
@@ -225,6 +232,7 @@ export function RecurrenceBuilder({
           </Field>
           <Field label="Minute">
             <TextInput
+              aria-label="Monthly minute"
               type="number"
               min={0}
               max={59}

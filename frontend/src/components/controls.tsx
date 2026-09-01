@@ -13,22 +13,68 @@ export const inputCls =
   'focus:border-accent focus:ring-1 focus:ring-accent-ring ' +
   'dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100 dark:placeholder:text-zinc-500'
 
-export function Field({label, hint, children}: {label: string; hint?: ReactNode; children: ReactNode}) {
+export function Field({
+  label,
+  hint,
+  error,
+  errorId,
+  children,
+}: {
+  label: string
+  hint?: ReactNode
+  error?: string
+  errorId?: string
+  children: ReactNode
+}) {
   return (
-    <label className="block">
+    <div className="block">
       <span className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
         {label}
       </span>
       {children}
-      {hint && (
+      {error ? (
+        <span id={errorId} className="mt-1.5 flex items-start gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+          <span aria-hidden="true">•</span>
+          {error}
+        </span>
+      ) : hint ? (
         <span className="mt-1 block text-xs text-zinc-400 dark:text-zinc-500">{hint}</span>
-      )}
-    </label>
+      ) : null}
+    </div>
+  )
+}
+
+export function FormErrors({
+  errors,
+  title = 'Check the highlighted fields',
+  testId,
+}: {
+  errors: string[]
+  title?: string
+  testId?: string
+}) {
+  if (errors.length === 0) return null
+  return (
+    <div
+      role="alert"
+      data-testid={testId}
+      className="rounded-xl border border-red-200 bg-red-50/90 px-3 py-2.5 text-xs text-red-800 shadow-sm dark:border-red-900 dark:bg-red-950/70 dark:text-red-200"
+    >
+      <p className="font-semibold">{title}</p>
+      <ul className="mt-1 list-inside list-disc space-y-0.5">
+        {errors.map((error) => <li key={error}>{error}</li>)}
+      </ul>
+    </div>
   )
 }
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`${inputCls} ${props.className ?? ''}`} />
+  return (
+    <input
+      {...props}
+      className={`${inputCls} ${props['aria-invalid'] ? 'border-red-400 focus:border-red-500 focus:ring-red-300 dark:border-red-700' : ''} ${props.className ?? ''}`}
+    />
+  )
 }
 
 export function NumberInput(props: InputHTMLAttributes<HTMLInputElement>) {
@@ -54,15 +100,19 @@ export function SelectField({
   placeholder,
   isDisabled,
   className,
+  isInvalid,
   'aria-label': ariaLabel,
+  'aria-describedby': ariaDescribedBy,
 }: {
   value: string
   onChange: (value: string) => void
   items: SelectItemData[]
   placeholder?: string
   isDisabled?: boolean
+  isInvalid?: boolean
   className?: string
   'aria-label'?: string
+  'aria-describedby'?: string
 }) {
   const triggerCls =
     'w-full rounded-lg border border-zinc-200 bg-white/70 px-2.5 py-1.5 text-sm ' +
@@ -90,10 +140,12 @@ export function SelectField({
       }}
       placeholder={placeholder ?? 'Select…'}
       isDisabled={isDisabled}
+      isInvalid={isInvalid}
+      aria-describedby={ariaDescribedBy}
       className={className}
     >
       <Label className="sr-only">{ariaLabel}</Label>
-      <Select.Trigger className={triggerCls}>
+      <Select.Trigger className={`${triggerCls} ${isInvalid ? 'border-red-400 data-[focus-visible=true]:border-red-500 data-[focus-visible=true]:ring-red-300 dark:border-red-700' : ''}`}>
         <Select.Value className="text-sm" />
         <Select.Indicator className="size-4 text-zinc-400 dark:text-zinc-500" />
       </Select.Trigger>

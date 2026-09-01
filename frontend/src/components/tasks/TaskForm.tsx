@@ -2,7 +2,7 @@
 // canonical draft (props in, patch-out). Sections: Basics, Script/Binary,
 // Execution, Retry, Environment, Notifications.
 import {useState} from 'react'
-import {Field, NumberInput, SelectField, TextInput, Toggle, pillBtn} from '../controls'
+import {Field, FormErrors, NumberInput, SelectField, TextInput, Toggle, pillBtn} from '../controls'
 import {EnvEditor} from './EnvEditor'
 import {WebhookEditor} from './WebhookEditor'
 import {pickScriptFile, pickWorkingDir} from '../../lib/api'
@@ -57,6 +57,10 @@ export function TaskForm({
   const patch = (p: Partial<TaskDraft>) => onChange(p)
   const type = draft.type
   const setType = (t: TaskType) => patch({type: t})
+  const fieldError = (...fields: string[]) => {
+    const match = errors.find((error) => fields.some((field) => error.toLowerCase().startsWith(`${field.toLowerCase()}:`)))
+    return match?.replace(/^[^:]+:\s*/, '')
+  }
 
   // Slug auto-generation (user can take over by typing in the field): the
   // slug follows the name while it's untouched and still matches what the
@@ -74,24 +78,16 @@ export function TaskForm({
 
   return (
     <div className="space-y-6">
-      {errors.length > 0 && (
-        <ul
-          role="alert"
-          data-testid="form-errors"
-          className="space-y-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/60 dark:text-red-300"
-        >
-          {errors.map((err) => (
-            <li key={err}>• {err}</li>
-          ))}
-        </ul>
-      )}
+      <FormErrors errors={errors} testId="form-errors" />
 
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Basics</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Name">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Name" error={fieldError('name')} errorId="task-name-error">
             <TextInput
               aria-label="Task name"
+              aria-invalid={Boolean(fieldError('name'))}
+              aria-describedby={fieldError('name') ? 'task-name-error' : undefined}
               value={draft.name}
               onChange={(e) => onNameChange(e.target.value)}
               placeholder="Nightly backup"
@@ -99,10 +95,14 @@ export function TaskForm({
           </Field>
           <Field
             label="Slug"
-            hint="Auto-generated from the name — override it here if you want."
+            hint="Auto-generated from the name. You can override it."
+            error={fieldError('slug')}
+            errorId="task-slug-error"
           >
             <TextInput
               aria-label="Task slug"
+              aria-invalid={Boolean(fieldError('slug'))}
+              aria-describedby={fieldError('slug') ? 'task-slug-error' : undefined}
               value={draft.slug}
               onChange={(e) => patch({slug: e.target.value})}
               placeholder="nightly-backup"
@@ -117,7 +117,7 @@ export function TaskForm({
             Slug changed — saving will create a copy and remove the original task.
           </p>
         )}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Type">
             <SelectField
               aria-label="Task type"
@@ -133,15 +133,19 @@ export function TaskForm({
             label="Runtime"
             hint={
               type === 'binary'
-                ? 'Binaries run directly — no interpreter.'
+                ? 'Binaries run directly. No interpreter is needed.'
                 : 'Need another runtime? Use the YAML tab.'
             }
+            error={type === 'script' ? fieldError('runtime') : undefined}
+            errorId="task-runtime-error"
           >
             <SelectField
               aria-label="Runtime"
+              aria-describedby={fieldError('runtime') ? 'task-runtime-error' : undefined}
               value={draft.runtime}
               placeholder="Choose runtime…"
               isDisabled={type === 'binary'}
+              isInvalid={type === 'script' && Boolean(fieldError('runtime'))}
               onChange={(v) => patch({runtime: v})}
               items={RUNTIMES.map((r) => ({id: r, label: r}))}
             />
@@ -153,10 +157,16 @@ export function TaskForm({
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
           {type === 'binary' ? 'Binary' : 'Script'}
         </h3>
-        <Field label={type === 'binary' ? 'Command' : 'Script path'}>
+        <Field
+          label={type === 'binary' ? 'Command' : 'Script path'}
+          error={fieldError(type === 'binary' ? 'command' : 'script')}
+          errorId="task-executable-error"
+        >
           <div className="flex gap-2">
             <TextInput
               aria-label={type === 'binary' ? 'Command' : 'Script path'}
+              aria-invalid={Boolean(fieldError(type === 'binary' ? 'command' : 'script'))}
+              aria-describedby={fieldError(type === 'binary' ? 'command' : 'script') ? 'task-executable-error' : undefined}
               value={type === 'binary' ? draft.command : draft.script}
               onChange={(e) =>
                 patch(
@@ -184,10 +194,12 @@ export function TaskForm({
 
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Execution</h3>
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="Timeout (seconds)">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="Timeout (seconds)" error={fieldError('timeout')} errorId="task-timeout-error">
             <NumberInput
               aria-label="Timeout seconds"
+              aria-invalid={Boolean(fieldError('timeout'))}
+              aria-describedby={fieldError('timeout') ? 'task-timeout-error' : undefined}
               min={0}
               value={draft.timeout}
               onChange={(e) => patch({timeout: Number(e.target.value)})}
@@ -244,18 +256,22 @@ export function TaskForm({
 
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Retry</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Max attempts">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Max attempts" error={fieldError('retry.max_attempts', 'max_attempts')} errorId="task-attempts-error">
             <NumberInput
               aria-label="Max attempts"
+              aria-invalid={Boolean(fieldError('retry.max_attempts', 'max_attempts'))}
+              aria-describedby={fieldError('retry.max_attempts', 'max_attempts') ? 'task-attempts-error' : undefined}
               min={1}
               value={draft.maxAttempts}
               onChange={(e) => patch({maxAttempts: Number(e.target.value)})}
             />
           </Field>
-          <Field label="Delay between attempts (seconds)">
+          <Field label="Delay between attempts (seconds)" error={fieldError('retry.delay_seconds', 'delay_seconds')} errorId="task-delay-error">
             <NumberInput
               aria-label="Delay seconds"
+              aria-invalid={Boolean(fieldError('retry.delay_seconds', 'delay_seconds'))}
+              aria-describedby={fieldError('retry.delay_seconds', 'delay_seconds') ? 'task-delay-error' : undefined}
               min={0}
               value={draft.delaySeconds}
               onChange={(e) => patch({delaySeconds: Number(e.target.value)})}

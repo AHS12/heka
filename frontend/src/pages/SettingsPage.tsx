@@ -2,7 +2,8 @@
 // both persisted shell stores), daemon startup/reliability toggles, and the
 // secrets vault manager (names in, values go to the daemon's encrypted store
 // and never come back).
-import {useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
+import type {ReactNode} from 'react'
 import {useQuery, useQueryClient, useMutation} from '@tanstack/react-query'
 import {
   apiErrorDetails,
@@ -27,21 +28,82 @@ import type {Accent} from '../lib/accent'
 import type {ThemeChoice} from '../lib/theme'
 import {useAnimations} from '../lib/animations'
 import {Field, SelectField, TextInput, pillBtn} from '../components/controls'
-import {Switch} from '@heroui/react'
+import {Switch, Tabs} from '@heroui/react'
 
 const SECRETS_KEY = ['secrets'] as const
 
+type SettingsTab = 'appearance' | 'data' | 'startup' | 'reliability' | 'retention' | 'notifications' | 'secrets'
+
+const SETTINGS_TABS: Array<{id: SettingsTab; label: string; detail: string}> = [
+  {id: 'appearance', label: 'Appearance', detail: 'Theme, accent, and motion'},
+  {id: 'data', label: 'Data', detail: 'Local storage locations'},
+  {id: 'startup', label: 'Startup', detail: 'Launch with your system'},
+  {id: 'reliability', label: 'Reliability', detail: 'Daemon watchdog'},
+  {id: 'retention', label: 'Retention', detail: 'Run history lifetime'},
+  {id: 'notifications', label: 'Notifications', detail: 'Sounds and previews'},
+  {id: 'secrets', label: 'Secrets', detail: 'Encrypted credentials'},
+]
+
+function useNarrowSettings() {
+  const query = '(max-width: 767px)'
+  const [narrow, setNarrow] = useState(() => window.matchMedia?.(query).matches ?? false)
+  useEffect(() => {
+    const media = window.matchMedia?.(query)
+    if (!media) return
+    const update = () => setNarrow(media.matches)
+    update()
+    media.addEventListener?.('change', update)
+    return () => media.removeEventListener?.('change', update)
+  }, [])
+  return narrow
+}
+
 export function SettingsPage() {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
+  const narrow = useNarrowSettings()
+  const panels: Record<SettingsTab, ReactNode> = {
+    appearance: <AppearanceSection />,
+    data: <DataDirSection />,
+    startup: <StartupSection />,
+    reliability: <ReliabilitySection />,
+    retention: <RetentionSection />,
+    notifications: <NotificationSection />,
+    secrets: <SecretsSection />,
+  }
+
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
-      <h2 className="text-lg font-semibold">Settings</h2>
-      <AppearanceSection />
-      <DataDirSection />
-      <StartupSection />
-      <ReliabilitySection />
-      <RetentionSection />
-      <NotificationSection />
-      <SecretsSection />
+    <div className="mx-auto max-w-5xl space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Settings</h2>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Shape how Heka looks, starts, stores data, and protects credentials.</p>
+      </div>
+      <Tabs
+        orientation={narrow ? 'horizontal' : 'vertical'}
+        selectedKey={activeTab}
+        onSelectionChange={(key) => setActiveTab(key as SettingsTab)}
+        className="grid items-start gap-4 md:grid-cols-[13rem_minmax(0,1fr)]"
+      >
+        <div className="self-start overflow-x-auto rounded-2xl border border-zinc-200/80 bg-white/45 p-1.5 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/25 md:overflow-visible">
+          <Tabs.List aria-label="Settings sections" className="flex min-w-max gap-1.5 md:min-w-0 md:flex-col md:items-stretch">
+            {SETTINGS_TABS.map((tab) => (
+              <Tabs.Tab
+                key={tab.id}
+                id={tab.id}
+                className="group relative flex min-h-12 min-w-40 flex-none items-center justify-start rounded-xl px-3.5 py-2 text-left outline-none transition-colors data-[hovered=true]:bg-white/65 data-[selected=true]:bg-white/90 data-[selected=true]:shadow-sm data-[focus-visible=true]:ring-2 data-[focus-visible=true]:ring-accent-ring dark:data-[hovered=true]:bg-zinc-900/65 dark:data-[selected=true]:bg-zinc-900/90 md:min-w-0 md:items-stretch md:px-3"
+              >
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="block truncate text-sm font-semibold leading-tight">{tab.label}</span>
+                  <span className="block truncate text-[11px] font-normal leading-tight text-zinc-500 dark:text-zinc-400">{tab.detail}</span>
+                </span>
+                <Tabs.Indicator className="absolute bottom-1 left-3 right-3 h-0.5 rounded-full bg-accent md:bottom-2 md:left-0 md:right-auto md:top-2 md:h-auto md:w-0.5" />
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+        </div>
+        <Tabs.Panel id={activeTab} className="min-w-0 rounded-2xl border border-zinc-200/80 bg-white/45 p-4 shadow-sm backdrop-blur-sm outline-none dark:border-zinc-800 dark:bg-zinc-950/25 sm:p-5">
+          {panels[activeTab]}
+        </Tabs.Panel>
+      </Tabs>
     </div>
   )
 }
@@ -314,13 +376,14 @@ function RetentionSection() {
   const settings = useQuery({queryKey: SETTINGS_KEY, queryFn: getSettings})
   const [days, setDays] = useState(90)
   const [saved, setSaved] = useState(false)
-  const initialized = useState(false)
+  const initialized = useRef(false)
 
-  // Sync from server once loaded.
-  if (settings.data && !initialized[0]) {
-    setDays(settings.data.log_retention_days)
-    initialized[1](true)
-  }
+  useEffect(() => {
+    if (settings.data && !initialized.current) {
+      initialized.current = true
+      setDays(settings.data.log_retention_days)
+    }
+  }, [settings.data])
 
   const mutation = useMutation({
     mutationFn: (v: number) => updateSettings({
@@ -387,14 +450,16 @@ function NotificationSection() {
   const [failure, setFailure] = useState('system')
   const [timeoutSound, setTimeoutSound] = useState('system')
   const [saved, setSaved] = useState(false)
-  const initialized = useState(false)
+  const initialized = useRef(false)
 
-  if (settings.data && !initialized[0]) {
-    setSuccess(settings.data.sound_success ?? 'system')
-    setFailure(settings.data.sound_failure ?? 'system')
-    setTimeoutSound(settings.data.sound_timeout ?? 'system')
-    initialized[1](true)
-  }
+  useEffect(() => {
+    if (settings.data && !initialized.current) {
+      initialized.current = true
+      setSuccess(settings.data.sound_success ?? 'system')
+      setFailure(settings.data.sound_failure ?? 'system')
+      setTimeoutSound(settings.data.sound_timeout ?? 'system')
+    }
+  }, [settings.data])
 
   const mutation = useMutation({
     mutationFn: (s: {sound_success: string; sound_failure: string; sound_timeout: string}) =>

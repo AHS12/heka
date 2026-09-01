@@ -22,6 +22,11 @@ function renderPage() {
   )
 }
 
+async function openSecrets(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('tab', {name: /Secrets/}))
+  return screen.findByRole('heading', {name: 'Secrets'})
+}
+
 beforeEach(() => {
   useTheme.getState().setTheme('system')
   useAccent.getState().setAccent('blue')
@@ -31,7 +36,7 @@ describe('SettingsPage appearance', () => {
   it('switches the persisted theme', async () => {
     const user = userEvent.setup()
     renderPage()
-    await screen.findByText('Appearance')
+    await screen.findByRole('heading', {name: 'Appearance'})
 
     // HeroUI Select popovers don't fully open in jsdom (portal limitation).
     // Verify the component renders and the theme state works when set directly.
@@ -45,7 +50,7 @@ describe('SettingsPage appearance', () => {
   it('repoints the accent via swatches', async () => {
     const user = userEvent.setup()
     renderPage()
-    await screen.findByText('Appearance')
+    await screen.findByRole('heading', {name: 'Appearance'})
 
     await user.click(screen.getByRole('button', {name: 'Accent violet'}))
     expect(useAccent.getState().accent).toBe('violet')
@@ -56,7 +61,9 @@ describe('SettingsPage appearance', () => {
 describe('SettingsPage secrets vault', () => {
   it('lists stored keys only', async () => {
     mList.mockResolvedValue(['OPENROUTER_API_KEY', 'SLACK_WEBHOOK_URL'])
+    const user = userEvent.setup()
     renderPage()
+    await openSecrets(user)
     const list = await screen.findByTestId('secret-list')
     expect(list).toHaveTextContent('OPENROUTER_API_KEY')
     expect(list).toHaveTextContent('SLACK_WEBHOOK_URL')
@@ -68,6 +75,7 @@ describe('SettingsPage secrets vault', () => {
     const user = userEvent.setup()
 
     renderPage()
+    await openSecrets(user)
     await screen.findByText(/No secrets yet/)
 
     await user.type(screen.getByLabelText('Secret key'), 'OPENROUTER_API_KEY')
@@ -87,6 +95,7 @@ describe('SettingsPage secrets vault', () => {
     const user = userEvent.setup()
 
     renderPage()
+    await openSecrets(user)
     await screen.findByText(/No secrets yet/)
     await user.type(screen.getByLabelText('Secret key'), 'not-a-key')
     await user.type(screen.getByLabelText('Secret value'), 'x')
@@ -105,6 +114,7 @@ describe('SettingsPage secrets vault', () => {
     const user = userEvent.setup()
 
     renderPage()
+    await openSecrets(user)
     await screen.findByTestId('secret-list')
     await user.click(screen.getByRole('button', {name: 'Delete secret OLD_KEY'}))
 
