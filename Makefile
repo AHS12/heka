@@ -1,6 +1,6 @@
 # Heka build tooling — single entry point for dev, build, and checks (SPEC-01 §4).
 
-VERSION   ?= 0.6.8
+VERSION   ?= 0.6.9
 BIN_DIR   := build
 DIST_DIR  := $(BIN_DIR)/dist
 LDFLAGS   := -X main.appVersion=$(VERSION)

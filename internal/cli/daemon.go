@@ -130,7 +130,7 @@ func (a *App) watchdogCmd() *cobra.Command {
 		Short: "Register the watchdog with the operating system",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			exe, err := osapp.ConsoleExecutable()
+			exe, err := osapp.GUIExecutable()
 			if err != nil {
 				return err
 			}

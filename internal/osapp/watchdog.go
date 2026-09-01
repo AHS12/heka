@@ -41,12 +41,12 @@ type Installer interface {
 // RepairEntries reconciles OS registration (watchdog + startup) with the
 // currently running binary. After an upgrade the recorded exe path can point
 // at a deleted/renamed binary, so entries whose path differs are re-created
-// with the current executable path. Runs once at daemon startup (SPEC-10 §3).
+// with the current executable path. The GUI-subsystem binary is used so
+// neither the watchdog task nor the startup entry ever opens a console
+// (Windows). Runs once at daemon startup (SPEC-10 §3).
 func RepairEntries() {
-	if consoleExe, err := ConsoleExecutable(); err == nil {
-		repairWatchdog(consoleExe)
-	}
 	if guiExe, err := GUIExecutable(); err == nil {
+		repairWatchdog(guiExe)
 		repairStartup(guiExe)
 	}
 }

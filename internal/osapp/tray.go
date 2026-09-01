@@ -182,7 +182,7 @@ func onReady(deps TrayDeps) {
 				_ = watchdogInstaller.Uninstall()
 				watchdogItem.Uncheck()
 			} else {
-				exe, err := ConsoleExecutable()
+				exe, err := GUIExecutable()
 				if err == nil {
 					_ = watchdogInstaller.Install(DefaultWatchdogInterval, exe)
 					watchdogItem.Check()

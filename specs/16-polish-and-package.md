@@ -80,7 +80,7 @@ The last spec: the Dashboard page (promised by the shell but never detailed) wit
 ## 5. Packaging (Windows MVP)
 
 - `make release-windows` builds `heka.exe` with Wails `-windowsconsole`, builds `heka-gui.exe` with the GUI subsystem, and packages both in the NSIS installer.
-- NSIS config lives in `build/windows/installer/`. Start-menu, desktop, and finish-page actions launch `heka-gui.exe`; startup/watchdog registration and terminal PATH usage resolve to `heka.exe`.
+- NSIS config lives in `build/windows/installer/`. Start-menu, desktop, and finish-page actions launch `heka-gui.exe`; startup and watchdog registration also resolve to `heka-gui.exe` (GUI subsystem → no console window). Terminal PATH usage resolves to `heka.exe`.
 - **PATH checkbox:** Installer includes an optional checkbox "Add Heka to PATH" which appends the install directory to the user's PATH environment variable. Default: checked. Implementation: manual registry edit for `HKCU\Environment\Path`.
 - Upgrades stop stale processes and restore the existing startup/watchdog entries against the new console executable; Settings/tray remain the runtime controls.
 - Linux/macOS: documented recipes in `README` (AppImage/deb + .app); not built or verified.

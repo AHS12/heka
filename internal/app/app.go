@@ -627,7 +627,7 @@ func (a *App) WatchdogEnabled() (WatchdogStatusDTO, error) {
 // WatchdogSet installs or uninstalls the OS-level watchdog.
 func (a *App) WatchdogSet(on bool) error {
 	if on {
-		exe, err := osapp.ConsoleExecutable()
+		exe, err := osapp.GUIExecutable()
 		if err != nil {
 			return err
 		}
