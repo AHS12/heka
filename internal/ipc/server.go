@@ -19,6 +19,7 @@ type Deps struct {
 	Runs          *db.RunStore
 	Schedules     *db.ScheduleStore
 	SyncSchedules func() error // scheduler registry refresh after mutations
+	Reconcile     func() error // fire any missed schedule runs (manual override)
 	Secrets       *db.SecretStore
 	TaskFiles     TaskFilesystem // task YAML read/write (SPEC-13 §1)
 	SyncTasks     func() error   // reindex tasks dir after file mutations
@@ -87,6 +88,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/schedules/{id}", s.handleSchedule)
 	mux.HandleFunc("/v1/schedules/{id}/enable", s.handleScheduleEnable)
 	mux.HandleFunc("/v1/schedules/{id}/disable", s.handleScheduleDisable)
+	mux.HandleFunc("/v1/schedules/reconcile", s.handleSchedulesReconcile)
 
 	// Secrets (SPEC-11).
 	mux.HandleFunc("/v1/secrets", s.handleSecrets)

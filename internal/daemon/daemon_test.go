@@ -16,13 +16,43 @@ import (
 	"heka/internal/core/executor"
 	"heka/internal/core/task"
 	"heka/internal/db"
+	"heka/internal/ipc"
+	"heka/internal/osapp"
 )
 
 // TestMain isolates this package's tests onto their own named pipe (parallel
-// package runs would otherwise collide on the shared per-user endpoint).
+// package runs would otherwise collide on the shared per-user endpoint). The
+// OS watchdog installer is stubbed out package-wide: no test may touch the
+// real Task Scheduler.
 func TestMain(m *testing.M) {
 	_ = os.Setenv("HEKA_PIPE_NAME", fmt.Sprintf("heka-daemon-test-%d", os.Getpid()))
+	osapp.NewInstaller = func() osapp.Installer {
+		return &fakeOSInstaller{installed: false, taskInterval: 0}
+	}
 	os.Exit(m.Run())
+}
+
+// fakeOSInstaller is the osapp.Installer seam: records Install calls without
+// touching the OS.
+type fakeOSInstaller struct {
+	installed    bool
+	taskInterval time.Duration
+}
+
+func (f *fakeOSInstaller) Install(d time.Duration, _ string) error {
+	f.installed = true
+	f.taskInterval = d
+	return nil
+}
+
+func (f *fakeOSInstaller) Uninstall() error {
+	f.installed = false
+	f.taskInterval = 0
+	return nil
+}
+
+func (f *fakeOSInstaller) Status() (bool, time.Duration, error) {
+	return f.installed, f.taskInterval, nil
 }
 
 // testConfig returns a config rooted at a fresh temp dir, so tests never
@@ -292,6 +322,233 @@ func TestDaemonHealthScheduler(t *testing.T) {
 	case <-done:
 	case <-time.After(15 * time.Second):
 		t.Fatal("daemon did not exit")
+	}
+}
+
+func TestReconcileIntervalDefaultsAndClamps(t *testing.T) {
+	database, err := db.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	d := newDaemon(config.Config{}, "test", database)
+
+	// No KV entry: default 10 minutes.
+	if got := d.reconcileInterval(); got != 10*time.Minute {
+		t.Fatalf("default = %v, want 10m", got)
+	}
+
+	// Valid value passes through.
+	if err := database.KV().Set("reconcile_interval_min", "5"); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.reconcileInterval(); got != 5*time.Minute {
+		t.Fatalf("valid = %v, want 5m", got)
+	}
+
+	// Below the floor clamps.
+	if err := database.KV().Set("reconcile_interval_min", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.reconcileInterval(); got != 2*time.Minute {
+		t.Fatalf("under-clamp = %v, want 2m", got)
+	}
+
+	// Above the ceiling clamps.
+	if err := database.KV().Set("reconcile_interval_min", "60"); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.reconcileInterval(); got != 10*time.Minute {
+		t.Fatalf("over-clamp = %v, want 10m", got)
+	}
+
+	// Garbage value falls back to default.
+	if err := database.KV().Set("reconcile_interval_min", "junk"); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.reconcileInterval(); got != 10*time.Minute {
+		t.Fatalf("garbage = %v, want 10m", got)
+	}
+}
+
+func TestUpdateSettingsReconcilesInterval(t *testing.T) {
+	database, err := db.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	d := newDaemon(config.Config{LogRetentionDays: 90}, "test", database)
+
+	// Default surfaces in getSettings.
+	if got := d.getSettings().ReconcileIntervalMin; got != 10 {
+		t.Fatalf("default get = %d, want 10", got)
+	}
+
+	// Round-trip a valid value.
+	if err := d.updateSettings(ipc.SettingsDTO{
+		LogRetentionDays: 60, SoundSuccess: "system", SoundFailure: "system", SoundTimeout: "system",
+		ReconcileIntervalMin: 3,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.getSettings().ReconcileIntervalMin; got != 3 {
+		t.Fatalf("after set get = %d, want 3", got)
+	}
+	v, ok, _ := database.KV().Get("reconcile_interval_min")
+	if !ok || v != "3" {
+		t.Fatalf("KV = %q %v", v, ok)
+	}
+
+	// Out-of-range rejected; KV untouched.
+	if err := d.updateSettings(ipc.SettingsDTO{
+		LogRetentionDays: 60, SoundSuccess: "system", SoundFailure: "system", SoundTimeout: "system",
+		ReconcileIntervalMin: 1,
+	}); err == nil {
+		t.Fatal("below min must error")
+	}
+	if err := d.updateSettings(ipc.SettingsDTO{
+		LogRetentionDays: 60, SoundSuccess: "system", SoundFailure: "system", SoundTimeout: "system",
+		ReconcileIntervalMin: 11,
+	}); err == nil {
+		t.Fatal("above max must error")
+	}
+}
+
+func TestWatchdogIntervalDefaultsAndClamps(t *testing.T) {
+	database, err := db.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	d := newDaemon(config.Config{}, "test", database)
+
+	// No KV entry: the osapp default (5 minutes).
+	if got := d.watchdogInterval(); got != 5 {
+		t.Fatalf("default = %d, want 5", got)
+	}
+
+	// Valid value passes through.
+	if err := database.KV().Set("watchdog_interval_min", "2"); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.watchdogInterval(); got != 2 {
+		t.Fatalf("valid = %d, want 2", got)
+	}
+
+	// Below the floor clamps to 1 (Task Scheduler's minimum repeat).
+	if err := database.KV().Set("watchdog_interval_min", "0"); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.watchdogInterval(); got != 1 {
+		t.Fatalf("under-clamp = %d, want 1", got)
+	}
+
+	// Above the ceiling clamps to 60.
+	if err := database.KV().Set("watchdog_interval_min", "600"); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.watchdogInterval(); got != 60 {
+		t.Fatalf("over-clamp = %d, want 60", got)
+	}
+
+	// Garbage falls back to the default.
+	if err := database.KV().Set("watchdog_interval_min", "junk"); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.watchdogInterval(); got != 5 {
+		t.Fatalf("garbage = %d, want 5", got)
+	}
+}
+
+func TestUpdateSettingsWatchdogInterval(t *testing.T) {
+	database, err := db.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	d := newDaemon(config.Config{LogRetentionDays: 90}, "test", database)
+
+	// Default surfaces in getSettings.
+	if got := d.getSettings().WatchdogIntervalMin; got != 5 {
+		t.Fatalf("default get = %d, want 5", got)
+	}
+
+	base := ipc.SettingsDTO{
+		LogRetentionDays: 60, SoundSuccess: "system", SoundFailure: "system", SoundTimeout: "system",
+		ReconcileIntervalMin: 10,
+	}
+
+	// Out-of-range rejected before anything persists.
+	bad := base
+	bad.WatchdogIntervalMin = 61
+	if err := d.updateSettings(bad); err == nil {
+		t.Fatal("above max must error")
+	}
+	bad.WatchdogIntervalMin = 0 // sanity: baseline saves cleanly below
+
+	// 0 = "not provided" (older clients) — keeps the current value.
+	if err := d.updateSettings(bad); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.watchdogInterval(); got != 5 {
+		t.Fatalf("zero must keep current, got %d", got)
+	}
+
+	// Changing the interval persists and (below) recreates the task.
+	saved := base
+	saved.WatchdogIntervalMin = 2
+	if err := d.updateSettings(saved); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.getSettings().WatchdogIntervalMin; got != 2 {
+		t.Fatalf("after set get = %d, want 2", got)
+	}
+	v, ok, _ := database.KV().Get("watchdog_interval_min")
+	if !ok || v != "2" {
+		t.Fatalf("KV = %q %v", v, ok)
+	}
+}
+
+func TestApplyWatchdogTaskRecreatesOnIntervalChange(t *testing.T) {
+	database, err := db.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	d := newDaemon(config.Config{}, "test", database)
+
+	if err := database.KV().Set("watchdog_interval_min", "2"); err != nil {
+		t.Fatal(err)
+	}
+	inst := &fakeOSInstaller{installed: true, taskInterval: 5 * time.Minute}
+	orig := osapp.NewInstaller
+	osapp.NewInstaller = func() osapp.Installer { return inst }
+	t.Cleanup(func() { osapp.NewInstaller = orig })
+
+	// Installed task's cadence differs from settings → recreated.
+	if err := d.applyWatchdogTask(); err != nil {
+		t.Fatal(err)
+	}
+	if inst.taskInterval != 2*time.Minute {
+		t.Fatalf("task interval = %v, want 2m", inst.taskInterval)
+	}
+
+	// Now matching → no further churn.
+	if err := d.applyWatchdogTask(); err != nil {
+		t.Fatal(err)
+	}
+	if inst.taskInterval != 2*time.Minute {
+		t.Fatalf("task interval drifted: %v", inst.taskInterval)
+	}
+
+	// Not installed → no-op.
+	inst2 := &fakeOSInstaller{installed: false}
+	osapp.NewInstaller = func() osapp.Installer { return inst2 }
+	if err := d.applyWatchdogTask(); err != nil {
+		t.Fatal(err)
+	}
+	if inst2.taskInterval != 0 {
+		t.Fatalf("uninstalled task must not be created: %v", inst2.taskInterval)
 	}
 }
 

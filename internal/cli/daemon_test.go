@@ -33,6 +33,10 @@ type stubClient struct {
 	enabled  bool
 	disabled bool
 	err      error // when set, every call returns it
+
+	reconciled   int
+	reconcileErr error
+	schedules    []ipc.Schedule
 }
 
 func (s *stubClient) ListTasks() ([]ipc.TaskSummary, error)        { return s.tasks, s.err }
@@ -54,6 +58,17 @@ func (s *stubClient) Disable(slug string) error {
 }
 func (s *stubClient) TaskRuns(_ string, _ int) ([]ipc.Run, error) { return s.runs, s.err }
 func (s *stubClient) Run(string) (ipc.Run, error)                 { return s.runOne, s.err }
+func (s *stubClient) ListRuns(_ ipc.RunFilters) (ipc.RunListResult, error) {
+	return ipc.RunListResult{Runs: s.runs, Total: len(s.runs)}, s.err
+}
+func (s *stubClient) ListSchedules() ([]ipc.Schedule, error)      { return s.schedules, s.err }
+func (s *stubClient) ReconcileSchedules() error {
+	if s.reconcileErr != nil {
+		return s.reconcileErr
+	}
+	s.reconciled++
+	return nil
+}
 
 // newTestApp wires a stub client into an App with captured output.
 func newTestApp(stub *stubClient) (*App, *bytes.Buffer, *bytes.Buffer) {
@@ -257,13 +272,175 @@ func TestDaemonNotRunningHint(t *testing.T) {
 	}
 }
 
+func TestDaemonAccessDeniedHint(t *testing.T) {
+	stub := &stubClient{err: ipc.ErrDaemonAccessDenied}
+	a, _, errOut := newTestApp(stub)
+	if err := runArgs(t, a, "list"); err == nil {
+		t.Fatal("expected error")
+	}
+	msg := errOut.String()
+	if !strings.Contains(msg, "denied access") || !strings.Contains(msg, "elevated") {
+		t.Fatalf("access-denied hint missing:\n%s", msg)
+	}
+}
+
+func TestDaemonAccessDeniedJSONCode(t *testing.T) {
+	stub := &stubClient{err: ipc.ErrDaemonAccessDenied}
+	a, out, errOut := newTestApp(stub)
+	if err := runArgs(t, a, "list", "--json"); err == nil {
+		t.Fatal("expected error")
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("json errors must go to stdout, stderr got:\n%s", errOut.String())
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out.Bytes(), &m); err != nil {
+		t.Fatalf("json error invalid:\n%s", out.String())
+	}
+	if e, ok := m["error"].(map[string]any); !ok || e["code"] != "daemon_access_denied" {
+		t.Fatalf("json error = %v", m)
+	}
+}
+
+func TestDaemonUnreachableHint(t *testing.T) {
+	stub := &stubClient{err: ipc.ErrDaemonUnreachable}
+	a, _, errOut := newTestApp(stub)
+	if err := runArgs(t, a, "list"); err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(errOut.String(), "did not respond") {
+		t.Fatalf("unreachable hint missing:\n%s", errOut.String())
+	}
+}
+
 func TestSchedulesPlaceholder(t *testing.T) {
-	a, out, _ := newTestApp(&stubClient{})
-	if err := runArgs(t, a, "schedules"); err != nil {
+	a, _, errOut := newTestApp(&stubClient{})
+	if err := runArgs(t, a, "schedules"); err == nil {
+		t.Fatal("expected error for missing subcommand")
+	}
+	if !strings.Contains(errOut.String(), "specify") {
+		t.Fatalf("schedules stderr:\n%s", errOut.String())
+	}
+}
+
+func TestSchedulesReconcile(t *testing.T) {
+	stub := &stubClient{}
+	a, out, _ := newTestApp(stub)
+	if err := runArgs(t, a, "schedules", "reconcile"); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "arrives in SPEC-09") {
-		t.Fatalf("schedules output:\n%s", out.String())
+	if stub.reconciled != 1 {
+		t.Fatalf("reconciled = %d, want 1", stub.reconciled)
+	}
+	if !strings.Contains(out.String(), "reconciled") {
+		t.Fatalf("output = %q", out.String())
+	}
+
+	stub2 := &stubClient{}
+	a2, out2, _ := newTestApp(stub2)
+	if err := runArgs(t, a2, "schedules", "reconcile", "--json"); err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out2.Bytes(), &m); err != nil {
+		t.Fatalf("json parse: %v (%q)", err, out2.String())
+	}
+	if ok, _ := m["ok"].(bool); !ok {
+		t.Fatalf("json = %v", m)
+	}
+}
+
+func TestSchedulesMissed(t *testing.T) {
+	stub := &stubClient{
+		schedules: []ipc.Schedule{
+			{ID: "schA", Slug: "daily-check", TaskSlug: "openrouter", Kind: "recurring"},
+			{ID: "schB", Slug: "monthly-ims", TaskSlug: "ims-reminder", Kind: "recurring"},
+		},
+		runs: []ipc.Run{
+			{
+				RunID: "01HABCDEFGHJKMNPQRSTVWX", TaskSlug: "openrouter",
+				ScheduleID: "schA", Trigger: "schedule", Status: "missed",
+				StartedAt:  "2026-09-02T09:00:00Z",
+				FinishedAt: "2026-09-02T09:00:00Z",
+			},
+			{
+				RunID: "01HMISSEDJKMMNPQRSTVWXY", TaskSlug: "openrouter",
+				ScheduleID: "schA", Trigger: "schedule", Status: "skipped",
+				StartedAt: "2026-09-02T09:30:00Z",
+			},
+			{
+				RunID: "01HOTHERRUNJKMMNPQRSTVW", TaskSlug: "ims-reminder",
+				ScheduleID: "schB", Trigger: "schedule", Status: "success",
+				StartedAt: "2026-09-01T10:00:00Z",
+			},
+		},
+	}
+	a, out, _ := newTestApp(stub)
+	if err := runArgs(t, a, "schedules", "missed"); err != nil {
+		t.Fatal(err)
+	}
+	body := out.String()
+	for _, expect := range []string{
+		"WHEN", "TASK", "SCHEDULE", "STATUS", "TRIGGER", "RUN_ID",
+		"openrouter", "daily-check", "missed", "skipped",
+		"01HABCDEFGHJ…", "01HMISSEDJKM…",
+	} {
+		if !strings.Contains(body, expect) {
+			t.Fatalf("output missing %q\n%s", expect, body)
+		}
+	}
+	// Schedule ID → slug resolution worked; the schedule's own slug appears even
+	// when there's no schedule_id match for a stale run.
+	if !strings.Contains(body, "monthly-ims") {
+		t.Fatalf("output missing mapped slug\n%s", body)
+	}
+	// Footer summary.
+	if !strings.Contains(body, "3 row(s)") {
+		t.Fatalf("output missing row count\n%s", body)
+	}
+}
+
+func TestSchedulesMissedEmpty(t *testing.T) {
+	stub := &stubClient{}
+	a, out, _ := newTestApp(stub)
+	if err := runArgs(t, a, "schedules", "missed"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "no missed/skipped schedule runs") {
+		t.Fatalf("output = %q", out.String())
+	}
+}
+
+func TestSchedulesMissedJSON(t *testing.T) {
+	stub := &stubClient{
+		runs: []ipc.Run{
+			{RunID: "r1", TaskSlug: "t", ScheduleID: "s", Status: "missed",
+				StartedAt: "2026-09-02T09:00:00Z"},
+		},
+	}
+	a, out, _ := newTestApp(stub)
+	if err := runArgs(t, a, "schedules", "missed", "--json"); err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out.Bytes(), &m); err != nil {
+		t.Fatalf("json parse: %v (%q)", err, out.String())
+	}
+	if m["status"] != "missed,skipped" {
+		t.Fatalf("status filter = %v", m["status"])
+	}
+	if total, _ := m["total"].(float64); int(total) != 1 {
+		t.Fatalf("total = %v", m["total"])
+	}
+}
+
+func TestSchedulesMissedBadSince(t *testing.T) {
+	stub := &stubClient{}
+	a, _, _ := newTestApp(stub)
+	if err := runArgs(t, a, "schedules", "missed", "--since", "nope"); err == nil {
+		t.Fatal("expected error")
+	} else if !strings.Contains(err.Error(), "--since") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

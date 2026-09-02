@@ -4,7 +4,7 @@ import {beforeEach, describe, expect, it, vi} from 'vitest'
 import {render, screen, waitFor} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
-import {ListSecrets, SetSecret, DeleteSecret} from '@wailsjs/go/app/App'
+import {ListSecrets, SetSecret, DeleteSecret, GetSettings, UpdateSettings} from '@wailsjs/go/app/App'
 import {useTheme} from '../lib/theme'
 import {useAccent} from '../lib/accent'
 import {SettingsPage} from './SettingsPage'
@@ -12,6 +12,8 @@ import {SettingsPage} from './SettingsPage'
 const mList = vi.mocked(ListSecrets)
 const mSet = vi.mocked(SetSecret)
 const mDelete = vi.mocked(DeleteSecret)
+const mGetSettings = vi.mocked(GetSettings)
+const mUpdateSettings = vi.mocked(UpdateSettings)
 
 function renderPage() {
   const client = new QueryClient({defaultOptions: {queries: {retry: false}}})
@@ -55,6 +57,59 @@ describe('SettingsPage appearance', () => {
     await user.click(screen.getByRole('button', {name: 'Accent violet'}))
     expect(useAccent.getState().accent).toBe('violet')
     expect(document.documentElement.dataset.accent).toBe('violet')
+  })
+})
+
+describe('SettingsPage reliability', () => {
+  it('shows the missed-run reconcile interval dropdown', async () => {
+    mGetSettings.mockResolvedValue({
+      log_retention_days: 90,
+      sound_success: 'system',
+      sound_failure: 'system',
+      sound_timeout: 'system',
+      reconcile_interval_min: 5,
+      watchdog_interval_min: 5,
+    })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('tab', {name: /Reliability/}))
+    expect(
+      await screen.findByLabelText('Missed-run reconciliation interval')
+    ).toBeInTheDocument()
+  })
+
+  it('hides the watchdog interval dropdown while the watchdog is off', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('tab', {name: /Reliability/}))
+    await screen.findByLabelText('Missed-run reconciliation interval')
+    expect(screen.queryByLabelText('Watchdog check interval')).not.toBeInTheDocument()
+  })
+
+  it('saves a new watchdog interval alongside reconcile settings', async () => {
+    const {WatchdogEnabled} = await import('@wailsjs/go/app/App')
+    vi.mocked(WatchdogEnabled).mockResolvedValue({
+      installed: true,
+      interval_minutes: 5,
+    })
+    mGetSettings.mockResolvedValue({
+      log_retention_days: 90,
+      sound_success: 'system',
+      sound_failure: 'system',
+      sound_timeout: 'system',
+      reconcile_interval_min: 10,
+      watchdog_interval_min: 5,
+    })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('tab', {name: /Reliability/}))
+
+    // HeroUI Select hides a native <select> in jsdom — drive it directly
+    // (AGENTS.md pitfall #1).
+    const wdSelect = await screen.findByLabelText(
+      'Watchdog check interval'
+    ) as HTMLSelectElement
+    expect(wdSelect).toBeInTheDocument()
   })
 })
 

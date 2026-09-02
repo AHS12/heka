@@ -5,6 +5,7 @@ import {useEffect, useRef, useState} from 'react'
 import {Outlet} from 'react-router-dom'
 import {TopNav} from '../components/TopNav'
 import {DaemonDownBanner} from '../components/DaemonDownBanner'
+import {SchedulerPausedBanner} from '../components/SchedulerPausedBanner'
 import {useQuery} from '@tanstack/react-query'
 import {daemonStatus} from '../lib/api'
 
@@ -66,6 +67,7 @@ export function AppLayout() {
         className={`heka-scroll ${scrolling ? 'heka-scroll-show' : ''} mx-auto w-full max-w-6xl min-h-0 flex-1 overflow-y-auto px-4 py-6`}
       >
         <DaemonDownBanner />
+        <SchedulerPausedBanner />
         <Outlet key={daemonKey} />
       </main>
     </div>

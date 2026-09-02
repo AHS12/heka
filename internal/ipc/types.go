@@ -139,10 +139,14 @@ type ActivityItem struct {
 
 // SettingsDTO is the wire shape for daemon settings (SPEC-16 §2).
 type SettingsDTO struct {
-	LogRetentionDays int    `json:"log_retention_days"`
-	SoundSuccess     string `json:"sound_success"`
-	SoundFailure     string `json:"sound_failure"`
-	SoundTimeout     string `json:"sound_timeout"`
+	LogRetentionDays     int    `json:"log_retention_days"`
+	SoundSuccess         string `json:"sound_success"`
+	SoundFailure         string `json:"sound_failure"`
+	SoundTimeout         string `json:"sound_timeout"`
+	ReconcileIntervalMin int    `json:"reconcile_interval_min"`
+	// WatchdogIntervalMin is the OS watchdog task's check cadence (1–60).
+	// Saving a new value recreates the scheduled task.
+	WatchdogIntervalMin int `json:"watchdog_interval_min"`
 }
 
 // SoundPreviewRequest is the request body for POST /v1/settings/sound-preview.

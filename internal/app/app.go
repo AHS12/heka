@@ -65,6 +65,7 @@ type ipcCaller interface {
 	Cancel(slug string) error
 	PauseScheduler() error
 	ResumeScheduler() error
+	ReconcileSchedules() error
 	Stats() (ipc.Stats, error)
 	GetSettings() (ipc.SettingsDTO, error)
 	UpdateSettings(s ipc.SettingsDTO) error
@@ -652,6 +653,17 @@ func (a *App) ResumeScheduler() error {
 		return err
 	}
 	return wrapIPCError(client.ResumeScheduler())
+}
+
+// ReconcileSchedules asks the daemon to fire any missed recurring schedule
+// runs immediately. The daemon's periodic watchdog does the same every 10
+// minutes; this is the manual override.
+func (a *App) ReconcileSchedules() error {
+	client, err := a.cfgClient()
+	if err != nil {
+		return err
+	}
+	return wrapIPCError(client.ReconcileSchedules())
 }
 
 // Stats returns dashboard statistics (SPEC-16 §1).

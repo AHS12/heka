@@ -64,12 +64,20 @@ vi.mock('@wailsjs/go/app/App', () => ({
   WatchdogSet: vi.fn(),
   PauseScheduler: vi.fn(),
   ResumeScheduler: vi.fn(),
+  ReconcileSchedules: vi.fn(),
   Stats: vi.fn().mockResolvedValue({
     tasks: 0, tasks_enabled: 0, schedules_enabled: 0, running: 0,
     runs_today: 0, success_today: 0, failed_today: 0,
     run_history: [], status_distribution: [], recent_activity: [],
   }),
-  GetSettings: vi.fn().mockResolvedValue({log_retention_days: 90}),
+  GetSettings: vi.fn().mockResolvedValue({
+    log_retention_days: 90,
+    sound_success: 'system',
+    sound_failure: 'system',
+    sound_timeout: 'system',
+    reconcile_interval_min: 10,
+    watchdog_interval_min: 5,
+  }),
   UpdateSettings: vi.fn(),
   DataDir: vi.fn().mockResolvedValue(''),
   TasksDir: vi.fn().mockResolvedValue(''),
@@ -103,6 +111,21 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
     unobserve() {}
     disconnect() {}
   } as any
+}
+
+// HeroUI Toast uses useMediaQuery (matchMedia) for mobile layout detection.
+if (typeof window !== 'undefined' && !window.matchMedia) {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
 }
 
 // HeroUI Tabs/Tooltip use SharedElementTransition which calls getAnimations().

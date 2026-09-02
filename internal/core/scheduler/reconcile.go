@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,8 +18,22 @@ import (
 // occurrences in [last_run_at|created_at, now], subtract the schedule runs
 // actually recorded, and apply missed_policy once.
 //
-// Only the daemon's startup calls this.
+// Called at daemon start, on the daemon's periodic watchdog cadence, and on
+// demand from the CLI / GUI. reconcileMu serializes concurrent callers so an
+// overlapping startup + periodic + manual reconcile can never double-fire a
+// window; a paused scheduler is left untouched so the gap stays open until
+// the scheduler resumes.
 func (s *Scheduler) Reconcile() error {
+	s.reconcileMu.Lock()
+	defer s.reconcileMu.Unlock()
+
+	s.mu.Lock()
+	paused := s.paused
+	s.mu.Unlock()
+	if paused {
+		return nil
+	}
+
 	now := time.Now()
 	scheds, err := s.db.Schedules().List()
 	if err != nil {
@@ -60,7 +75,11 @@ func (s *Scheduler) Reconcile() error {
 				ScheduleID: sch.ID,
 				BaseDir:    filepath.Dir(row.YAMLPath),
 			})
-			if err != nil {
+			switch {
+			case errors.Is(err, executor.ErrAlreadyRunning):
+				// Overlap (D11): record the skip so the gap is visible in history.
+				s.recordHalt(sch, "skipped")
+			case err != nil:
 				fmt.Fprintf(os.Stderr, "heka: reconcile run %s: %v\n", sch.Slug, err)
 			}
 		default: // "skip"

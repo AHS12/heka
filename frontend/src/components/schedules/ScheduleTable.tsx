@@ -145,6 +145,24 @@ function ScheduleCard({
           )}
         </DetailBlock>
 
+        <DetailBlock label="Missed policy">
+          <span
+            className={
+              s.missed_policy === 'run_now'
+                ? 'text-xs font-medium text-emerald-600 dark:text-emerald-400'
+                : 'text-xs font-medium text-zinc-400 dark:text-zinc-500'
+            }
+            title={
+              s.missed_policy === 'run_now'
+                ? 'Missed runs fire immediately on next reconcile'
+                : 'Missed runs are recorded but not executed'
+            }
+            data-testid={`schedule-missed-policy-${s.id}`}
+          >
+            {s.missed_policy === 'run_now' ? 'Run now' : 'Skip'}
+          </span>
+        </DetailBlock>
+
         {hasIssues && (
           <DetailBlock label="Issues">
             <div className="flex items-center gap-2 text-xs">

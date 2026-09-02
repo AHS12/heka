@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oklog/ulid/v2"
+
 	"heka/internal/core/executor"
 	"heka/internal/core/task"
 	"heka/internal/db"
@@ -252,6 +254,70 @@ func TestDisabledSchedulesNotReconciled(t *testing.T) {
 	}
 	if runner.count() != 0 {
 		t.Fatalf("disabled schedules must not fire, got %d", runner.count())
+	}
+}
+
+// Regression: a daily schedule whose last successful run is ~2 days back
+// (two missed 9:00 activations) must fire exactly one catch-up run. Mirrors
+// the real-world "PC off for two days, reconcile now did nothing" report.
+func TestReconcileTwoMissedDays(t *testing.T) {
+	database, sch, runner := setup(t)
+
+	// Window spanning >= 2 daily 9:00 activations regardless of time-of-day.
+	lastRun := time.Now().Add(-50 * time.Hour)
+	finished := lastRun.Add(2 * time.Minute)
+	saveSchedule(t, database, db.Schedule{
+		ID: "s9", Slug: "daily-check", TaskSlug: "daily", Kind: "recurring",
+		Cron: "00 09 * * *", Enabled: true, MissedPolicy: "run_now",
+		LastRunAt:  finished.UTC().Format(time.RFC3339),
+		LastStatus: "success",
+		CreatedAt:  lastRun.Add(-24 * time.Hour).UTC().Format(time.RFC3339),
+	})
+	// The last successful schedule run inside that window.
+	at := finished.UTC().Format(time.RFC3339)
+	if err := database.Runs().Create(db.Run{
+		RunID: ulid.Make().String(), GroupID: ulid.Make().String(),
+		TaskSlug: "daily", ScheduleID: "s9", Trigger: "schedule",
+		Status: "success", StartedAt: &at, FinishedAt: &at, CreatedAt: at,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := sch.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	if runner.count() != 1 {
+		t.Fatalf("two missed days: fires = %d, want 1", runner.count())
+	}
+}
+
+func TestReconcileSkippedWhilePaused(t *testing.T) {
+	database, sch, runner := setup(t)
+	saveSchedule(t, database, db.Schedule{
+		ID: "s8", Slug: "paused-missed", TaskSlug: "daily", Kind: "recurring",
+		Cron: "@every 1m", Enabled: true, MissedPolicy: "run_now",
+		LastRunAt: time.Now().Add(-10 * time.Minute).Format(time.RFC3339),
+	})
+	if err := sch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	sch.Pause()
+	if err := sch.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	if runner.count() != 0 {
+		t.Fatalf("paused schedule must not fire, got %d", runner.count())
+	}
+	// Resume: the same window is still open and now fires.
+	sch.Resume()
+	if err := sch.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	if runner.count() != 1 {
+		t.Fatalf("after resume fires = %d, want 1", runner.count())
 	}
 }
 

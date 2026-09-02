@@ -55,6 +55,8 @@ type Scheduler struct {
 	recs    map[string]record
 	ctx     context.Context
 	paused  bool
+
+	reconcileMu sync.Mutex // serializes Reconcile callers (startup/loop/IPC)
 }
 
 // New builds an empty scheduler. Call Sync to load schedules, Start to begin

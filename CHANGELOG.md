@@ -5,6 +5,64 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-09-02
+
+This release makes Heka more dependable day to day. The daemon — the
+background part of Heka that runs and schedules your tasks — now stays
+reachable no matter how it was started, and it explains itself clearly when
+something is wrong.
+
+### Fixed
+- Fixed the confusing "heka daemon is not running" error that could appear
+  even when the daemon was actually running. If Heka had been started as
+  administrator (for example, to get notification sounds working), the CLI
+  and GUI could not connect to it. Heka now grants your Windows account
+  permission to reach the daemon regardless of how it was started.
+- `heka daemon stop` now actually stops the daemon. Previously it was
+  silently ignored whenever the daemon was running with a tray icon.
+- Fixed a small race when logging into Windows: the automatic startup and
+  the watchdog could briefly overlap when bringing the daemon up. That can
+  no longer lead to tasks running twice.
+- `heka daemon status` now tells you what is actually wrong and what to do
+  next, instead of always reporting "not running".
+
+### Added
+- You can now choose how often the watchdog checks on the daemon, in
+  Settings → Reliability. Pick anywhere from every minute to once an hour —
+  the change applies right away, no restart needed.
+
+### Changed
+- Command-line error messages are clearer: they now tell you whether the
+  daemon needs to be started, was started with administrator rights, or is
+  simply busy.
+
+## [0.7.0] - 2026-09-02
+
+### Added
+- Schedules now catch up automatically. If your computer was off, asleep, or
+  the app was in the background when a recurring task should have fired,
+  Heka will run the missed schedule as soon as you return — no more wondering
+  why the 9 AM task never happened. You can choose how often to check
+  (every 2, 5, 8, or 10 minutes) in Settings → Reliability.
+- "Reconcile now" button on the Schedules page lets you catch up on missed
+  runs without waiting for the next tick.
+- New `heka schedules reconcile` command for the same on demand from the
+  terminal.
+- Each schedule row now shows whether missed runs will fire (Run now) or
+  just be logged (Skip), so you know what will happen after downtime.
+
+### Changed
+- The log retention and notification settings now also include the new
+  reconciliation interval, keeping the settings shape consistent.
+
+### Added
+- `heka schedules missed` command for debugging. Lists schedule runs the
+  daemon recorded as missed or skipped, so you can see exactly which
+  schedules didn't fire (and when) after the PC was off, asleep, or when an
+  overlap was skipped. Supports `--since` (default 168h/7d), `--status` (default
+  `missed,skipped`), `--task`, and `--limit`, with both human-readable and
+  `--json` output.
+
 ## [0.6.9] - 2026-09-01
 
 ### Added

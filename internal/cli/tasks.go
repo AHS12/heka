@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -187,22 +189,176 @@ func (a *App) disableCmd() *cobra.Command {
 }
 
 func (a *App) schedulesCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "schedules",
-		Short: "List schedules (arrives in SPEC-09)",
+		Short: "Manage schedules",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return errors.New("specify: heka schedules list|reconcile|missed")
+		},
+	}
+	cmd.AddCommand(a.schedulesListCmd(), a.schedulesReconcileCmd(), a.schedulesMissedCmd())
+	return cmd
+}
+
+// schedulesListCmd prints a tab-aligned summary of every schedule.
+func (a *App) schedulesListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List schedules",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			rows, err := a.client.ListSchedules()
+			if err != nil {
+				return err
+			}
 			if a.json {
-				a.printJSON(map[string]any{
-					"success": false,
-					"error":   map[string]string{"code": "not_implemented", "message": "schedules not available yet"},
-				})
+				a.printJSON(rows)
 				return nil
 			}
-			fmt.Fprintln(a.stdout, "schedules not available yet (arrives in SPEC-09)")
+			w := tabwriter.NewWriter(a.stdout, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(w, "SLUG\tTASK\tKIND\tRULE\tPOLICY\tENABLED\tLAST\tNEXT")
+			for _, s := range rows {
+				rule := s.Cron
+				if s.Kind != "recurring" {
+					rule = s.RunAt
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					s.Slug, s.TaskSlug, s.Kind, rule,
+					defaultStr(s.MissedPolicy, "skip"),
+					yesNo(s.Enabled),
+					defaultStr(s.LastStatus, "—"),
+					defaultStr(s.NextRunAt, "—"))
+			}
+			return w.Flush()
+		},
+	}
+}
+
+// schedulesReconcileCmd asks the daemon to fire any missed recurring schedule
+// runs immediately (manual override of the periodic watchdog).
+func (a *App) schedulesReconcileCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "reconcile",
+		Short: "Fire missed schedule runs immediately",
+		Long: "Recurring schedules that should have run while the daemon was up\n" +
+			"but idle (PC sleep, backgrounded, clock drift) are evaluated again.\n" +
+			"Schedules with missed_policy=run_now fire now; missed_policy=skip\n" +
+			"records a 'missed' run row instead.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := a.client.ReconcileSchedules(); err != nil {
+				return err
+			}
+			if a.json {
+				a.printJSON(map[string]any{"ok": true, "action": "schedules_reconcile"})
+				return nil
+			}
+			fmt.Fprintln(a.stdout, "schedules reconciled")
 			return nil
 		},
 	}
+}
+
+// schedulesMissedCmd lists schedule runs the daemon recorded as missed or
+// skipped, for debugging why a task didn't run when expected.
+func (a *App) schedulesMissedCmd() *cobra.Command {
+	var since string
+	var statusFilter string
+	var taskFilter string
+	var limit int
+	cmd := &cobra.Command{
+		Use:   "missed",
+		Short: "List missed and skipped schedule runs",
+		Long: "Reads the run history filtered to status=missed,skipped by default\n" +
+			"so you can see which schedules didn't fire (PC was off, sleep, overlap)\n" +
+			"and when.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dur, err := time.ParseDuration(since)
+			if err != nil {
+				return fmt.Errorf("--since: %w", err)
+			}
+			if limit <= 0 {
+				limit = 50
+			}
+
+			// Build schedule-id → slug map for friendly output.
+			scheds, err := a.client.ListSchedules()
+			if err != nil {
+				return err
+			}
+			slugByID := make(map[string]string, len(scheds))
+			for _, s := range scheds {
+				slugByID[s.ID] = s.Slug
+			}
+
+			from := time.Now().Add(-dur).UTC().Format(time.RFC3339)
+			result, err := a.client.ListRuns(ipc.RunFilters{
+				Task:   taskFilter,
+				Status: statusFilter,
+				From:   from,
+				Order:  "desc",
+				Limit:  limit,
+			})
+			if err != nil {
+				return err
+			}
+
+			if a.json {
+				a.printJSON(map[string]any{
+					"since":  from,
+					"status": statusFilter,
+					"total":  result.Total,
+					"runs":   result.Runs,
+				})
+				return nil
+			}
+
+			if len(result.Runs) == 0 {
+				fmt.Fprintf(a.stdout, "no missed/skipped schedule runs in the last %s.\n", dur)
+				return nil
+			}
+
+			w := tabwriter.NewWriter(a.stdout, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(w, "WHEN\tTASK\tSCHEDULE\tSTATUS\tTRIGGER\tRUN_ID")
+			for _, r := range result.Runs {
+				when := r.StartedAt
+				if when == "" {
+					when = r.FinishedAt
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+					when,
+					r.TaskSlug,
+					defaultStr(slugByID[r.ScheduleID], "—"),
+					r.Status,
+					r.Trigger,
+					shortRunID(r.RunID))
+			}
+			_ = w.Flush()
+			fmt.Fprintf(a.stdout, "\n%d row(s), %d total in window (filter: status=%s, since=%s)\n",
+				len(result.Runs), result.Total, statusFilter, dur)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&since, "since", "168h", "lookback window, e.g. 24h, 7d, 30m")
+	cmd.Flags().StringVar(&statusFilter, "status", "missed,skipped", "comma-separated status filter")
+	cmd.Flags().StringVar(&taskFilter, "task", "", "filter by task slug")
+	cmd.Flags().IntVar(&limit, "limit", 50, "max rows to display")
+	return cmd
+}
+
+func shortRunID(id string) string {
+	if len(id) <= 12 {
+		return id
+	}
+	return id[:12] + "…"
+}
+
+func defaultStr(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
 }
 
 func yesNo(b bool) string {
