@@ -111,9 +111,10 @@ type RunListResultDTO = ipc.RunListResult
 
 // App is the Wails-bound struct. Its exported methods become JS bindings.
 type App struct {
-	name    string
-	version string
-	ctx     context.Context
+	name      string
+	version   string
+	ctx       context.Context
+	statePath string // window geometry file; empty disables persistence
 
 	mu      sync.Mutex
 	cfg     *config.Config
@@ -135,6 +136,52 @@ func NewApp(name, version string) *App {
 // Startup is called by Wails when the window starts up.
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	a.restoreWindow()
+}
+
+// SetWindowStatePath points the app at the window-geometry file used to
+// restore the last size/position on launch. Must be called before wails.Run;
+// empty disables persistence.
+func (a *App) SetWindowStatePath(path string) {
+	a.statePath = path
+}
+
+// restoreWindow re-applies the saved window geometry. Wails v2 options
+// cannot express an X/Y position, so the position (and the maximized flag)
+// are restored here; the size was already applied through options.App.
+func (a *App) restoreWindow() {
+	if a.ctx == nil || a.statePath == "" {
+		return
+	}
+	ws, err := LoadWindowState(a.statePath)
+	if err != nil {
+		return
+	}
+	if offScreen(ws.X, ws.Y, ws.Width, ws.Height) {
+		wruntime.WindowCenter(a.ctx)
+	} else {
+		wruntime.WindowSetPosition(a.ctx, ws.X, ws.Y)
+	}
+	if ws.Maximized {
+		wruntime.WindowMaximise(a.ctx)
+	}
+}
+
+// BeforeClose is called by Wails before the window closes. Returning false
+// lets the close proceed after the geometry snapshot is written.
+func (a *App) BeforeClose(ctx context.Context) bool {
+	if a.statePath != "" {
+		width, height := wruntime.WindowGetSize(ctx)
+		x, y := wruntime.WindowGetPosition(ctx)
+		_ = SaveWindowState(a.statePath, WindowState{
+			X:         x,
+			Y:         y,
+			Width:     width,
+			Height:    height,
+			Maximized: wruntime.WindowIsMaximised(ctx),
+		})
+	}
+	return false
 }
 
 // AppInfo returns static information about the running application.

@@ -4,7 +4,16 @@ import {beforeEach, describe, expect, it, vi} from 'vitest'
 import {render, screen, waitFor} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
-import {ListSecrets, SetSecret, DeleteSecret, GetSettings, UpdateSettings} from '@wailsjs/go/app/App'
+import {
+  ListSecrets,
+  SetSecret,
+  DeleteSecret,
+  GetSettings,
+  UpdateSettings,
+  Health,
+  PauseScheduler,
+  ResumeScheduler,
+} from '@wailsjs/go/app/App'
 import {useTheme} from '../lib/theme'
 import {useAccent} from '../lib/accent'
 import {SettingsPage} from './SettingsPage'
@@ -14,6 +23,14 @@ const mSet = vi.mocked(SetSecret)
 const mDelete = vi.mocked(DeleteSecret)
 const mGetSettings = vi.mocked(GetSettings)
 const mUpdateSettings = vi.mocked(UpdateSettings)
+const mPause = vi.mocked(PauseScheduler)
+const mResume = vi.mocked(ResumeScheduler)
+
+function mockHealth(scheduler: string) {
+  vi.mocked(Health).mockResolvedValue({
+    version: 'test', uptime_seconds: 0, core: 'healthy', scheduler,
+  })
+}
 
 function renderPage() {
   const client = new QueryClient({defaultOptions: {queries: {retry: false}}})
@@ -110,6 +127,33 @@ describe('SettingsPage reliability', () => {
       'Watchdog check interval'
     ) as HTMLSelectElement
     expect(wdSelect).toBeInTheDocument()
+  })
+})
+
+describe('SettingsPage scheduler pause', () => {
+  it('pauses a running scheduler immediately', async () => {
+    mockHealth('running')
+    mPause.mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('tab', {name: /Reliability/}))
+
+    await user.click(await screen.findByRole('switch', {name: 'Pause scheduler'}))
+    await waitFor(() => expect(mPause).toHaveBeenCalledTimes(1))
+    expect(mResume).not.toHaveBeenCalled()
+  })
+
+  it('resumes a paused scheduler', async () => {
+    mockHealth('paused')
+    mResume.mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('tab', {name: /Reliability/}))
+
+    const toggle = await screen.findByRole('switch', {name: 'Pause scheduler'})
+    await user.click(toggle)
+    await waitFor(() => expect(mResume).toHaveBeenCalledTimes(1))
+    expect(mPause).not.toHaveBeenCalled()
   })
 })
 

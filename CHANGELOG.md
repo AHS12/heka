@@ -5,6 +5,18 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-09-02
+
+### Added
+- Heka now remembers your window. The size and position you leave it in are
+  restored the next time you open the app, including whether it was
+  maximized. If the monitor you last used is no longer connected, the window
+  reopens centered on a visible screen instead of getting lost off-screen.
+- A "Pause scheduler" switch in Settings → Reliability. Pausing used to be
+  possible only from the tray icon; the switch mirrors that state, so you
+  can pause and resume without hunting for the tray. Both controls stay in
+  sync, and a paused scheduler survives daemon restarts.
+
 ## [0.7.0] - 2026-09-02
 
 ### Added

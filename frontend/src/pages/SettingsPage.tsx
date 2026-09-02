@@ -20,7 +20,10 @@ import {
   getSettings,
   updateSettings,
   previewSound,
+  pauseScheduler,
+  resumeScheduler,
 } from '../lib/api'
+import {useHealth} from '../lib/query'
 import {useTheme, LIGHT_VARIANTS, DARK_VARIANTS} from '../lib/theme'
 import type {ThemeVariant} from '../lib/theme'
 import {useAccent, ACCENT_COLORS, ACCENT_PRESETS} from '../lib/accent'
@@ -38,7 +41,7 @@ const SETTINGS_TABS: Array<{id: SettingsTab; label: string; detail: string}> = [
   {id: 'appearance', label: 'Appearance', detail: 'Theme, accent, and motion'},
   {id: 'data', label: 'Data', detail: 'Local storage locations'},
   {id: 'startup', label: 'Startup', detail: 'Launch with your system'},
-  {id: 'reliability', label: 'Reliability', detail: 'Daemon watchdog'},
+  {id: 'reliability', label: 'Reliability', detail: 'Scheduler and watchdog'},
   {id: 'retention', label: 'Retention', detail: 'Run history lifetime'},
   {id: 'notifications', label: 'Notifications', detail: 'Sounds and previews'},
   {id: 'secrets', label: 'Secrets', detail: 'Encrypted credentials'},
@@ -292,6 +295,8 @@ function ReliabilitySection() {
   const qc = useQueryClient()
   const status = useQuery({queryKey: ['watchdog'], queryFn: watchdogEnabled})
   const settings = useQuery({queryKey: SETTINGS_KEY, queryFn: getSettings})
+  const health = useHealth()
+  const paused = health.data?.scheduler === 'paused'
   const [interval, setInterval] = useState(2)
   const [wdMins, setWdMins] = useState(5)
   const [saved, setSaved] = useState(false)
@@ -305,6 +310,15 @@ function ReliabilitySection() {
       setWdMins(settings.data.watchdog_interval_min ?? 5)
     }
   }, [settings.data])
+
+  const pauseToggle = useMutation({
+    mutationFn: (pause: boolean) => (pause ? pauseScheduler() : resumeScheduler()),
+    onSuccess: () => {
+      setError(null)
+      void qc.invalidateQueries({queryKey: ['health']})
+    },
+    onError: (err) => setError(apiErrorDetails(err).join('; ')),
+  })
 
   const toggle = useMutation({
     mutationFn: (on: boolean) => watchdogSet(on),
@@ -344,6 +358,17 @@ function ReliabilitySection() {
       <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
         Reliability
       </h3>
+      <ToggleRow
+        label="Pause scheduler"
+        hint={
+          paused
+            ? 'Paused — schedules are skipped; resuming catches up missed runs'
+            : 'Temporarily skip all scheduled runs; missed runs catch up on resume'
+        }
+        checked={paused}
+        disabled={health.isLoading || pauseToggle.isPending}
+        onChange={(pause) => { setError(null); pauseToggle.mutate(pause) }}
+      />
       <ToggleRow
         label="Watchdog guard"
         hint={
