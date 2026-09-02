@@ -58,6 +58,7 @@ vi.mock('@wailsjs/go/app/App', () => ({
   ListRuns: vi.fn(),
   GetRun: vi.fn(),
   CancelRun: vi.fn(),
+  ListSystemLog: vi.fn(),
   StartupEnabled: vi.fn().mockResolvedValue(false),
   StartupSet: vi.fn(),
   WatchdogEnabled: vi.fn().mockResolvedValue({installed: false, interval_minutes: 0}),
@@ -75,7 +76,7 @@ vi.mock('@wailsjs/go/app/App', () => ({
     sound_success: 'system',
     sound_failure: 'system',
     sound_timeout: 'system',
-    reconcile_interval_min: 10,
+    reconcile_interval_min: 2,
     watchdog_interval_min: 5,
   }),
   UpdateSettings: vi.fn(),
@@ -143,3 +144,4 @@ vi.mocked(bindings.ValidateTaskYAML).mockResolvedValue([])
 vi.mocked(bindings.ListSecrets).mockResolvedValue([])
 vi.mocked(bindings.ListSchedules).mockResolvedValue([])
 vi.mocked(bindings.ListRuns).mockResolvedValue({runs: [], total: 0} as any)
+vi.mocked(bindings.ListSystemLog).mockResolvedValue([] as any)

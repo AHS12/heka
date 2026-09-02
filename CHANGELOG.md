@@ -5,6 +5,44 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-09-02
+
+### Added
+- Schedules now catch up automatically. If your computer was off, asleep, or
+  the app was in the background when a recurring task should have fired,
+  Heka will run the missed schedule as soon as you return — no more wondering
+  why the 9 AM task never happened. You can choose how often to check
+  (every 2, 5, 8, or 10 minutes) in Settings → Reliability.
+- Heka now notices when your PC wakes from sleep and catches up missed runs
+  right away, instead of waiting for the next check. Resuming the scheduler
+  after a pause does the same.
+- A new System view on the Logs page shows what the scheduler has been up
+  to: when the daemon started, when it woke from sleep, and exactly what it
+  caught up — which schedule missed how many runs and what was done about it.
+  Manual checks and the check at startup always report their result, even
+  when nothing was missed.
+- If a missed task fails to start (for example the script was temporarily
+  unavailable), the catch-up stays pending and is retried on the next check
+  instead of being silently dropped.
+- "Reconcile now" button on the Schedules page lets you catch up on missed
+  runs without waiting for the next tick.
+- New `heka schedules reconcile` command for the same on demand from the
+  terminal. It now points you to Logs → System to see what was caught up.
+- `heka schedules missed` command for debugging. Lists schedule runs the
+  daemon recorded as missed or skipped, so you can see exactly which
+  schedules didn't fire (and when) after the PC was off, asleep, or when an
+  overlap was skipped. Supports `--since` (default 168h/7d), `--status` (default
+  `missed,skipped`), `--task`, and `--limit`, with both human-readable and
+  `--json` output.
+- Each schedule row now shows whether missed runs will fire (Run now) or
+  just be logged (Skip), so you know what will happen after downtime.
+
+### Changed
+- Missed-run checks now run every 2 minutes by default (was 10), so
+  catch-up after a nap or short sleep happens within moments of returning.
+- The log retention and notification settings now also include the new
+  reconciliation interval, keeping the settings shape consistent.
+
 ## [0.7.1] - 2026-09-02
 
 This release makes Heka more dependable day to day. The daemon — the
@@ -35,33 +73,6 @@ something is wrong.
 - Command-line error messages are clearer: they now tell you whether the
   daemon needs to be started, was started with administrator rights, or is
   simply busy.
-
-## [0.7.0] - 2026-09-02
-
-### Added
-- Schedules now catch up automatically. If your computer was off, asleep, or
-  the app was in the background when a recurring task should have fired,
-  Heka will run the missed schedule as soon as you return — no more wondering
-  why the 9 AM task never happened. You can choose how often to check
-  (every 2, 5, 8, or 10 minutes) in Settings → Reliability.
-- "Reconcile now" button on the Schedules page lets you catch up on missed
-  runs without waiting for the next tick.
-- New `heka schedules reconcile` command for the same on demand from the
-  terminal.
-- Each schedule row now shows whether missed runs will fire (Run now) or
-  just be logged (Skip), so you know what will happen after downtime.
-
-### Changed
-- The log retention and notification settings now also include the new
-  reconciliation interval, keeping the settings shape consistent.
-
-### Added
-- `heka schedules missed` command for debugging. Lists schedule runs the
-  daemon recorded as missed or skipped, so you can see exactly which
-  schedules didn't fire (and when) after the PC was off, asleep, or when an
-  overlap was skipped. Supports `--since` (default 168h/7d), `--status` (default
-  `missed,skipped`), `--task`, and `--limit`, with both human-readable and
-  `--json` output.
 
 ## [0.6.9] - 2026-09-01
 

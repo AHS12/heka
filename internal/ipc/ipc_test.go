@@ -151,6 +151,32 @@ func TestTasksListAndGet(t *testing.T) {
 	}
 }
 
+func TestSystemLogRoute(t *testing.T) {
+	database := openDB(t)
+	if err := database.Logs().Add("info", "reconcile", "reconcile (manual): checked 1 schedule(s), 0 caught up"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Logs().Add("warn", "scheduler", `schedule "x": start failed`); err != nil {
+		t.Fatal(err)
+	}
+	cfg := startTestServer(t, Deps{
+		Health: func() Health { return Health{Core: "healthy"} },
+		Tasks:  database.Tasks(), Runs: database.Runs(), Schedules: database.Schedules(),
+		Logs:   database.Logs(), Runner: &fakeRunner{},
+	})
+	client := NewClient(cfg)
+	logs, err := client.SystemLog(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != 2 {
+		t.Fatalf("logs = %+v, want 2 entries newest first", logs)
+	}
+	if logs[0].Level != "warn" || logs[0].Event != "scheduler" {
+		t.Fatalf("newest entry = %+v", logs[0])
+	}
+}
+
 func TestRunAndConflict(t *testing.T) {
 	database := openDB(t)
 	seedTask(t, database, "alpha", "Alpha", true)

@@ -44,7 +44,7 @@ func TestMigrateFreshAndIdempotent(t *testing.T) {
 		t.Fatalf("schema_migrations count after reopen = %d", count)
 	}
 	// No application tables are missing.
-	for _, table := range []string{"tasks", "schedules", "runs", "secrets", "kv"} {
+	for _, table := range []string{"tasks", "schedules", "runs", "secrets", "kv", "daemon_log"} {
 		var n int
 		if err := d2.sql.QueryRow(
 			`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table,
@@ -412,6 +412,44 @@ func TestPersistenceAcrossReopen(t *testing.T) {
 	}
 	if v, ok, _ := d2.KV().Get("state"); !ok || v != "alive" {
 		t.Fatalf("kv did not survive reopen: %q, %v", v, ok)
+	}
+}
+
+func TestLogStore(t *testing.T) {
+	d := openTest(t)
+	for i := 0; i < 3; i++ {
+		if err := d.Logs().Add("info", "reconcile", "entry"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := d.Logs().Add("warn", "scheduler", "oops"); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := d.Logs().List(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("List(2) = %d rows, want 2 (newest first)", len(rows))
+	}
+	if rows[0].Level != "warn" || rows[0].Event != "scheduler" {
+		t.Fatalf("newest row = %+v, want the warn/scheduler entry", rows[0])
+	}
+	if rows[0].TS == "" || rows[0].ID == 0 {
+		t.Fatalf("row missing ts/id: %+v", rows[0])
+	}
+
+	// Retention prunes only old entries.
+	future := time.Now().UTC().Add(time.Hour)
+	if err := d.Logs().Prune(future); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = d.Logs().List(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("Prune(left) left %d rows", len(rows))
 	}
 }
 

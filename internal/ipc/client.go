@@ -350,6 +350,20 @@ func (c *Client) ListRuns(f RunFilters) (RunListResult, error) {
 	return out, err
 }
 
+// SystemLog fetches the daemon's own event log (scheduler reconcile,
+// lifecycle), newest first. limit ≤ 0 uses the daemon default.
+func (c *Client) SystemLog(limit int) ([]DaemonLog, error) {
+	var out struct {
+		Logs []DaemonLog `json:"logs"`
+	}
+	path := "/v1/logs/system"
+	if limit > 0 {
+		path += "?limit=" + fmt.Sprint(limit)
+	}
+	err := c.do("GET", path, nil, &out)
+	return out.Logs, err
+}
+
 // Schedules (SPEC-09).
 func (c *Client) ListSchedules() ([]Schedule, error) {
 	var out []Schedule

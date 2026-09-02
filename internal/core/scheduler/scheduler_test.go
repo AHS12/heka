@@ -3,6 +3,8 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -20,6 +22,7 @@ type fakeRunner struct {
 	calls []executor.Options
 	slug  string
 	busy  bool
+	err   error // returned when set and not busy
 }
 
 func (f *fakeRunner) Start(_ context.Context, t *task.Task, opt executor.Options) (*executor.Handle, error) {
@@ -28,6 +31,9 @@ func (f *fakeRunner) Start(_ context.Context, t *task.Task, opt executor.Options
 	f.slug = t.Slug
 	if f.busy {
 		return nil, executor.ErrAlreadyRunning
+	}
+	if f.err != nil {
+		return nil, f.err
 	}
 	f.calls = append(f.calls, opt)
 	done := make(chan struct{})
@@ -318,6 +324,107 @@ func TestReconcileSkippedWhilePaused(t *testing.T) {
 	}
 	if runner.count() != 1 {
 		t.Fatalf("after resume fires = %d, want 1", runner.count())
+	}
+}
+
+// Regression for v0.7 follow-up: every catch-up decision must land in the
+// daemon log (Logs → System view), and a transient start failure must leave
+// the window open so the next pass retries instead of dropping the run.
+func TestReconcileLogsAndRetries(t *testing.T) {
+	database, sch, runner := setup(t)
+	saveSchedule(t, database, db.Schedule{
+		ID: "s10", Slug: "retry", TaskSlug: "daily", Kind: "recurring",
+		Cron: "@every 1m", Enabled: true, MissedPolicy: "run_now",
+		LastRunAt: time.Now().Add(-10 * time.Minute).Format(time.RFC3339),
+	})
+	boom := errors.New("spawn failed")
+	runner.err = boom
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := sch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	sch.Start(ctx)
+	defer sch.Stop()
+
+	// Transient start failure: no run, window stays open, warn logged.
+	if err := sch.ReconcileWithReason("startup"); err != nil {
+		t.Fatal(err)
+	}
+	if runner.count() != 0 {
+		t.Fatalf("failing runner fired %d times", runner.count())
+	}
+	row, _ := database.Schedules().Get("s10")
+	if got := parseTime(row.LastRunAt); got.After(time.Now().Add(-5 * time.Minute)) {
+		t.Fatalf("transient failure closed the window: last_run_at = %s", row.LastRunAt)
+	}
+	logs, err := database.Logs().List(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, l := range logs {
+		if l.Event == "reconcile" && l.Level == "warn" && strings.Contains(l.Message, "retry") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no warn log for transient failure: %+v", logs)
+	}
+
+	// Runner recovers: next pass fires the catch-up and logs it.
+	runner.err = nil
+	if err := sch.ReconcileWithReason("startup"); err != nil {
+		t.Fatal(err)
+	}
+	if runner.count() != 1 {
+		t.Fatalf("run_now after recovery fired %d times, want 1", runner.count())
+	}
+	row, _ = database.Schedules().Get("s10")
+	if got := parseTime(row.LastRunAt); got.Before(time.Now().Add(-5 * time.Minute)) {
+		t.Fatalf("recovery did not close the window: last_run_at = %s", row.LastRunAt)
+	}
+	logs, _ = database.Logs().List(10)
+	found = false
+	for _, l := range logs {
+		if l.Event == "reconcile" && l.Level == "info" && strings.Contains(l.Message, "catch-up") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no info log for catch-up run: %+v", logs)
+	}
+}
+
+// A manual reconcile with nothing to do still reports "caught up" so the
+// system log proves the mechanism ran; periodic passes stay quiet.
+func TestReconcileManualLogsWhenQuiet(t *testing.T) {
+	database, sch, runner := setup(t)
+	saveSchedule(t, database, db.Schedule{
+		ID: "s11", Slug: "quiet", TaskSlug: "daily", Kind: "recurring",
+		Cron: "@every 1m", Enabled: true, MissedPolicy: "run_now", CreatedAt: db.Now(),
+	})
+	if err := sch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := sch.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	logs, _ := database.Logs().List(10)
+	for _, l := range logs {
+		if l.Event == "reconcile" {
+			t.Fatalf("periodic pass must stay quiet, got: %+v", l)
+		}
+	}
+	if err := sch.ReconcileWithReason("manual"); err != nil {
+		t.Fatal(err)
+	}
+	logs, _ = database.Logs().List(10)
+	if len(logs) != 1 || !strings.Contains(logs[0].Message, "0 caught up") {
+		t.Fatalf("manual quiet pass not logged: %+v", logs)
+	}
+	if runner.count() != 0 {
+		t.Fatalf("quiet reconcile fired %d times", runner.count())
 	}
 }
 

@@ -28,7 +28,7 @@ import (
 const (
 	heartbeatInterval    = 5 * time.Second
 	syncInterval         = 2 * time.Second
-	defaultReconcileMins = 10 // missed-run watchdog cadence
+	defaultReconcileMins = 2 // missed-run watchdog cadence (fast catch-up)
 	minReconcileMins     = 2
 	maxReconcileMins     = 10
 	minWatchdogMins      = 1 // OS watchdog task cadence bounds
@@ -59,10 +59,12 @@ func (d *Daemon) Pause() {
 	_ = d.db.KV().Set("scheduler_paused", "true")
 }
 
-// Resume unfreezes the scheduler.
+// Resume unfreezes the scheduler and immediately catches up anything missed
+// while paused, instead of waiting for the next periodic reconcile tick.
 func (d *Daemon) Resume() {
 	d.scheduler.Resume()
 	_ = d.db.KV().Delete("scheduler_paused")
+	go d.reconcile("resume")
 }
 
 // SchedulerPaused reports whether the scheduler is currently paused.
@@ -235,13 +237,10 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 	// Restore persisted pause state (SPEC-15 §2).
 	if v, _, _ := database.KV().Get("scheduler_paused"); v == "true" {
 		d.scheduler.Pause()
+		d.logf("info", "scheduler", "scheduler restored as paused; resuming reconciles the backlog")
 	}
 	d.scheduler.Start(d.execCtx)
-	go func() {
-		if err := d.scheduler.Reconcile(); err != nil {
-			fmt.Fprintf(os.Stderr, "heka: reconcile missed runs: %v\n", err)
-		}
-	}()
+	go d.reconcile("startup")
 
 	d.noteStartup()
 	go d.heartbeatLoop()
@@ -254,8 +253,9 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 		Tasks:         database.Tasks(),
 		Runs:          database.Runs(),
 		Schedules:     database.Schedules(),
+		Logs:          database.Logs(),
 		SyncSchedules: d.scheduler.Sync,
-		Reconcile:     d.scheduler.Reconcile,
+		Reconcile: func() error { return d.scheduler.ReconcileWithReason("manual") },
 		Secrets:       database.Secrets(),
 		TaskFiles:     taskFS{dir: cfg.TasksDir},
 		SyncTasks:     func() error { d.syncTasks(); return nil },
@@ -281,24 +281,57 @@ func (d *Daemon) noteStartup() {
 	_ = d.db.KV().Set("daemon_pid", p)
 	_ = d.db.KV().Set("daemon_version", d.version)
 	_ = d.db.KV().Set("heartbeat", db.Now())
+	d.logf("info", "daemon", "daemon started (version %s, pid %s)", d.version, p)
 	osapp.RepairEntries()
 	if err := d.applyWatchdogTask(); err != nil {
 		fmt.Fprintf(os.Stderr, "heka: reconcile watchdog interval: %v\n", err)
 	}
 }
 
-// heartbeatLoop keeps the heartbeat fresh while running.
+// logf writes a daemon event to the daemon log table (surfaced in the GUI
+// Logs → System view) and stderr. Best-effort: logging must never break the
+// operation it is reporting.
+func (d *Daemon) logf(level, event, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	fmt.Fprintf(os.Stderr, "heka: %s\n", msg)
+	_ = d.db.Logs().Add(level, event, msg)
+}
+
+// reconcile runs one missed-run pass with the caller's reason recorded in the
+// daemon log ("startup", "wake", "resume", "manual", "periodic").
+func (d *Daemon) reconcile(reason string) {
+	if err := d.scheduler.ReconcileWithReason(reason); err != nil {
+		d.logf("warn", "reconcile", "reconcile (%s) failed: %v", reason, err)
+	}
+}
+
+// heartbeatLoop keeps the heartbeat fresh while running. A gap between ticks
+// that greatly exceeds the tick interval is the signature of host sleep or
+// hibernate — cron ticks die with the process's timers, so on wake we
+// reconcile immediately instead of waiting for the next periodic pass.
 func (d *Daemon) heartbeatLoop() {
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
+	last := time.Now()
 	for {
 		select {
-		case <-ticker.C:
+		case now := <-ticker.C:
+			if overslept(last, now) {
+				d.logf("info", "daemon", "wake from sleep detected — reconciling missed runs")
+				d.reconcile("wake")
+			}
+			last = now
 			_ = d.db.KV().Set("heartbeat", db.Now())
 		case <-d.shutdown:
 			return
 		}
 	}
+}
+
+// overslept reports whether the gap between consecutive heartbeat ticks
+// greatly exceeds the interval (host slept between ticks).
+func overslept(last, now time.Time) bool {
+	return now.Sub(last) > 2*heartbeatInterval
 }
 
 // syncLoop polls the tasks directory into the index (SPEC-06 §5).
@@ -429,6 +462,9 @@ func (d *Daemon) prune() {
 	cutoff := time.Now().UTC().AddDate(0, 0, -d.cfg.LogRetentionDays)
 	if err := d.db.Runs().Prune(cutoff); err != nil {
 		fmt.Fprintf(os.Stderr, "heka: prune runs: %v\n", err)
+	}
+	if err := d.db.Logs().Prune(cutoff); err != nil {
+		fmt.Fprintf(os.Stderr, "heka: prune daemon log: %v\n", err)
 	}
 }
 

@@ -333,9 +333,9 @@ func TestReconcileIntervalDefaultsAndClamps(t *testing.T) {
 	defer database.Close()
 	d := newDaemon(config.Config{}, "test", database)
 
-	// No KV entry: default 10 minutes.
-	if got := d.reconcileInterval(); got != 10*time.Minute {
-		t.Fatalf("default = %v, want 10m", got)
+	// No KV entry: default 2 minutes (fast catch-up).
+	if got := d.reconcileInterval(); got != 2*time.Minute {
+		t.Fatalf("default = %v, want 2m", got)
 	}
 
 	// Valid value passes through.
@@ -366,8 +366,8 @@ func TestReconcileIntervalDefaultsAndClamps(t *testing.T) {
 	if err := database.KV().Set("reconcile_interval_min", "junk"); err != nil {
 		t.Fatal(err)
 	}
-	if got := d.reconcileInterval(); got != 10*time.Minute {
-		t.Fatalf("garbage = %v, want 10m", got)
+	if got := d.reconcileInterval(); got != 2*time.Minute {
+		t.Fatalf("garbage = %v, want 2m", got)
 	}
 }
 
@@ -380,8 +380,8 @@ func TestUpdateSettingsReconcilesInterval(t *testing.T) {
 	d := newDaemon(config.Config{LogRetentionDays: 90}, "test", database)
 
 	// Default surfaces in getSettings.
-	if got := d.getSettings().ReconcileIntervalMin; got != 10 {
-		t.Fatalf("default get = %d, want 10", got)
+	if got := d.getSettings().ReconcileIntervalMin; got != 2 {
+		t.Fatalf("default get = %d, want 2", got)
 	}
 
 	// Round-trip a valid value.

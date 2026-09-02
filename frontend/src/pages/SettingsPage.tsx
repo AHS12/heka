@@ -292,7 +292,7 @@ function ReliabilitySection() {
   const qc = useQueryClient()
   const status = useQuery({queryKey: ['watchdog'], queryFn: watchdogEnabled})
   const settings = useQuery({queryKey: SETTINGS_KEY, queryFn: getSettings})
-  const [interval, setInterval] = useState(10)
+  const [interval, setInterval] = useState(2)
   const [wdMins, setWdMins] = useState(5)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -301,7 +301,7 @@ function ReliabilitySection() {
   useEffect(() => {
     if (settings.data && !initRef.current) {
       initRef.current = true
-      setInterval(settings.data.reconcile_interval_min ?? 10)
+      setInterval(settings.data.reconcile_interval_min ?? 2)
       setWdMins(settings.data.watchdog_interval_min ?? 5)
     }
   }, [settings.data])
@@ -335,7 +335,7 @@ function ReliabilitySection() {
 
   const installed = status.data?.installed ?? false
   const wdInterval = status.data?.intervalMinutes ?? 5
-  const reconcileCurrent = settings.data?.reconcile_interval_min ?? 10
+  const reconcileCurrent = settings.data?.reconcile_interval_min ?? 2
   const watchdogCurrent = settings.data?.watchdog_interval_min ?? 5
   const dirty = interval !== reconcileCurrent || wdMins !== watchdogCurrent
 
@@ -483,7 +483,7 @@ function RetentionSection() {
       sound_success: settings.data?.sound_success ?? 'system',
       sound_failure: settings.data?.sound_failure ?? 'system',
       sound_timeout: settings.data?.sound_timeout ?? 'system',
-      reconcile_interval_min: settings.data?.reconcile_interval_min ?? 10,
+      reconcile_interval_min: settings.data?.reconcile_interval_min ?? 2,
       watchdog_interval_min: settings.data?.watchdog_interval_min ?? 5,
     }),
     onSuccess: () => {
@@ -559,7 +559,7 @@ function NotificationSection() {
     mutationFn: (s: {sound_success: string; sound_failure: string; sound_timeout: string}) =>
       updateSettings({
         log_retention_days: settings.data?.log_retention_days ?? 90,
-        reconcile_interval_min: settings.data?.reconcile_interval_min ?? 10,
+        reconcile_interval_min: settings.data?.reconcile_interval_min ?? 2,
         watchdog_interval_min: settings.data?.watchdog_interval_min ?? 5,
         ...s,
       }),

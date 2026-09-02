@@ -34,6 +34,7 @@ import {
   ListRuns,
   GetRun,
   CancelRun,
+  ListSystemLog,
   StartupEnabled,
   StartupSet,
   WatchdogEnabled,
@@ -489,6 +490,25 @@ export async function getRun(runID: string): Promise<Run> {
 export async function cancelRun(slug: string): Promise<void> {
   try {
     await CancelRun(slug)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+// ---- System log (daemon event log: reconcile, lifecycle).
+
+export interface SystemLogEntry {
+  id: number
+  ts: string
+  level: string
+  event: string
+  message: string
+}
+
+export async function listSystemLogs(limit = 200): Promise<SystemLogEntry[]> {
+  try {
+    const result = (await ListSystemLog(limit)) as unknown as SystemLogEntry[] | null
+    return result ?? []
   } catch (err) {
     throw toAPIError(err)
   }

@@ -253,7 +253,8 @@ func (a *App) schedulesReconcileCmd() *cobra.Command {
 				a.printJSON(map[string]any{"ok": true, "action": "schedules_reconcile"})
 				return nil
 			}
-			fmt.Fprintln(a.stdout, "schedules reconciled")
+			fmt.Fprintln(a.stdout,
+				"schedules reconciled — what was caught up is in Logs → System, history in `heka schedules missed`")
 			return nil
 		},
 	}

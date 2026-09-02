@@ -63,6 +63,7 @@ type ipcCaller interface {
 	ListRuns(f ipc.RunFilters) (ipc.RunListResult, error)
 	Run(runID string) (ipc.Run, error)
 	Cancel(slug string) error
+	SystemLog(limit int) ([]ipc.DaemonLog, error)
 	PauseScheduler() error
 	ResumeScheduler() error
 	ReconcileSchedules() error
@@ -572,6 +573,25 @@ func (a *App) CancelRun(slug string) error {
 		return wrapIPCError(err)
 	}
 	return nil
+}
+
+// ---- Daemon event log (Logs → System view).
+
+// DaemonLogDTO is the Wails bridge view of a daemon log entry.
+type DaemonLogDTO = ipc.DaemonLog
+
+// ListSystemLog returns the daemon's own event log (scheduler reconcile,
+// lifecycle, wake detection), newest first.
+func (a *App) ListSystemLog(limit int) ([]DaemonLogDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return nil, err
+	}
+	logs, err := client.SystemLog(limit)
+	if err != nil {
+		return nil, wrapIPCError(err)
+	}
+	return logs, nil
 }
 
 func (a *App) ListTasksForSchedules() ([]TaskSummaryDTO, error) {

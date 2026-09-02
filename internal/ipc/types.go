@@ -77,6 +77,16 @@ type RunListWithTotal struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
+// DaemonLog is one entry of the daemon's own event log (scheduler reconcile,
+// lifecycle, wake detection) surfaced in the GUI Logs → System view.
+type DaemonLog struct {
+	ID      int64  `json:"id"`
+	TS      string `json:"ts"`
+	Level   string `json:"level"` // info | warn | error
+	Event   string `json:"event"` // reconcile | daemon | scheduler
+	Message string `json:"message"`
+}
+
 // Run is one attempt row on the wire (SPEC-05 group/attempt model).
 type Run struct {
 	RunID      string `json:"run_id"`
