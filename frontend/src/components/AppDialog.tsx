@@ -7,11 +7,16 @@ export function AppDialog({
   onOpenChange,
   children,
   size = 'lg',
+  dialogClassName,
 }: {
   isOpen: boolean
   onOpenChange: (isOpen: boolean) => void
   children: ReactNode
   size?: ModalContainerProps['size']
+  /** Extra classes on the dialog surface — e.g. a wider max-width than the
+   *  HeroUI size presets (sm/md/lg cap at 24/28/32rem). Needs the important
+   *  modifier to beat the unlayered HeroUI variant CSS. */
+  dialogClassName?: string
 }) {
   const state = useOverlayState({isOpen, onOpenChange})
 
@@ -24,7 +29,9 @@ export function AppDialog({
           placement="center"
           className="max-h-[calc(100dvh-1.5rem)] w-full"
         >
-          <Modal.Dialog className="overflow-hidden rounded-[1.25rem] border border-zinc-200/90 bg-[color:var(--background)] text-[color:var(--foreground)] shadow-2xl shadow-zinc-950/25 outline-none dark:border-zinc-700/80">
+          <Modal.Dialog
+            className={`overflow-hidden rounded-[1.25rem] border border-zinc-200/90 bg-[color:var(--background)] text-[color:var(--foreground)] shadow-2xl shadow-zinc-950/25 outline-none dark:border-zinc-700/80 ${dialogClassName ?? ''}`}
+          >
             {children}
           </Modal.Dialog>
         </Modal.Container>

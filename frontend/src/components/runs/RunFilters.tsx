@@ -1,17 +1,21 @@
 import {SelectField, TextInput, Field, DatePickerField} from '../controls'
-import type {RunFilters as RunFilterState} from '../../lib/runs'
+import {STATUS_LABELS, type RunFilters as RunFilterState} from '../../lib/runs'
 import type {TaskSummary} from '../../lib/api'
+
+const STATUS_ORDER = [
+  'success',
+  'failed',
+  'timed_out',
+  'running',
+  'queued',
+  'cancelled',
+  'skipped',
+  'missed',
+]
 
 const STATUS_ITEMS = [
   {id: '', label: 'All statuses'},
-  {id: 'success', label: 'Success'},
-  {id: 'failed', label: 'Failed'},
-  {id: 'timed_out', label: 'Timed out'},
-  {id: 'running', label: 'Running'},
-  {id: 'queued', label: 'Queued'},
-  {id: 'cancelled', label: 'Cancelled'},
-  {id: 'skipped', label: 'Skipped'},
-  {id: 'missed', label: 'Missed'},
+  ...STATUS_ORDER.map((id) => ({id, label: STATUS_LABELS[id]})),
 ]
 
 export function RunFilters({

@@ -6,6 +6,8 @@ import userEvent from '@testing-library/user-event'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 import {MemoryRouter} from 'react-router-dom'
 import {
+  GetTask,
+  GetTaskYAML,
   ListTasks,
   RunTask,
   SetTaskEnabled,
@@ -18,6 +20,8 @@ const mList = vi.mocked(ListTasks)
 const mRun = vi.mocked(RunTask)
 const mToggle = vi.mocked(SetTaskEnabled)
 const mImport = vi.mocked(ImportTaskFromFile)
+const mGetTask = vi.mocked(GetTask)
+const mGetTaskYAML = vi.mocked(GetTaskYAML)
 
 const seed: app.TaskSummaryDTO[] = [
   {
@@ -137,6 +141,35 @@ describe('TasksPage', () => {
       expect(screen.getByTestId('toast')).toHaveTextContent('group-42')
     )
     expect(mRun).toHaveBeenCalledWith('backup', 'manual')
+  })
+
+  it('opens the edit dialog when a row is clicked', async () => {
+    mList.mockResolvedValue(seed)
+    mGetTask.mockResolvedValue({
+      enabled: true,
+      updated_at: '2026-08-25T10:00:00Z',
+      task: {
+        version: 1,
+        name: 'Backup',
+        slug: 'backup',
+        type: 'script',
+        runtime: 'custom',
+        script: 'run.sh',
+        timeout: 60,
+        capture_output: true,
+      },
+    } as never)
+    mGetTaskYAML.mockResolvedValue(
+      'version: 1\nname: Backup\nslug: backup\ntype: script\nruntime: custom\nscript: run.sh\ntimeout: 60\ncapture_output: true\n'
+    )
+    const user = userEvent.setup()
+
+    renderPage()
+    await screen.findByText('Backup')
+
+    await user.click(screen.getByTestId('task-row-backup'))
+    expect(await screen.findByText('Edit task')).toBeInTheDocument()
+    expect(screen.getByRole('button', {name: 'Save changes'})).toBeInTheDocument()
   })
 
   it('renders the 422 list from a failed import', async () => {

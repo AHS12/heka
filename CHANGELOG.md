@@ -5,6 +5,51 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.5] - 2026-09-03
+
+This release is about the part of Heka you see first. The Home screen, the
+task list, and the task dialogs got a full pass to feel like a proper desktop
+app — quicker to read, quicker to act.
+
+### Added
+- A reworked Home screen. Up top you'll find the state of the engine at a
+  glance (is the daemon up, is the scheduler running) and three quick
+  actions: create a task, create a schedule, or run any task right from a
+  small picker — no need to visit other pages for the everyday stuff.
+- The next scheduled run now gets the spotlight it deserves: which task,
+  when it fires, and how long from now ("in 14h 2m"), with a one-click
+  "Run now" if you can't wait.
+- Recent activity rows now open the exact run they refer to — one click from
+  the dashboard straight to that run's output — and show friendly times like
+  "2m ago" (the full timestamp appears when you hover).
+- Hovering the status dot in the top bar — or the engine badge on Home —
+  now tells you what's actually going on: the version, the state of the
+  core and scheduler, and how long the daemon has been up. When the
+  scheduler is paused, it says so plainly.
+- The task list is now made of cards instead of a dense table. Each card
+  shows the task, its type, when it last ran and how it went, with Run,
+  enable/disable and delete right on the card. Clicking a card opens the
+  editor.
+
+### Changed
+- Creating and editing tasks now happens in a dialog, the same way for both.
+  Editing no longer navigates away from the task list, and importing a task
+  file drops you straight into the editor to review it.
+- The task dialog is wider, so the form breathes and the YAML editor has
+  room to work.
+- The default window size is larger, and Tasks and Schedules use the extra
+  room. On small laptop screens the window quietly shrinks to fit — the
+  shape stays the same.
+- Statuses are written the way people say them — "Timed out" instead of
+  "timed_out" — everywhere, including the charts and the log filters. The
+  status chart now shows readable labels with aligned counts, and the log
+  filters use the same wording.
+
+### Fixed
+- The status dot in the top bar ignored the mouse entirely — hovering it
+  never showed anything. It now has a proper hover area and reveals the
+  health details described above.
+
 ## [0.7.2] - 2026-09-02
 
 ### Added
@@ -16,6 +61,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   possible only from the tray icon; the switch mirrors that state, so you
   can pause and resume without hunting for the tray. Both controls stay in
   sync, and a paused scheduler survives daemon restarts.
+
+## [0.7.1] - 2026-09-02
+
+This release makes Heka more dependable day to day. The daemon — the
+background part of Heka that runs and schedules your tasks — now stays
+reachable no matter how it was started, and it explains itself clearly when
+something is wrong.
+
+### Fixed
+- Fixed the confusing "heka daemon is not running" error that could appear
+  even when the daemon was actually running. If Heka had been started as
+  administrator (for example, to get notification sounds working), the CLI
+  and GUI could not connect to it. Heka now grants your Windows account
+  permission to reach the daemon regardless of how it was started.
+- `heka daemon stop` now actually stops the daemon. Previously it was
+  silently ignored whenever the daemon was running with a tray icon.
+- Fixed a small race when logging into Windows: the automatic startup and
+  the watchdog could briefly overlap when bringing the daemon up. That can
+  no longer lead to tasks running twice.
+- `heka daemon status` now tells you what is actually wrong and what to do
+  next, instead of always reporting "not running".
+
+### Added
+- You can now choose how often the watchdog checks on the daemon, in
+  Settings → Reliability. Pick anywhere from every minute to once an hour —
+  the change applies right away, no restart needed.
+
+### Changed
+- Command-line error messages are clearer: they now tell you whether the
+  daemon needs to be started, was started with administrator rights, or is
+  simply busy.
 
 ## [0.7.0] - 2026-09-02
 
@@ -54,37 +130,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   catch-up after a nap or short sleep happens within moments of returning.
 - The log retention and notification settings now also include the new
   reconciliation interval, keeping the settings shape consistent.
-
-## [0.7.1] - 2026-09-02
-
-This release makes Heka more dependable day to day. The daemon — the
-background part of Heka that runs and schedules your tasks — now stays
-reachable no matter how it was started, and it explains itself clearly when
-something is wrong.
-
-### Fixed
-- Fixed the confusing "heka daemon is not running" error that could appear
-  even when the daemon was actually running. If Heka had been started as
-  administrator (for example, to get notification sounds working), the CLI
-  and GUI could not connect to it. Heka now grants your Windows account
-  permission to reach the daemon regardless of how it was started.
-- `heka daemon stop` now actually stops the daemon. Previously it was
-  silently ignored whenever the daemon was running with a tray icon.
-- Fixed a small race when logging into Windows: the automatic startup and
-  the watchdog could briefly overlap when bringing the daemon up. That can
-  no longer lead to tasks running twice.
-- `heka daemon status` now tells you what is actually wrong and what to do
-  next, instead of always reporting "not running".
-
-### Added
-- You can now choose how often the watchdog checks on the daemon, in
-  Settings → Reliability. Pick anywhere from every minute to once an hour —
-  the change applies right away, no restart needed.
-
-### Changed
-- Command-line error messages are clearer: they now tell you whether the
-  daemon needs to be started, was started with administrator rights, or is
-  simply busy.
 
 ## [0.6.9] - 2026-09-01
 

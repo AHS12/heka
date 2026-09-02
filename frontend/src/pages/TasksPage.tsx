@@ -2,7 +2,6 @@
 // Run Now (toasts the group_id), inline delete confirm, and the Import /
 // New task affordances. Client-side filters while the list is small.
 import {useEffect, useMemo, useState} from 'react'
-import {useNavigate} from 'react-router-dom'
 import {apiErrorDetails} from '../lib/api'
 import {
   useDeleteTask,
@@ -26,7 +25,6 @@ function useToast(): [string | null, (text: string) => void] {
 }
 
 export function TasksPage() {
-  const navigate = useNavigate()
   const tasks = useTasks()
   const run = useRunTask()
   const del = useDeleteTask()
@@ -35,6 +33,7 @@ export function TasksPage() {
   const [toast, toastMsg] = useToast()
   const [errors, setErrors] = useState<string[]>([])
   const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<string | null>(null)
 
   const [typeFilter, setTypeFilter] = useState<'all' | 'script' | 'binary'>('all')
   const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
@@ -73,7 +72,7 @@ export function TasksPage() {
     importer.mutate(undefined, {
       onSuccess: (result) => {
         setErrors([])
-        navigate(`/tasks/${result.task.slug}`)
+        setEditing(result.task.slug)
       },
       onError: (err) => {
         const details = apiErrorDetails(err)
@@ -149,7 +148,7 @@ export function TasksPage() {
           onRun={onRun}
           onDelete={onDelete}
           onToggle={(slug, enabled) => toggle.mutate({slug, enabled})}
-          onOpen={(slug) => navigate(`/tasks/${slug}`)}
+          onOpen={(slug) => setEditing(slug)}
         />
       )}
 
@@ -157,7 +156,16 @@ export function TasksPage() {
         <TaskEditorPage
           dialog
           onClose={() => setCreating(false)}
-          onCreated={(slug) => toastMsg(`Created ${slug}`)}
+          onSaved={(slug) => toastMsg(`Created ${slug}`)}
+        />
+      )}
+
+      {editing && (
+        <TaskEditorPage
+          dialog
+          slug={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(slug) => toastMsg(`Saved ${slug}`)}
         />
       )}
 

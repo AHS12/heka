@@ -98,6 +98,31 @@ func TestSaveWindowStateCreatesMissingDir(t *testing.T) {
 	}
 }
 
+func TestFitWithin(t *testing.T) {
+	cases := []struct {
+		name             string
+		w, h, maxW, maxH int
+		wantW, wantH     int
+	}{
+		{"fits unchanged", 1310, 940, 1920, 1032, 1310, 940},
+		{"exactly fits", 1310, 940, 1310, 940, 1310, 940},
+		{"height-bound laptop", 1310, 940, 1366, 720, 1003, 720},
+		{"width-bound narrow screen", 1310, 940, 1024, 900, 1024, 735},
+		{"scaled down on both axes", 2000, 1000, 1000, 500, 1000, 500},
+		{"degenerate window", 0, 0, 1920, 1032, 0, 0},
+		{"degenerate screen", 1310, 940, 0, 0, 1310, 940},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotW, gotH := fitWithin(tc.w, tc.h, tc.maxW, tc.maxH)
+			if gotW != tc.wantW || gotH != tc.wantH {
+				t.Fatalf("fitWithin(%d,%d,%d,%d) = (%d,%d), want (%d,%d)",
+					tc.w, tc.h, tc.maxW, tc.maxH, gotW, gotH, tc.wantW, tc.wantH)
+			}
+		})
+	}
+}
+
 func TestOffScreenIn(t *testing.T) {
 	vb := bounds{left: 0, top: 0, right: 3840, bottom: 1080}
 	cases := []struct {

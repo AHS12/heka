@@ -49,6 +49,7 @@ import {
   DataDir,
   TasksDir,
   OpenDataDir,
+  OpenURL,
 } from '@wailsjs/go/app/App'
 import type {task} from '@wailsjs/go/models'
 
@@ -616,6 +617,15 @@ export async function getTasksDir(): Promise<string> {
 export async function openDataDir(): Promise<void> {
   try {
     await OpenDataDir()
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+/** Opens an external http(s) link in the user's default browser (not the webview). */
+export async function openURL(url: string): Promise<void> {
+  try {
+    await OpenURL(url)
   } catch (err) {
     throw toAPIError(err)
   }

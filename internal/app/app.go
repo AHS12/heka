@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	stdruntime "runtime"
+	"strings"
 	"sync"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -136,7 +137,40 @@ func NewApp(name, version string) *App {
 // Startup is called by Wails when the window starts up.
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	a.fitWindowToScreen()
 	a.restoreWindow()
+}
+
+// taskbarMargin is the vertical slack reserved for the OS taskbar/dock when
+// fitting the window to the screen (Screen.Size covers the full display).
+const taskbarMargin = 48
+
+// fitWindowToScreen shrinks the window — preserving its aspect ratio — when
+// the requested size does not fit the display it opens on (e.g. the
+// 1310×940 default on a 1366×768 laptop). Screen sizes from Wails are in
+// the same logical pixel space as WindowGetSize/WindowSetSize, so no DPI
+// conversion is needed. macOS and most Linux window managers already clamp
+// oversized windows themselves; the check is cheap and harmless there.
+func (a *App) fitWindowToScreen() {
+	if a.ctx == nil {
+		return
+	}
+	screens, err := wruntime.ScreenGetAll(a.ctx)
+	if err != nil || len(screens) == 0 {
+		return
+	}
+	screen := screens[0]
+	for i := range screens {
+		if screens[i].IsCurrent {
+			screen = screens[i]
+			break
+		}
+	}
+	w, h := wruntime.WindowGetSize(a.ctx)
+	fitW, fitH := fitWithin(w, h, screen.Size.Width, screen.Size.Height-taskbarMargin)
+	if fitW != w || fitH != h {
+		wruntime.WindowSetSize(a.ctx, fitW, fitH)
+	}
 }
 
 // SetWindowStatePath points the app at the window-geometry file used to
@@ -775,6 +809,19 @@ func (a *App) PreviewSound(preset string) error {
 		return err
 	}
 	return wrapIPCError(client.PreviewSound(preset))
+}
+
+// OpenURL opens an external http(s) link in the user's default browser —
+// never the app webview (SPEC-12 §1).
+func (a *App) OpenURL(url string) error {
+	if a.ctx == nil {
+		return errors.New("browser unavailable before startup")
+	}
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return fmt.Errorf("only http(s) URLs can be opened")
+	}
+	wruntime.BrowserOpenURL(a.ctx, url)
+	return nil
 }
 
 // OpenDataDir opens the data directory in the OS file manager (SPEC-16 §2).

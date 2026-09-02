@@ -1,4 +1,5 @@
-import {useState, useMemo} from 'react'
+import {useEffect, useState, useMemo} from 'react'
+import {useSearchParams} from 'react-router-dom'
 import {Modal, Toast} from '@heroui/react'
 import {apiErrorDetails} from '../lib/api'
 import {useSchedules, useCreateSchedule, useDeleteSchedule, useToggleSchedule, useReconcileSchedules} from '../lib/schedules'
@@ -25,6 +26,18 @@ export function SchedulesPage() {
   const [draft, setDraft] = useState(emptyScheduleDraft())
   const [errors, setErrors] = useState<string[]>([])
   const [search, setSearch] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Deep-link from the dashboard quick action: /schedules?new=1 opens the
+  // create form once, then the param is stripped so refresh stays clean.
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setShowForm(true)
+      const next = new URLSearchParams(searchParams)
+      next.delete('new')
+      setSearchParams(next, {replace: true})
+    }
+  }, [searchParams, setSearchParams])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()

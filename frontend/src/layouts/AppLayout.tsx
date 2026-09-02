@@ -64,7 +64,7 @@ export function AppLayout() {
       <TopNav />
       <main
         ref={mainRef}
-        className={`heka-scroll ${scrolling ? 'heka-scroll-show' : ''} mx-auto w-full max-w-6xl min-h-0 flex-1 overflow-y-auto px-4 py-6`}
+        className={`heka-scroll ${scrolling ? 'heka-scroll-show' : ''} mx-auto w-full max-w-7xl min-h-0 flex-1 overflow-y-auto px-4 py-6`}
       >
         <DaemonDownBanner />
         <SchedulerPausedBanner />

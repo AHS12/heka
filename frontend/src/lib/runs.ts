@@ -13,6 +13,35 @@ export interface RunFilters {
   order?: string
 }
 
+/** Human-readable run status labels — the backend stores snake_case ids,
+ *  but the UI always renders these. Unknown statuses fall back to the id
+ *  with underscores swapped for spaces. */
+export const STATUS_LABELS: Record<string, string> = {
+  success: 'Success',
+  failed: 'Failed',
+  timed_out: 'Timed out',
+  running: 'Running',
+  queued: 'Queued',
+  cancelled: 'Cancelled',
+  skipped: 'Skipped',
+  missed: 'Missed',
+}
+
+export function statusLabel(status: string): string {
+  return STATUS_LABELS[status] ?? status.replace(/_/g, ' ')
+}
+
+const STATS_KEY = ['stats'] as const
+
+/** Dashboard aggregate (SPEC-16 §1): counts, 7-day history, recent runs. */
+export function useStats() {
+  return useQuery({
+    queryKey: STATS_KEY,
+    queryFn: api.getStats,
+    refetchInterval: 15_000,
+  })
+}
+
 const RUNS_KEY = ['runs'] as const
 
 export function runsKey(filters: RunFilters) {

@@ -199,6 +199,7 @@ body {
   --color-gradient-mid: var(--gradient-mid, var(--background));
   --color-gradient-end: var(--gradient-end, var(--background));
 
+  --color-border: var(--border, var(--field-border));
   --color-surface: var(--surface, var(--background));
   --color-surface-secondary: var(--surface-secondary, var(--background));
   --color-field-border: var(--field-border, var(--border));

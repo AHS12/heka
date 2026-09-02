@@ -30,11 +30,11 @@ import (
 const appName = "Heka"
 
 const (
-	defaultWinWidth  = 1024
-	defaultWinHeight = 768
+	defaultWinWidth  = 1310
+	defaultWinHeight = 940
 )
 
-var appVersion = "0.7.2"
+var appVersion = "0.7.5"
 
 //go:embed all:frontend/dist
 var assets embed.FS

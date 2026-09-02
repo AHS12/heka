@@ -4,6 +4,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest'
 import {render, screen, waitFor} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
+import {MemoryRouter} from 'react-router-dom'
 import {Toast} from '@heroui/react'
 import {ListSchedules, ReconcileSchedules} from '@wailsjs/go/app/App'
 import type {ipc} from '@wailsjs/go/models'
@@ -31,7 +32,9 @@ function renderPage() {
   return render(
     <QueryClientProvider client={client}>
       <Toast.Provider />
-      <SchedulesPage />
+      <MemoryRouter>
+        <SchedulesPage />
+      </MemoryRouter>
     </QueryClientProvider>
   )
 }
