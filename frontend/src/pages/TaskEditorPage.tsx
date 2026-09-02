@@ -31,16 +31,20 @@ type Tab = 'form' | 'yaml'
 
 export function TaskEditorPage({
   dialog = false,
+  slug: slugProp,
   onClose,
-  onCreated,
+  onSaved,
 }: {
   dialog?: boolean
+  /** Explicit task to edit — the dialog mode has no route params. */
+  slug?: string
   onClose?: () => void
-  onCreated?: (slug: string) => void
+  /** Fires with the saved task's slug after a successful create or update in dialog mode. */
+  onSaved?: (slug: string) => void
 } = {}) {
   const {slug} = useParams()
   const navigate = useNavigate()
-  const editingSlug = !slug || slug === 'new' ? undefined : slug
+  const editingSlug = slugProp ?? (!slug || slug === 'new' ? undefined : slug)
   const isNew = !editingSlug
 
   const taskQuery = useTask(editingSlug)
@@ -157,7 +161,7 @@ export function TaskEditorPage({
         await update.mutateAsync({slug: editingSlug as string, yaml: text})
       }
       if (dialog) {
-        onCreated?.(dto.task.slug)
+        onSaved?.(dto.task.slug)
         onClose?.()
       } else {
         navigate(`/tasks/${dto.task.slug}`, {replace: true})
@@ -174,21 +178,47 @@ export function TaskEditorPage({
     }
   }
 
-  if (taskQuery.isLoading) {
-    return <p className="text-sm text-zinc-400">Loading…</p>
-  }
-
-  if (!isNew && !draft) {
+  if (taskQuery.isLoading || (!isNew && !draft)) {
+    if (!dialog) {
+      if (taskQuery.isLoading) {
+        return <p className="text-sm text-zinc-400">Loading…</p>
+      }
+      return (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold">Task not found</h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <span data-testid="task-missing">{slug}</span> does not exist.
+          </p>
+          <Link to="/tasks" className={pillBtn}>
+            Back to Tasks
+          </Link>
+        </div>
+      )
+    }
     return (
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Task not found</h2>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          <span data-testid="task-missing">{slug}</span> does not exist.
-        </p>
-        <Link to="/tasks" className={pillBtn}>
-          Back to Tasks
-        </Link>
-      </div>
+      <AppDialog isOpen onOpenChange={(open) => { if (!open) onClose?.() }}>
+        <Modal.Header className={dialogHeaderCls}>
+          <Modal.Heading className="text-lg font-semibold">
+            {isNew ? 'Create task' : 'Edit task'}
+          </Modal.Heading>
+          <Modal.CloseTrigger aria-label="Close task dialog" />
+        </Modal.Header>
+        <Modal.Body className={dialogBodyCls}>
+          {taskQuery.data || taskQuery.isLoading ? (
+            <p className="text-sm text-zinc-400">Loading…</p>
+          ) : (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              <span data-testid="task-missing">{editingSlug}</span> does not exist. It may have
+              been deleted from the tasks directory.
+            </p>
+          )}
+        </Modal.Body>
+        <Modal.Footer className={dialogFooterCls}>
+          <button type="button" className={pillBtn} onClick={onClose}>
+            Close
+          </button>
+        </Modal.Footer>
+      </AppDialog>
     )
   }
 
@@ -264,19 +294,48 @@ export function TaskEditorPage({
 
   if (dialog) {
     return (
-      <AppDialog isOpen onOpenChange={(open) => { if (!open && !pending) onClose?.() }}>
+      <AppDialog
+        isOpen
+        onOpenChange={(open) => { if (!open && !pending) onClose?.() }}
+        dialogClassName="sm:max-w-3xl!"
+      >
         <Modal.Header className={dialogHeaderCls}>
           <div>
-            <Modal.Heading className="text-lg font-semibold">Create task</Modal.Heading>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Define what runs, how it runs, and how Heka reports the result.</p>
+            <Modal.Heading className="text-lg font-semibold">
+              {isNew ? 'Create task' : 'Edit task'}
+            </Modal.Heading>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              {isNew
+                ? 'Define what runs, how it runs, and how Heka reports the result.'
+                : `Editing “${draft.name || editingSlug}” — changes apply to future runs.`}
+            </p>
           </div>
-          <Modal.CloseTrigger aria-label="Close create task dialog" isDisabled={pending} />
+          <Modal.CloseTrigger
+            aria-label={isNew ? 'Close create task dialog' : 'Close edit task dialog'}
+            isDisabled={pending}
+          />
         </Modal.Header>
         <Modal.Body className={dialogBodyCls}>{editor}</Modal.Body>
         <Modal.Footer className={dialogFooterCls}>
           <button type="button" className={pillBtn} onClick={onClose} disabled={pending}>Cancel</button>
+          {!isNew && (
+            <button
+              type="button"
+              className={pillBtn}
+              disabled={pending}
+              onClick={() =>
+                exporter.mutate(editingSlug as string, {
+                  onError: (err) => setSaveErrors(apiErrorDetails(err)),
+                })
+              }
+            >
+              Export
+            </button>
+          )}
           <button type="button" onClick={() => void submit()} className={primaryBtn} disabled={pending}>
-            {pending ? 'Creating…' : 'Create task'}
+            {pending
+              ? isNew ? 'Creating…' : 'Saving…'
+              : isNew ? 'Create task' : 'Save changes'}
           </button>
         </Modal.Footer>
       </AppDialog>

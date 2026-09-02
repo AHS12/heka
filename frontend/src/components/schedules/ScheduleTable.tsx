@@ -13,7 +13,20 @@ function splitDateTime(iso?: string) {
   }
 }
 
-function DateTime({iso, empty = '—'}: {iso?: string; empty?: string}) {
+function DetailBlock({label, children}: {label: string; children: React.ReactNode}) {
+  return (
+    <div className="min-w-0">
+      <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+        {label}
+      </div>
+      <div className="min-w-0 text-sm text-zinc-700 dark:text-zinc-200">{children}</div>
+    </div>
+  )
+}
+
+export {DetailBlock}
+
+export function DateTime({iso, empty = '—'}: {iso?: string; empty?: string}) {
   const value = splitDateTime(iso)
   if (!value) return <span className="text-xs text-zinc-400 dark:text-zinc-500">{empty}</span>
   return (
@@ -23,17 +36,6 @@ function DateTime({iso, empty = '—'}: {iso?: string; empty?: string}) {
         <span className="ml-1.5 text-zinc-400 dark:text-zinc-500">{value.time}</span>
       )}
     </span>
-  )
-}
-
-function DetailBlock({label, children}: {label: string; children: React.ReactNode}) {
-  return (
-    <div className="min-w-0">
-      <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-        {label}
-      </div>
-      <div className="min-w-0 text-sm text-zinc-700 dark:text-zinc-200">{children}</div>
-    </div>
   )
 }
 

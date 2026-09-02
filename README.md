@@ -64,7 +64,7 @@ Everything is local-first: no account, no cloud, no internet required.
 - **Local-only IPC** — named pipe / unix socket, SQLite storage, no network listener
   by default.
 - **Runs with the OS** — optional startup registration and a watchdog that restarts
-  the daemon; installers for Windows (NSIS), Linux (DEB), and macOS (DMG).
+  the daemon; installers for Windows (NSIS), and macOS (DMG)(upcoming).
 
 ## Use cases — for humans
 
@@ -107,4 +107,4 @@ skill file.
 
 ---
 
-Built with [Wails](https://wails.io/) · [GitHub](https://github.com/AHS12/heka)
+Built with [Wails](https://wails.io/)

@@ -97,6 +97,23 @@ func SaveWindowState(path string, ws WindowState) error {
 // bounds is an axis-aligned rectangle in screen coordinates.
 type bounds struct{ left, top, right, bottom int }
 
+// fitWithin scales w×h down, preserving aspect ratio, so the rectangle fits
+// inside maxW×maxH. A rectangle that already fits passes through unchanged;
+// degenerate sizes (≤0) are returned as-is.
+func fitWithin(w, h, maxW, maxH int) (int, int) {
+	if w <= 0 || h <= 0 || maxW <= 0 || maxH <= 0 {
+		return w, h
+	}
+	if w <= maxW && h <= maxH {
+		return w, h
+	}
+	scale := float64(maxW) / float64(w)
+	if s := float64(maxH) / float64(h); s < scale {
+		scale = s
+	}
+	return int(float64(w)*scale + 0.5), int(float64(h)*scale + 0.5)
+}
+
 // offScreen reports whether a window rectangle lies entirely outside the
 // virtual desktop (all monitors) — e.g. after unplugging a display. The
 // check is skipped off-Windows and whenever the OS metrics are unavailable.

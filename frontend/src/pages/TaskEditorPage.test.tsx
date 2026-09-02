@@ -1,7 +1,7 @@
 // TaskEditorPage tests (SPEC-13 §6.2, §4 preservation rule): invalid YAML
 // shows errors, keeps the text byte-for-byte, and sends no save signal;
 // valid YAML saves and navigates to the task.
-import {describe, expect, it, vi} from 'vitest'
+import {beforeEach, describe, expect, it, vi} from 'vitest'
 import {render, screen, waitFor, fireEvent} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
@@ -10,7 +10,10 @@ import {
   ValidateTaskYAML,
   ParseTaskYAML,
   CreateTask,
+  GetTask,
+  GetTaskYAML,
   ListSecrets,
+  UpdateTask,
 } from '@wailsjs/go/app/App'
 import type {app, task} from '@wailsjs/go/models'
 import {TaskEditorPage} from './TaskEditorPage'
@@ -19,6 +22,9 @@ const mValidate = vi.mocked(ValidateTaskYAML)
 const mParse = vi.mocked(ParseTaskYAML)
 const mCreate = vi.mocked(CreateTask)
 const mListSecrets = vi.mocked(ListSecrets)
+const mGetTask = vi.mocked(GetTask)
+const mGetTaskYAML = vi.mocked(GetTaskYAML)
+const mUpdate = vi.mocked(UpdateTask)
 
 const validTask = {
   version: 1,
@@ -235,5 +241,60 @@ describe('TaskEditorPage', () => {
       expect(screen.getByTestId('task-missing')).toHaveTextContent('ghost')
     )
     expect(screen.getByText('Task not found')).toBeInTheDocument()
+  })
+})
+
+describe('TaskEditorPage dialog mode', () => {
+  function renderDialogEditor() {
+    const client = new QueryClient({defaultOptions: {queries: {retry: false}}})
+    const onClose = vi.fn()
+    const onSaved = vi.fn()
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <TaskEditorPage dialog slug="nightly" onClose={onClose} onSaved={onSaved} />
+        </QueryClientProvider>
+      </MemoryRouter>
+    )
+    return {onClose, onSaved}
+  }
+
+  beforeEach(() => {
+    mGetTask.mockResolvedValue(validDTO)
+    mGetTaskYAML.mockResolvedValue(validYAML)
+  })
+
+  it('renders edit chrome with Export and Save changes', async () => {
+    renderDialogEditor()
+
+    // The loading dialog shares the heading; wait for the hydrated editor.
+    expect(await screen.findByRole('button', {name: 'Save changes'})).toBeInTheDocument()
+    expect(screen.getByText('Edit task')).toBeInTheDocument()
+    expect(screen.getByText(/changes apply to future runs/)).toBeInTheDocument()
+    expect(screen.getByRole('button', {name: 'Export'})).toBeInTheDocument()
+  })
+
+  it('saves updates in place and fires onSaved', async () => {
+    mParse.mockResolvedValue(validDTO)
+    mUpdate.mockResolvedValue(validDTO)
+    const user = userEvent.setup()
+    const {onSaved, onClose} = renderDialogEditor()
+
+    await user.click(await screen.findByRole('button', {name: 'Save changes'}))
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith('nightly'))
+    expect(mUpdate).toHaveBeenCalledTimes(1)
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('shows a not-found dialog for a missing slug', async () => {
+    mGetTask.mockRejectedValue(new Error('not_found: task not found'))
+    mGetTaskYAML.mockRejectedValue(new Error('not_found: task not found'))
+    renderDialogEditor()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('task-missing')).toHaveTextContent('nightly')
+    )
+    expect(screen.getByText('Edit task')).toBeInTheDocument()
   })
 })
