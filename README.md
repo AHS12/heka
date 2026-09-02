@@ -4,7 +4,7 @@
 
 <h1 align="center">Heka</h1>
 
-<p align="center"><strong>A local task runner and scheduler for programmers — built for AI agents.</strong></p>
+<p align="center"><strong>A local task runner & scheduler for programmers — with first-class AI agent support.</strong></p>
 
 <p align="center">
   <a href="https://github.com/AHS12/heka/releases">
