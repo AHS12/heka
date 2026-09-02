@@ -63,8 +63,10 @@ type ipcCaller interface {
 	ListRuns(f ipc.RunFilters) (ipc.RunListResult, error)
 	Run(runID string) (ipc.Run, error)
 	Cancel(slug string) error
+	SystemLog(limit int) ([]ipc.DaemonLog, error)
 	PauseScheduler() error
 	ResumeScheduler() error
+	ReconcileSchedules() error
 	Stats() (ipc.Stats, error)
 	GetSettings() (ipc.SettingsDTO, error)
 	UpdateSettings(s ipc.SettingsDTO) error
@@ -109,9 +111,10 @@ type RunListResultDTO = ipc.RunListResult
 
 // App is the Wails-bound struct. Its exported methods become JS bindings.
 type App struct {
-	name    string
-	version string
-	ctx     context.Context
+	name      string
+	version   string
+	ctx       context.Context
+	statePath string // window geometry file; empty disables persistence
 
 	mu      sync.Mutex
 	cfg     *config.Config
@@ -133,6 +136,52 @@ func NewApp(name, version string) *App {
 // Startup is called by Wails when the window starts up.
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	a.restoreWindow()
+}
+
+// SetWindowStatePath points the app at the window-geometry file used to
+// restore the last size/position on launch. Must be called before wails.Run;
+// empty disables persistence.
+func (a *App) SetWindowStatePath(path string) {
+	a.statePath = path
+}
+
+// restoreWindow re-applies the saved window geometry. Wails v2 options
+// cannot express an X/Y position, so the position (and the maximized flag)
+// are restored here; the size was already applied through options.App.
+func (a *App) restoreWindow() {
+	if a.ctx == nil || a.statePath == "" {
+		return
+	}
+	ws, err := LoadWindowState(a.statePath)
+	if err != nil {
+		return
+	}
+	if offScreen(ws.X, ws.Y, ws.Width, ws.Height) {
+		wruntime.WindowCenter(a.ctx)
+	} else {
+		wruntime.WindowSetPosition(a.ctx, ws.X, ws.Y)
+	}
+	if ws.Maximized {
+		wruntime.WindowMaximise(a.ctx)
+	}
+}
+
+// BeforeClose is called by Wails before the window closes. Returning false
+// lets the close proceed after the geometry snapshot is written.
+func (a *App) BeforeClose(ctx context.Context) bool {
+	if a.statePath != "" {
+		width, height := wruntime.WindowGetSize(ctx)
+		x, y := wruntime.WindowGetPosition(ctx)
+		_ = SaveWindowState(a.statePath, WindowState{
+			X:         x,
+			Y:         y,
+			Width:     width,
+			Height:    height,
+			Maximized: wruntime.WindowIsMaximised(ctx),
+		})
+	}
+	return false
 }
 
 // AppInfo returns static information about the running application.
@@ -573,6 +622,25 @@ func (a *App) CancelRun(slug string) error {
 	return nil
 }
 
+// ---- Daemon event log (Logs → System view).
+
+// DaemonLogDTO is the Wails bridge view of a daemon log entry.
+type DaemonLogDTO = ipc.DaemonLog
+
+// ListSystemLog returns the daemon's own event log (scheduler reconcile,
+// lifecycle, wake detection), newest first.
+func (a *App) ListSystemLog(limit int) ([]DaemonLogDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return nil, err
+	}
+	logs, err := client.SystemLog(limit)
+	if err != nil {
+		return nil, wrapIPCError(err)
+	}
+	return logs, nil
+}
+
 func (a *App) ListTasksForSchedules() ([]TaskSummaryDTO, error) {
 	return a.ListTasks()
 }
@@ -652,6 +720,17 @@ func (a *App) ResumeScheduler() error {
 		return err
 	}
 	return wrapIPCError(client.ResumeScheduler())
+}
+
+// ReconcileSchedules asks the daemon to fire any missed recurring schedule
+// runs immediately. The daemon's periodic watchdog does the same every 10
+// minutes; this is the manual override.
+func (a *App) ReconcileSchedules() error {
+	client, err := a.cfgClient()
+	if err != nil {
+		return err
+	}
+	return wrapIPCError(client.ReconcileSchedules())
 }
 
 // Stats returns dashboard statistics (SPEC-16 §1).

@@ -20,7 +20,10 @@ import {
   getSettings,
   updateSettings,
   previewSound,
+  pauseScheduler,
+  resumeScheduler,
 } from '../lib/api'
+import {useHealth} from '../lib/query'
 import {useTheme, LIGHT_VARIANTS, DARK_VARIANTS} from '../lib/theme'
 import type {ThemeVariant} from '../lib/theme'
 import {useAccent, ACCENT_COLORS, ACCENT_PRESETS} from '../lib/accent'
@@ -38,7 +41,7 @@ const SETTINGS_TABS: Array<{id: SettingsTab; label: string; detail: string}> = [
   {id: 'appearance', label: 'Appearance', detail: 'Theme, accent, and motion'},
   {id: 'data', label: 'Data', detail: 'Local storage locations'},
   {id: 'startup', label: 'Startup', detail: 'Launch with your system'},
-  {id: 'reliability', label: 'Reliability', detail: 'Daemon watchdog'},
+  {id: 'reliability', label: 'Reliability', detail: 'Scheduler and watchdog'},
   {id: 'retention', label: 'Retention', detail: 'Run history lifetime'},
   {id: 'notifications', label: 'Notifications', detail: 'Sounds and previews'},
   {id: 'secrets', label: 'Secrets', detail: 'Encrypted credentials'},
@@ -291,7 +294,31 @@ function StartupSection() {
 function ReliabilitySection() {
   const qc = useQueryClient()
   const status = useQuery({queryKey: ['watchdog'], queryFn: watchdogEnabled})
+  const settings = useQuery({queryKey: SETTINGS_KEY, queryFn: getSettings})
+  const health = useHealth()
+  const paused = health.data?.scheduler === 'paused'
+  const [interval, setInterval] = useState(2)
+  const [wdMins, setWdMins] = useState(5)
+  const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const initRef = useRef(false)
+
+  useEffect(() => {
+    if (settings.data && !initRef.current) {
+      initRef.current = true
+      setInterval(settings.data.reconcile_interval_min ?? 2)
+      setWdMins(settings.data.watchdog_interval_min ?? 5)
+    }
+  }, [settings.data])
+
+  const pauseToggle = useMutation({
+    mutationFn: (pause: boolean) => (pause ? pauseScheduler() : resumeScheduler()),
+    onSuccess: () => {
+      setError(null)
+      void qc.invalidateQueries({queryKey: ['health']})
+    },
+    onError: (err) => setError(apiErrorDetails(err).join('; ')),
+  })
 
   const toggle = useMutation({
     mutationFn: (on: boolean) => watchdogSet(on),
@@ -302,8 +329,29 @@ function ReliabilitySection() {
     onError: (err) => setError(apiErrorDetails(err).join('; ')),
   })
 
+  const saveInterval = useMutation({
+    mutationFn: (mins: {reconcile: number; watchdog: number}) => updateSettings({
+      log_retention_days: settings.data?.log_retention_days ?? 90,
+      sound_success: settings.data?.sound_success ?? 'system',
+      sound_failure: settings.data?.sound_failure ?? 'system',
+      sound_timeout: settings.data?.sound_timeout ?? 'system',
+      reconcile_interval_min: mins.reconcile,
+      watchdog_interval_min: mins.watchdog,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({queryKey: SETTINGS_KEY})
+      qc.invalidateQueries({queryKey: ['watchdog']})
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1500)
+    },
+    onError: (err) => setError(apiErrorDetails(err).join('; ')),
+  })
+
   const installed = status.data?.installed ?? false
-  const interval = status.data?.intervalMinutes ?? 5
+  const wdInterval = status.data?.intervalMinutes ?? 5
+  const reconcileCurrent = settings.data?.reconcile_interval_min ?? 2
+  const watchdogCurrent = settings.data?.watchdog_interval_min ?? 5
+  const dirty = interval !== reconcileCurrent || wdMins !== watchdogCurrent
 
   return (
     <section className="space-y-3">
@@ -311,22 +359,91 @@ function ReliabilitySection() {
         Reliability
       </h3>
       <ToggleRow
+        label="Pause scheduler"
+        hint={
+          paused
+            ? 'Paused — schedules are skipped; resuming catches up missed runs'
+            : 'Temporarily skip all scheduled runs; missed runs catch up on resume'
+        }
+        checked={paused}
+        disabled={health.isLoading || pauseToggle.isPending}
+        onChange={(pause) => { setError(null); pauseToggle.mutate(pause) }}
+      />
+      <ToggleRow
         label="Watchdog guard"
         hint={
           installed
-            ? `Checks every ${interval}m — restarts the daemon if it goes down`
+            ? `Checks every ${wdInterval}m — restarts the daemon if it goes down`
             : 'Periodically checks the daemon and restarts it if it goes down'
         }
         checked={installed}
         disabled={status.isLoading || toggle.isPending}
         onChange={(on) => { setError(null); toggle.mutate(on) }}
       />
+      <div className="rounded-xl border border-zinc-200/80 bg-white/60 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+        <div className="flex flex-wrap items-center gap-3">
+          <Field label="Missed-run reconciliation">
+            <SelectField
+              aria-label="Missed-run reconciliation interval"
+              value={String(interval)}
+              onChange={(v) => setInterval(parseInt(v, 10))}
+              className="w-40"
+              items={RECONCILE_OPTIONS}
+            />
+          </Field>
+          {installed && (
+            <Field label="Watchdog check">
+              <SelectField
+                aria-label="Watchdog check interval"
+                value={String(wdMins)}
+                onChange={(v) => setWdMins(parseInt(v, 10))}
+                className="w-40"
+                items={WATCHDOG_OPTIONS}
+              />
+            </Field>
+          )}
+          <button
+            type="button"
+            disabled={saveInterval.isPending || !dirty}
+            onClick={() => saveInterval.mutate({reconcile: interval, watchdog: wdMins})}
+            className={`mt-5 ml-auto rounded-full px-3 py-1 text-xs font-medium shadow-sm transition-opacity ${
+              saved
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                : 'bg-accent text-accent-contrast hover:opacity-90'
+            } disabled:opacity-50`}
+          >
+            {saved ? 'Saved' : 'Save'}
+          </button>
+        </div>
+        <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+          How often the daemon checks for missed recurring schedule activations
+          (e.g. after the PC was off or sleeping). The watchdog cadence
+          recreates the OS task so crashes are caught sooner.
+        </p>
+      </div>
       {error && (
         <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
       )}
     </section>
   )
 }
+
+const RECONCILE_OPTIONS = [
+  {id: '2', label: 'Every 2 minutes'},
+  {id: '5', label: 'Every 5 minutes'},
+  {id: '8', label: 'Every 8 minutes'},
+  {id: '10', label: 'Every 10 minutes'},
+]
+
+const WATCHDOG_OPTIONS = [
+  {id: '1', label: 'Every minute'},
+  {id: '2', label: 'Every 2 minutes'},
+  {id: '5', label: 'Every 5 minutes'},
+  {id: '10', label: 'Every 10 minutes'},
+  {id: '15', label: 'Every 15 minutes'},
+  {id: '30', label: 'Every 30 minutes'},
+  {id: '60', label: 'Every hour'},
+]
 
 function ToggleRow({
   label,
@@ -391,6 +508,8 @@ function RetentionSection() {
       sound_success: settings.data?.sound_success ?? 'system',
       sound_failure: settings.data?.sound_failure ?? 'system',
       sound_timeout: settings.data?.sound_timeout ?? 'system',
+      reconcile_interval_min: settings.data?.reconcile_interval_min ?? 2,
+      watchdog_interval_min: settings.data?.watchdog_interval_min ?? 5,
     }),
     onSuccess: () => {
       qc.invalidateQueries({queryKey: SETTINGS_KEY})
@@ -465,6 +584,8 @@ function NotificationSection() {
     mutationFn: (s: {sound_success: string; sound_failure: string; sound_timeout: string}) =>
       updateSettings({
         log_retention_days: settings.data?.log_retention_days ?? 90,
+        reconcile_interval_min: settings.data?.reconcile_interval_min ?? 2,
+        watchdog_interval_min: settings.data?.watchdog_interval_min ?? 5,
         ...s,
       }),
     onSuccess: () => {

@@ -1,7 +1,7 @@
 import {useState, useMemo} from 'react'
-import {Modal} from '@heroui/react'
+import {Modal, Toast} from '@heroui/react'
 import {apiErrorDetails} from '../lib/api'
-import {useSchedules, useCreateSchedule, useDeleteSchedule, useToggleSchedule} from '../lib/schedules'
+import {useSchedules, useCreateSchedule, useDeleteSchedule, useToggleSchedule, useReconcileSchedules} from '../lib/schedules'
 import {useTasks} from '../lib/tasks'
 import {ScheduleTable} from '../components/schedules/ScheduleTable'
 import {ScheduleForm, emptyScheduleDraft, draftToCron, validateScheduleDraft} from '../components/schedules/ScheduleForm'
@@ -20,9 +20,9 @@ export function SchedulesPage() {
   const create = useCreateSchedule()
   const del = useDeleteSchedule()
   const toggle = useToggleSchedule()
+  const reconcile = useReconcileSchedules()
   const [showForm, setShowForm] = useState(false)
   const [draft, setDraft] = useState(emptyScheduleDraft())
-  const [toast, setToast] = useState<string | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const [search, setSearch] = useState('')
 
@@ -54,8 +54,7 @@ export function SchedulesPage() {
           setShowForm(false)
           setDraft(emptyScheduleDraft())
           setErrors([])
-          setToast('Schedule created')
-          setTimeout(() => setToast(null), 4000)
+          Toast.toast.success('Schedule created')
         },
         onError: (err) => {
           setErrors(apiErrorDetails(err))
@@ -82,6 +81,29 @@ export function SchedulesPage() {
               className="w-44 rounded-full border border-zinc-200/80 bg-white/80 py-1.5 pl-8 pr-3 text-sm text-zinc-700 outline-none transition-colors placeholder:text-zinc-400 focus:border-accent focus:ring-1 focus:ring-accent-ring dark:border-zinc-700/60 dark:bg-zinc-900/70 dark:text-zinc-200 dark:placeholder:text-zinc-500"
             />
           </div>
+          <button
+            type="button"
+            onClick={() =>
+              reconcile.mutate(undefined, {
+                onSuccess: () => {
+                  Toast.toast.success('Reconcile started', {
+                    description: 'Checking for missed recurring schedule activations',
+                  })
+                },
+                onError: (err) => {
+                  Toast.toast.danger('Reconcile failed', {
+                    description: apiErrorDetails(err)[0] ?? 'Unknown error',
+                  })
+                },
+              })
+            }
+            disabled={reconcile.isPending}
+            className={pillBtn}
+            title="Fire any missed recurring schedule runs (PC was off, sleep, etc.)"
+            data-testid="schedules-reconcile"
+          >
+            {reconcile.isPending ? 'Reconciling…' : 'Reconcile now'}
+          </button>
           <button
             type="button"
             onClick={() => setShowForm(true)}
@@ -156,16 +178,6 @@ export function SchedulesPage() {
             </button>
           </Modal.Footer>
         </AppDialog>
-      )}
-
-      {toast && (
-        <div
-          role="status"
-          data-testid="toast"
-          className="fixed bottom-5 right-5 rounded-xl border border-zinc-200 bg-white/90 px-4 py-2.5 text-sm shadow-lg backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/90"
-        >
-          {toast}
-        </div>
       )}
     </div>
   )

@@ -27,6 +27,9 @@ type APIClient interface {
 	Disable(slug string) error
 	TaskRuns(slug string, limit int) ([]ipc.Run, error)
 	Run(runID string) (ipc.Run, error)
+	ListRuns(filters ipc.RunFilters) (ipc.RunListResult, error)
+	ListSchedules() ([]ipc.Schedule, error)
+	ReconcileSchedules() error
 }
 
 // App wires one command invocation. stdout/stderr are injectable for tests.
@@ -115,15 +118,29 @@ func (a *App) reportError(err error) {
 	} else if errors.Is(err, ipc.ErrDaemonNotRunning) {
 		code = "daemon_not_running"
 		message = "heka daemon is not running."
+	} else if errors.Is(err, ipc.ErrDaemonAccessDenied) {
+		code = "daemon_access_denied"
+		message = "heka daemon denied access."
+	} else if errors.Is(err, ipc.ErrDaemonUnreachable) {
+		code = "daemon_unreachable"
+		message = "heka daemon did not respond."
 	}
 	if a.json {
 		a.printJSON(map[string]any{"error": map[string]string{"code": code, "message": message}})
 		return
 	}
 	fmt.Fprintln(a.stderr, "heka:", message)
-	if code == "daemon_not_running" {
+	switch code {
+	case "daemon_not_running":
 		fmt.Fprintln(a.stderr, "Start the daemon:")
 		fmt.Fprintln(a.stderr, "  heka daemon start")
+	case "daemon_access_denied":
+		fmt.Fprintln(a.stderr, "The daemon was likely started from an elevated (admin) session,")
+		fmt.Fprintln(a.stderr, "which locks out non-elevated clients. Restart it from a normal one:")
+		fmt.Fprintln(a.stderr, "  heka daemon stop    (in the elevated shell, or via the tray)")
+		fmt.Fprintln(a.stderr, "  heka daemon start")
+	case "daemon_unreachable":
+		fmt.Fprintln(a.stderr, "The daemon is busy or starting; try again in a moment.")
 	}
 }
 

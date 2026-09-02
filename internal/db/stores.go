@@ -18,6 +18,7 @@ func (d *DB) Schedules() *ScheduleStore { return &ScheduleStore{db: d} }
 func (d *DB) Runs() *RunStore           { return &RunStore{db: d} }
 func (d *DB) Secrets() *SecretStore     { return &SecretStore{db: d} }
 func (d *DB) KV() *KVStore              { return &KVStore{db: d} }
+func (d *DB) Logs() *LogStore           { return &LogStore{db: d} }
 
 // Task is the index row derived from a canonical task YAML (SPEC-04 §5).
 // The YAML file remains the source of truth; this is a cached index.
@@ -813,6 +814,62 @@ func (s *KVStore) Get(key string) (string, bool, error) {
 
 func (s *KVStore) Delete(key string) error {
 	_, err := s.db.sql.Exec(`DELETE FROM kv WHERE key = ?`, key)
+	return err
+}
+
+// DaemonLog is one entry of the daemon's own event log (scheduler reconcile,
+// lifecycle, wake detection). Task output lives in runs, not here.
+type DaemonLog struct {
+	ID      int64  `json:"id"`
+	TS      string `json:"ts"`
+	Level   string `json:"level"` // info | warn | error
+	Event   string `json:"event"` // reconcile | daemon | scheduler
+	Message string `json:"message"`
+}
+
+// LogStore is the daemon event log (migration 0002).
+type LogStore struct {
+	db *DB
+}
+
+// Add appends one entry. Best-effort callers may ignore the error; the log
+// must never break the operation it is reporting.
+func (s *LogStore) Add(level, event, message string) error {
+	_, err := s.db.sql.Exec(
+		`INSERT INTO daemon_log (ts, level, event, message) VALUES (?, ?, ?, ?)`,
+		Now(), level, event, message)
+	return err
+}
+
+// List returns the newest entries, capped at limit (≤ 500).
+func (s *LogStore) List(limit int) ([]DaemonLog, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	rows, err := s.db.sql.Query(
+		`SELECT id, ts, level, event, message FROM daemon_log ORDER BY id DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DaemonLog
+	for rows.Next() {
+		var l DaemonLog
+		if err := rows.Scan(&l.ID, &l.TS, &l.Level, &l.Event, &l.Message); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
+// Prune deletes entries older than the cutoff (same retention as runs).
+func (s *LogStore) Prune(before time.Time) error {
+	_, err := s.db.sql.Exec(`DELETE FROM daemon_log WHERE ts < ?`,
+		before.UTC().Format(time.RFC3339))
 	return err
 }
 

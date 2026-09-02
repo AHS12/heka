@@ -198,3 +198,28 @@ func writeScheduleError(w http.ResponseWriter, err error, id string) {
 	}
 	writeError(w, http.StatusInternalServerError, "internal", err.Error())
 }
+
+// handleSchedulesReconcile fires any schedule runs missed while the daemon
+// was up but idle (PC sleep, background, clock drift). The periodic watchdog
+// in the daemon calls this automatically; this endpoint is the manual
+// override used by `heka schedules reconcile` and the GUI. Reconciling a
+// paused scheduler would violate the pause, so it is rejected explicitly.
+func (s *Server) handleSchedulesReconcile(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, "POST") {
+		return
+	}
+	if s.deps.Reconcile == nil {
+		writeError(w, http.StatusServiceUnavailable, "unavailable", "reconcile not wired")
+		return
+	}
+	if s.deps.IsPaused != nil && s.deps.IsPaused() {
+		writeError(w, http.StatusConflict, "scheduler_paused",
+			"scheduler is paused — resume it to reconcile missed runs")
+		return
+	}
+	if err := s.deps.Reconcile(); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	respondOK(w)
+}

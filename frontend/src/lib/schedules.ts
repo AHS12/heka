@@ -67,3 +67,14 @@ export function useToggleSchedule() {
     onSettled: () => void qc.invalidateQueries({queryKey: SCHEDULES_KEY}),
   })
 }
+
+export function useReconcileSchedules() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.reconcileSchedules(),
+    onSuccess: () => {
+      qc.invalidateQueries({queryKey: SCHEDULES_KEY})
+      qc.invalidateQueries({queryKey: ['runs']})
+    },
+  })
+}

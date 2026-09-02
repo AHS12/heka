@@ -26,9 +26,14 @@ import (
 )
 
 const (
-	heartbeatInterval = 5 * time.Second
-	syncInterval      = 2 * time.Second
-	shutdownQuietSecs = 10 // max wait for in-flight groups at shutdown
+	heartbeatInterval    = 5 * time.Second
+	syncInterval         = 2 * time.Second
+	defaultReconcileMins = 2 // missed-run watchdog cadence (fast catch-up)
+	minReconcileMins     = 2
+	maxReconcileMins     = 10
+	minWatchdogMins      = 1 // OS watchdog task cadence bounds
+	maxWatchdogMins      = 60
+	shutdownQuietSecs    = 10 // max wait for in-flight groups at shutdown
 )
 
 // Daemon wires the daemon's subsystems together.
@@ -54,10 +59,12 @@ func (d *Daemon) Pause() {
 	_ = d.db.KV().Set("scheduler_paused", "true")
 }
 
-// Resume unfreezes the scheduler.
+// Resume unfreezes the scheduler and immediately catches up anything missed
+// while paused, instead of waiting for the next periodic reconcile tick.
 func (d *Daemon) Resume() {
 	d.scheduler.Resume()
 	_ = d.db.KV().Delete("scheduler_paused")
+	go d.reconcile("resume")
 }
 
 // SchedulerPaused reports whether the scheduler is currently paused.
@@ -126,22 +133,33 @@ func RunTray(cfg config.Config, version string) error {
 	}
 	defer database.Close()
 
-	d, handler, err := startCore(cfg, version, database)
-	if err != nil {
-		return err
-	}
-
-	// Bind IPC before starting the tray — a failure here (e.g. another
-	// daemon holding the pipe) is a clean exit, not a panic.
+	// Bind IPC before starting the core (same order as Run): a losing daemon
+	// at login (startup entry racing the first watchdog tick) then exits
+	// without ever running its scheduler. The successful bind doubles as the
+	// singleton lock (SPEC-06 §1).
 	ln, err := ipc.Listen(cfg)
 	if err != nil {
 		return fmt.Errorf("bind IPC endpoint: %w", err)
 	}
 	defer ln.Close()
 
+	d, handler, err := startCore(cfg, version, database)
+	if err != nil {
+		return err
+	}
+
 	// IPC server in background (tray is the main-thread owner).
 	server := &http.Server{Handler: handler}
 	go func() { _ = server.Serve(ln) }()
+
+	// The tray owns the main thread and nothing else watches d.shutdown —
+	// without this, `heka daemon stop` (IPC shutdown) is silently ignored by
+	// tray daemons. Relay the signal into a tray quit; RunTray then returns
+	// and the graceful shutdown below completes.
+	go func() {
+		<-d.shutdown
+		osapp.QuitTray()
+	}()
 
 	// Tray blocks the main thread; core is already running in goroutines.
 	osapp.RunTray(osapp.TrayDeps{
@@ -219,25 +237,25 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 	// Restore persisted pause state (SPEC-15 §2).
 	if v, _, _ := database.KV().Get("scheduler_paused"); v == "true" {
 		d.scheduler.Pause()
+		d.logf("info", "scheduler", "scheduler restored as paused; resuming reconciles the backlog")
 	}
 	d.scheduler.Start(d.execCtx)
-	go func() {
-		if err := d.scheduler.Reconcile(); err != nil {
-			fmt.Fprintf(os.Stderr, "heka: reconcile missed runs: %v\n", err)
-		}
-	}()
+	go d.reconcile("startup")
 
 	d.noteStartup()
 	go d.heartbeatLoop()
 	go d.syncLoop()
 	go d.retentionLoop()
+	go d.reconcileLoop()
 
 	handler := ipc.NewServer(ipc.Deps{
 		Health:        d.health,
 		Tasks:         database.Tasks(),
 		Runs:          database.Runs(),
 		Schedules:     database.Schedules(),
+		Logs:          database.Logs(),
 		SyncSchedules: d.scheduler.Sync,
+		Reconcile: func() error { return d.scheduler.ReconcileWithReason("manual") },
 		Secrets:       database.Secrets(),
 		TaskFiles:     taskFS{dir: cfg.TasksDir},
 		SyncTasks:     func() error { d.syncTasks(); return nil },
@@ -256,27 +274,64 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 
 // noteStartup records daemon identity in kv (SPEC-06 §3) and reconciles OS
 // registration (watchdog + startup) with the currently running binary so an
-// upgrade never leaves entries pointing at a deleted install path.
+// upgrade never leaves entries pointing at a deleted install path. The
+// watchdog task's cadence is also reconciled with the configured interval.
 func (d *Daemon) noteStartup() {
 	p := strconv.Itoa(os.Getpid())
 	_ = d.db.KV().Set("daemon_pid", p)
 	_ = d.db.KV().Set("daemon_version", d.version)
 	_ = d.db.KV().Set("heartbeat", db.Now())
+	d.logf("info", "daemon", "daemon started (version %s, pid %s)", d.version, p)
 	osapp.RepairEntries()
+	if err := d.applyWatchdogTask(); err != nil {
+		fmt.Fprintf(os.Stderr, "heka: reconcile watchdog interval: %v\n", err)
+	}
 }
 
-// heartbeatLoop keeps the heartbeat fresh while running.
+// logf writes a daemon event to the daemon log table (surfaced in the GUI
+// Logs → System view) and stderr. Best-effort: logging must never break the
+// operation it is reporting.
+func (d *Daemon) logf(level, event, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	fmt.Fprintf(os.Stderr, "heka: %s\n", msg)
+	_ = d.db.Logs().Add(level, event, msg)
+}
+
+// reconcile runs one missed-run pass with the caller's reason recorded in the
+// daemon log ("startup", "wake", "resume", "manual", "periodic").
+func (d *Daemon) reconcile(reason string) {
+	if err := d.scheduler.ReconcileWithReason(reason); err != nil {
+		d.logf("warn", "reconcile", "reconcile (%s) failed: %v", reason, err)
+	}
+}
+
+// heartbeatLoop keeps the heartbeat fresh while running. A gap between ticks
+// that greatly exceeds the tick interval is the signature of host sleep or
+// hibernate — cron ticks die with the process's timers, so on wake we
+// reconcile immediately instead of waiting for the next periodic pass.
 func (d *Daemon) heartbeatLoop() {
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
+	last := time.Now()
 	for {
 		select {
-		case <-ticker.C:
+		case now := <-ticker.C:
+			if overslept(last, now) {
+				d.logf("info", "daemon", "wake from sleep detected — reconciling missed runs")
+				d.reconcile("wake")
+			}
+			last = now
 			_ = d.db.KV().Set("heartbeat", db.Now())
 		case <-d.shutdown:
 			return
 		}
 	}
+}
+
+// overslept reports whether the gap between consecutive heartbeat ticks
+// greatly exceeds the interval (host slept between ticks).
+func overslept(last, now time.Time) bool {
+	return now.Sub(last) > 2*heartbeatInterval
 }
 
 // syncLoop polls the tasks directory into the index (SPEC-06 §5).
@@ -311,10 +366,105 @@ func (d *Daemon) retentionLoop() {
 	}
 }
 
+// reconcileLoop periodically catches missed schedule activations while the
+// daemon was up but idle (PC asleep, app backgrounded, clock drift). The cron
+// engine ticks to wall-clock seconds; if the host was off (laptop sleep, sleep
+// + hibernate), nothing fires until the next cron time after wake. This loop
+// runs Reconcile on a cadence read from KV each tick so the user can tune it
+// from the Reliability section without a daemon restart. Window accounting in
+// Reconcile keeps the watchdog from double-firing: once a window closes, the
+// next loop iteration finds nothing to do until the daemon itself was down.
+func (d *Daemon) reconcileLoop() {
+	current := d.reconcileInterval()
+	ticker := time.NewTicker(current)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if d.scheduler.IsPaused() {
+				continue
+			}
+			if err := d.scheduler.Reconcile(); err != nil {
+				fmt.Fprintf(os.Stderr, "heka: reconcile missed runs: %v\n", err)
+			}
+			// Re-read interval: a KV change shrinks/extends the next tick.
+			if next := d.reconcileInterval(); next != current {
+				current = next
+				ticker.Reset(current)
+			}
+		case <-d.shutdown:
+			return
+		}
+	}
+}
+
+// reconcileInterval reads the user-configured missed-run watchdog cadence.
+// Clamped to [minReconcileMins, maxReconcileMins] minutes so a bad KV value
+// can't make the daemon hot-loop or freeze changes.
+func (d *Daemon) reconcileInterval() time.Duration {
+	mins := defaultReconcileMins
+	if v, ok, _ := d.db.KV().Get("reconcile_interval_min"); ok && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			mins = n
+		}
+	}
+	return time.Duration(clampInt(mins, minReconcileMins, maxReconcileMins)) * time.Minute
+}
+
+// watchdogInterval reads the user-configured OS watchdog task cadence
+// (minutes), clamped to [minWatchdogMins, maxWatchdogMins]. The default is
+// osapp.DefaultWatchdogInterval.
+func (d *Daemon) watchdogInterval() int {
+	mins := int(osapp.DefaultWatchdogInterval / time.Minute)
+	if v, ok, _ := d.db.KV().Get("watchdog_interval_min"); ok && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			mins = n
+		}
+	}
+	return clampInt(mins, minWatchdogMins, maxWatchdogMins)
+}
+
+// applyWatchdogTask reconciles the OS watchdog scheduled task with the
+// configured interval — used after a settings change and at daemon startup.
+// No-op when the watchdog isn't installed (the installer already reports
+// permission problems with actionable text).
+func (d *Daemon) applyWatchdogTask() error {
+	installer := osapp.NewInstaller()
+	installed, interval, err := installer.Status()
+	if err != nil || !installed {
+		return nil
+	}
+	if int(interval.Minutes()) == d.watchdogInterval() {
+		return nil
+	}
+	exe, err := osapp.GUIExecutable()
+	if err != nil {
+		return nil
+	}
+	if err := installer.Install(time.Duration(d.watchdogInterval())*time.Minute, exe); err != nil {
+		return fmt.Errorf("watchdog task not updated: %w", err)
+	}
+	return nil
+}
+
+// clampInt confines v to [lo, hi].
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
 func (d *Daemon) prune() {
 	cutoff := time.Now().UTC().AddDate(0, 0, -d.cfg.LogRetentionDays)
 	if err := d.db.Runs().Prune(cutoff); err != nil {
 		fmt.Fprintf(os.Stderr, "heka: prune runs: %v\n", err)
+	}
+	if err := d.db.Logs().Prune(cutoff); err != nil {
+		fmt.Fprintf(os.Stderr, "heka: prune daemon log: %v\n", err)
 	}
 }
 
@@ -338,16 +488,32 @@ func (d *Daemon) getSettings() ipc.SettingsDTO {
 		soundTimeout = "system"
 	}
 	return ipc.SettingsDTO{
-		LogRetentionDays: days,
-		SoundSuccess:     soundSuccess,
-		SoundFailure:     soundFailure,
-		SoundTimeout:     soundTimeout,
+		LogRetentionDays:     days,
+		SoundSuccess:         soundSuccess,
+		SoundFailure:         soundFailure,
+		SoundTimeout:         soundTimeout,
+		ReconcileIntervalMin: int(d.reconcileInterval() / time.Minute),
+		WatchdogIntervalMin:  d.watchdogInterval(),
 	}
 }
 
 func (d *Daemon) updateSettings(s ipc.SettingsDTO) error {
 	if s.LogRetentionDays <= 0 {
 		return fmt.Errorf("log_retention_days must be > 0")
+	}
+	if s.ReconcileIntervalMin < minReconcileMins || s.ReconcileIntervalMin > maxReconcileMins {
+		return fmt.Errorf(
+			"reconcile_interval_min must be between %d and %d",
+			minReconcileMins, maxReconcileMins,
+		)
+	}
+	// WatchdogIntervalMin 0 = "not provided" (older clients) — keep current.
+	if s.WatchdogIntervalMin != 0 &&
+		(s.WatchdogIntervalMin < minWatchdogMins || s.WatchdogIntervalMin > maxWatchdogMins) {
+		return fmt.Errorf(
+			"watchdog_interval_min must be between %d and %d",
+			minWatchdogMins, maxWatchdogMins,
+		)
 	}
 	if err := notify.ValidatePreset(s.SoundSuccess); err != nil {
 		return fmt.Errorf("sound_success: %w", err)
@@ -370,8 +536,18 @@ func (d *Daemon) updateSettings(s ipc.SettingsDTO) error {
 	if err := d.db.KV().Set("sound_timeout", s.SoundTimeout); err != nil {
 		return err
 	}
+	if err := d.db.KV().Set("reconcile_interval_min", strconv.Itoa(s.ReconcileIntervalMin)); err != nil {
+		return err
+	}
+	if s.WatchdogIntervalMin != 0 {
+		if err := d.db.KV().Set("watchdog_interval_min", strconv.Itoa(s.WatchdogIntervalMin)); err != nil {
+			return err
+		}
+	}
 	d.cfg.LogRetentionDays = s.LogRetentionDays
-	return nil
+	// Persisted first; a failed task update surfaces as the settings error,
+	// and the next daemon start retries the reconciliation.
+	return d.applyWatchdogTask()
 }
 
 // health assembles the Health snapshot the IPC layer serves.

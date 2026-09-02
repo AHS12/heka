@@ -33,6 +33,13 @@ const (
 	maxRecentItems = 5
 )
 
+// QuitTray unblocks RunTray when the daemon is asked to shut down over IPC
+// (`heka daemon stop`) — equivalent to the user clicking Quit. Safe to call
+// when no tray is running.
+func QuitTray() {
+	systray.Quit()
+}
+
 // RunTray starts the system tray lifecycle on the main thread (SPEC-15 §1).
 // This call blocks until the user clicks Quit.
 func RunTray(deps TrayDeps) {

@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"heka/internal/daemon"
-	"heka/internal/ipc"
 	"heka/internal/osapp"
 )
 
@@ -60,7 +59,10 @@ func (a *App) daemonCmd() *cobra.Command {
 			RunE: func(cmd *cobra.Command, args []string) error {
 				h, err := daemon.Status(a.cfg)
 				if err != nil {
-					return ipc.ErrDaemonNotRunning
+					// Pass the classified transport error through so
+					// reportError can print the right hint (not-running vs
+					// access-denied vs unreachable).
+					return err
 				}
 				if a.json {
 					a.printJSON(map[string]any{"daemon": "running", "health": h})

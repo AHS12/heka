@@ -29,7 +29,12 @@ import (
 
 const appName = "Heka"
 
-var appVersion = "0.6.9"
+const (
+	defaultWinWidth  = 1024
+	defaultWinHeight = 768
+)
+
+var appVersion = "0.7.2"
 
 //go:embed all:frontend/dist
 var assets embed.FS
@@ -83,17 +88,30 @@ func runGUI() {
 		return
 	}
 	defer app.UnlockGUI()
+
+	// Restore the last window size up front (no resize flicker); position
+	// and the maximized flag are re-applied in App.Startup because Wails v2
+	// options carry no X/Y.
+	width, height := defaultWinWidth, defaultWinHeight
 	a := app.NewApp(appName, appVersion)
+	if cfg, err := config.LoadDefault(); err == nil {
+		statePath := app.WindowStatePath(cfg.DataDir)
+		a.SetWindowStatePath(statePath)
+		if ws, err := app.LoadWindowState(statePath); err == nil {
+			width, height = ws.Width, ws.Height
+		}
+	}
 	err := wails.Run(&options.App{
 		Title:     appName,
-		Width:     1024,
-		Height:    768,
-		MinWidth:  800,
-		MinHeight: 560,
+		Width:     width,
+		Height:    height,
+		MinWidth:  app.MinWindowWidth,
+		MinHeight: app.MinWindowHeight,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		OnStartup: a.Startup,
+		OnStartup:     a.Startup,
+		OnBeforeClose: a.BeforeClose,
 		Bind: []interface{}{
 			a,
 		},

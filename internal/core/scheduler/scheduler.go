@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sync"
@@ -55,6 +54,8 @@ type Scheduler struct {
 	recs    map[string]record
 	ctx     context.Context
 	paused  bool
+
+	reconcileMu sync.Mutex // serializes Reconcile callers (startup/loop/IPC)
 }
 
 // New builds an empty scheduler. Call Sync to load schedules, Start to begin
@@ -146,7 +147,7 @@ func (s *Scheduler) registerLocked(sch db.Schedule) {
 	case "recurring":
 		id, err := s.cron.AddFunc(sch.Cron, func() { s.fire(sch.ID) })
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "heka: schedule %s: invalid cron: %v\n", sch.Slug, err)
+			s.logf("warn", "scheduler", "schedule %q: invalid cron: %v", sch.Slug, err)
 			return
 		}
 		s.recs[sch.ID] = record{entryID: id}
@@ -221,11 +222,13 @@ func (s *Scheduler) fireOnetime(id string) {
 func (s *Scheduler) dispatch(sch db.Schedule) {
 	row, err := s.db.Tasks().Get(sch.TaskSlug)
 	if err != nil {
+		s.logf("warn", "scheduler", "schedule %q: task %q not found, cannot fire", sch.Slug, sch.TaskSlug)
 		s.setLast(sch.ID, "error", "task not found")
 		return
 	}
 	var t task.Task
 	if err := json.Unmarshal([]byte(row.ParsedJSON), &t); err != nil {
+		s.logf("warn", "scheduler", "schedule %q: task %q definition corrupt: %v", sch.Slug, sch.TaskSlug, err)
 		s.setLast(sch.ID, "error", "task definition corrupt")
 		return
 	}
@@ -241,6 +244,7 @@ func (s *Scheduler) dispatch(sch db.Schedule) {
 		return
 	}
 	if err != nil {
+		s.logf("warn", "scheduler", "schedule %q: start failed: %v", sch.Slug, err)
 		s.setLast(sch.ID, "error", err.Error())
 		return
 	}
@@ -274,7 +278,7 @@ func (s *Scheduler) recordHalt(sch db.Schedule, status string) {
 		StartedAt: &now, FinishedAt: &now, CreatedAt: now,
 	}
 	if err := s.db.Runs().Create(row); err != nil {
-		fmt.Fprintf(os.Stderr, "heka: record %s for %s: %v\n", status, sch.Slug, err)
+		s.logf("warn", "scheduler", "record %s for %s: %v", status, sch.Slug, err)
 	}
 }
 

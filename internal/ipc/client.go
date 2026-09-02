@@ -9,15 +9,27 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"heka/internal/config"
 )
 
-// ErrDaemonNotRunning is returned by every client call when the daemon
-// endpoint cannot be reached (PRD §3.1). CLI and GUI both branch on it.
-var ErrDaemonNotRunning = errors.New("ipc: heka daemon is not running")
+// Dial-failure sentinels returned by every client call when the daemon
+// endpoint cannot be reached (PRD §3.1). CLI and GUI both branch on them.
+var (
+	// ErrDaemonNotRunning: nothing is listening on the endpoint.
+	ErrDaemonNotRunning = errors.New("ipc: heka daemon is not running")
+	// ErrDaemonAccessDenied: the endpoint exists but rejected the connection —
+	// typically a daemon started from an elevated session holding an
+	// owner-only pipe, blocking this (non-elevated) client.
+	ErrDaemonAccessDenied = errors.New("ipc: heka daemon denied access")
+	// ErrDaemonUnreachable: the endpoint exists but did not answer in time
+	// (busy or timed out) — usually transient, worth retrying.
+	ErrDaemonUnreachable = errors.New("ipc: heka daemon did not respond")
+)
 
 // Client is the typed IPC client (SPEC-07 §4). Each call opens a fresh
 // pipe/socket connection through a custom dialer.
@@ -86,8 +98,8 @@ func (c *Client) rawCT(method, path, contentType string, body any) ([]byte, erro
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		if isDialError(err) {
-			return nil, ErrDaemonNotRunning
+		if isDialFailure(err) {
+			return nil, classifyDialError(err)
 		}
 		return nil, err
 	}
@@ -112,14 +124,46 @@ func (c *Client) RawGet(path string) ([]byte, error) {
 	return c.raw("GET", path, nil)
 }
 
-// isDialError maps transport failures onto ErrDaemonNotRunning.
-func isDialError(err error) bool {
+// isDialFailure reports whether an http.Client error was caused by the
+// endpoint connection itself (as opposed to a response-phase timeout).
+func isDialFailure(err error) bool {
+	var perr *os.PathError
+	if errors.As(err, &perr) {
+		return true
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return true
+	}
 	msg := err.Error()
-	return strings.Contains(msg, "pipe") ||
-		strings.Contains(msg, "connection refused") ||
+	return strings.Contains(msg, "connection refused") ||
 		strings.Contains(msg, "no such file") ||
 		strings.Contains(msg, "connect: ") ||
-		strings.Contains(msg, "Cannot create a file when that file already exists")
+		strings.Contains(msg, "timed out")
+}
+
+// classifyDialError maps a transport failure onto a precise sentinel:
+// not running (nothing listening), access denied (someone else's daemon —
+// e.g. an elevated one), or unreachable (busy/timeout, worth retrying).
+// Unrecognized failures stay "unreachable" instead of masquerading as a
+// clean "not running".
+func classifyDialError(err error) error {
+	var perr *os.PathError
+	if errors.As(err, &perr) {
+		err = perr.Err
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		if mapped := classifyErrno(errno); mapped != nil {
+			return mapped
+		}
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "no such file") {
+		return ErrDaemonNotRunning
+	}
+	return ErrDaemonUnreachable
 }
 
 // Health hits GET /v1/health.
@@ -306,6 +350,20 @@ func (c *Client) ListRuns(f RunFilters) (RunListResult, error) {
 	return out, err
 }
 
+// SystemLog fetches the daemon's own event log (scheduler reconcile,
+// lifecycle), newest first. limit ≤ 0 uses the daemon default.
+func (c *Client) SystemLog(limit int) ([]DaemonLog, error) {
+	var out struct {
+		Logs []DaemonLog `json:"logs"`
+	}
+	path := "/v1/logs/system"
+	if limit > 0 {
+		path += "?limit=" + fmt.Sprint(limit)
+	}
+	err := c.do("GET", path, nil, &out)
+	return out.Logs, err
+}
+
 // Schedules (SPEC-09).
 func (c *Client) ListSchedules() ([]Schedule, error) {
 	var out []Schedule
@@ -392,6 +450,12 @@ func (c *Client) PauseScheduler() error {
 // ResumeScheduler resumes the scheduler (SPEC-15 §2).
 func (c *Client) ResumeScheduler() error {
 	return c.do("POST", "/v1/scheduler/resume", nil, nil)
+}
+
+// ReconcileSchedules fires any missed recurring schedule runs (manual
+// override of the periodic watchdog loop in the daemon).
+func (c *Client) ReconcileSchedules() error {
+	return c.do("POST", "/v1/schedules/reconcile", nil, nil)
 }
 
 // Stats returns the dashboard statistics (SPEC-16 §1).

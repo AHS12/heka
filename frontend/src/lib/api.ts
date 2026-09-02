@@ -34,12 +34,14 @@ import {
   ListRuns,
   GetRun,
   CancelRun,
+  ListSystemLog,
   StartupEnabled,
   StartupSet,
   WatchdogEnabled,
   WatchdogSet,
   PauseScheduler,
   ResumeScheduler,
+  ReconcileSchedules,
   Stats,
   GetSettings,
   UpdateSettings,
@@ -64,6 +66,8 @@ export type DaemonStatusValue = 'running' | 'not-running'
 /** Envelope codes the Go IPC layer can produce. */
 export type ErrorCode =
   | 'daemon_not_running'
+  | 'daemon_access_denied'
+  | 'daemon_unreachable'
   | 'not_found'
   | 'bad_request'
   | 'method_not_allowed'
@@ -87,6 +91,8 @@ export class APIError extends Error {
 
 const KNOWN_CODES: ReadonlySet<string> = new Set([
   'daemon_not_running',
+  'daemon_access_denied',
+  'daemon_unreachable',
   'not_found',
   'bad_request',
   'method_not_allowed',
@@ -359,6 +365,14 @@ export async function listSchedules(kind?: string): Promise<Schedule[]> {
   }
 }
 
+export async function reconcileSchedules(): Promise<void> {
+  try {
+    await ReconcileSchedules()
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
 export async function createSchedule(
   slug: string,
   taskSlug: string,
@@ -481,6 +495,25 @@ export async function cancelRun(slug: string): Promise<void> {
   }
 }
 
+// ---- System log (daemon event log: reconcile, lifecycle).
+
+export interface SystemLogEntry {
+  id: number
+  ts: string
+  level: string
+  event: string
+  message: string
+}
+
+export async function listSystemLogs(limit = 200): Promise<SystemLogEntry[]> {
+  try {
+    const result = (await ListSystemLog(limit)) as unknown as SystemLogEntry[] | null
+    return result ?? []
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
 // ---- Startup / Watchdog / Scheduler control (SPEC-15).
 
 export async function startupEnabled(): Promise<boolean> {
@@ -595,6 +628,9 @@ export interface Settings {
   sound_success: string
   sound_failure: string
   sound_timeout: string
+  reconcile_interval_min: number
+  /** Mirrors the generated SettingsDTO (required); 0 on the Go side means "keep current". */
+  watchdog_interval_min: number
 }
 
 export async function getSettings(): Promise<Settings> {

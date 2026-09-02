@@ -151,6 +151,32 @@ func TestTasksListAndGet(t *testing.T) {
 	}
 }
 
+func TestSystemLogRoute(t *testing.T) {
+	database := openDB(t)
+	if err := database.Logs().Add("info", "reconcile", "reconcile (manual): checked 1 schedule(s), 0 caught up"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Logs().Add("warn", "scheduler", `schedule "x": start failed`); err != nil {
+		t.Fatal(err)
+	}
+	cfg := startTestServer(t, Deps{
+		Health: func() Health { return Health{Core: "healthy"} },
+		Tasks:  database.Tasks(), Runs: database.Runs(), Schedules: database.Schedules(),
+		Logs:   database.Logs(), Runner: &fakeRunner{},
+	})
+	client := NewClient(cfg)
+	logs, err := client.SystemLog(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != 2 {
+		t.Fatalf("logs = %+v, want 2 entries newest first", logs)
+	}
+	if logs[0].Level != "warn" || logs[0].Event != "scheduler" {
+		t.Fatalf("newest entry = %+v", logs[0])
+	}
+}
+
 func TestRunAndConflict(t *testing.T) {
 	database := openDB(t)
 	seedTask(t, database, "alpha", "Alpha", true)
@@ -465,6 +491,66 @@ func TestSchedulesCRUD(t *testing.T) {
 	// Delete of a missing schedule → 404.
 	if err := client.DeleteSchedule("nope"); !errors.As(err, &ipcErr) || ipcErr.Code != "not_found" {
 		t.Fatalf("delete missing err = %v", err)
+	}
+}
+
+func TestReconcileSchedulesEndpoint(t *testing.T) {
+	database := openDB(t)
+	calls := 0
+	cfg := startTestServer(t, Deps{
+		Health:    func() Health { return Health{Core: "healthy"} },
+		Tasks:     database.Tasks(),
+		Runs:      database.Runs(),
+		Schedules: database.Schedules(),
+		Runner:    &fakeRunner{},
+		Reconcile: func() error { calls++; return nil },
+	})
+	client := NewClient(cfg)
+
+	if err := client.ReconcileSchedules(); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("reconcile calls = %d, want 1", calls)
+	}
+
+	// GET must be rejected (POST only).
+	var ipcErr *Error
+	if _, err := client.RawGet("/v1/schedules/reconcile"); !errors.As(err, &ipcErr) || ipcErr.Code != "method_not_allowed" {
+		t.Fatalf("GET method err = %v", err)
+	}
+}
+
+func TestReconcileSchedulesRejectedWhilePaused(t *testing.T) {
+	database := openDB(t)
+	calls := 0
+	paused := true
+	cfg := startTestServer(t, Deps{
+		Health:    func() Health { return Health{Core: "healthy"} },
+		Tasks:     database.Tasks(),
+		Runs:      database.Runs(),
+		Schedules: database.Schedules(),
+		Runner:    &fakeRunner{},
+		Reconcile: func() error { calls++; return nil },
+		IsPaused:  func() bool { return paused },
+	})
+	client := NewClient(cfg)
+	var ipcErr *Error
+
+	if err := client.ReconcileSchedules(); !errors.As(err, &ipcErr) || ipcErr.Code != "scheduler_paused" {
+		t.Fatalf("paused reconcile err = %v, want scheduler_paused", err)
+	}
+	if calls != 0 {
+		t.Fatalf("reconcile calls while paused = %d, want 0", calls)
+	}
+
+	// Resuming unblocks the endpoint.
+	paused = false
+	if err := client.ReconcileSchedules(); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("reconcile calls after resume = %d, want 1", calls)
 	}
 }
 

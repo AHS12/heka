@@ -58,18 +58,27 @@ vi.mock('@wailsjs/go/app/App', () => ({
   ListRuns: vi.fn(),
   GetRun: vi.fn(),
   CancelRun: vi.fn(),
+  ListSystemLog: vi.fn(),
   StartupEnabled: vi.fn().mockResolvedValue(false),
   StartupSet: vi.fn(),
   WatchdogEnabled: vi.fn().mockResolvedValue({installed: false, interval_minutes: 0}),
   WatchdogSet: vi.fn(),
   PauseScheduler: vi.fn(),
   ResumeScheduler: vi.fn(),
+  ReconcileSchedules: vi.fn(),
   Stats: vi.fn().mockResolvedValue({
     tasks: 0, tasks_enabled: 0, schedules_enabled: 0, running: 0,
     runs_today: 0, success_today: 0, failed_today: 0,
     run_history: [], status_distribution: [], recent_activity: [],
   }),
-  GetSettings: vi.fn().mockResolvedValue({log_retention_days: 90}),
+  GetSettings: vi.fn().mockResolvedValue({
+    log_retention_days: 90,
+    sound_success: 'system',
+    sound_failure: 'system',
+    sound_timeout: 'system',
+    reconcile_interval_min: 2,
+    watchdog_interval_min: 5,
+  }),
   UpdateSettings: vi.fn(),
   DataDir: vi.fn().mockResolvedValue(''),
   TasksDir: vi.fn().mockResolvedValue(''),
@@ -105,6 +114,21 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   } as any
 }
 
+// HeroUI Toast uses useMediaQuery (matchMedia) for mobile layout detection.
+if (typeof window !== 'undefined' && !window.matchMedia) {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
+}
+
 // HeroUI Tabs/Tooltip use SharedElementTransition which calls getAnimations().
 if (typeof Element !== 'undefined' && !Element.prototype.getAnimations) {
   Element.prototype.getAnimations = () => []
@@ -120,3 +144,4 @@ vi.mocked(bindings.ValidateTaskYAML).mockResolvedValue([])
 vi.mocked(bindings.ListSecrets).mockResolvedValue([])
 vi.mocked(bindings.ListSchedules).mockResolvedValue([])
 vi.mocked(bindings.ListRuns).mockResolvedValue({runs: [], total: 0} as any)
+vi.mocked(bindings.ListSystemLog).mockResolvedValue([] as any)

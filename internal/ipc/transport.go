@@ -10,6 +10,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/Microsoft/go-winio"
@@ -38,17 +39,26 @@ func pipeName() string {
 			u = current.Username
 		}
 	}
-	return "heka-" + u
+	return "heka-" + sanitizeUser(u)
+}
+
+// sanitizeUser normalizes a username for use inside a pipe name. os/user on
+// Windows can return DOMAIN\user — backslashes are illegal in pipe names —
+// and the bare form must match the USERNAME env form so processes whose
+// environment lacks USERNAME still resolve the same endpoint.
+func sanitizeUser(u string) string {
+	if i := strings.LastIndexAny(u, `\/`); i >= 0 {
+		return u[i+1:]
+	}
+	return u
 }
 
 // Listen binds the IPC endpoint. A successful bind doubles as the daemon's
 // singleton lock (SPEC-06 §1): a second daemon fails here.
 func Listen(cfg config.Config) (net.Listener, error) {
 	if runtime.GOOS == "windows" {
-		// Owner-only ACL: the pipe is reachable only by the current user
-		// (PRD §31 "use operating-system access controls for IPC").
 		return winio.ListenPipe(EndpointPath(cfg), &winio.PipeConfig{
-			SecurityDescriptor: "D:P(A;;GA;;;OW)",
+			SecurityDescriptor: pipeSecurityDescriptor(),
 		})
 	}
 	path := EndpointPath(cfg)

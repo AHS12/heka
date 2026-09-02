@@ -236,6 +236,29 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleSystemLog serves GET /v1/logs/system?limit=N — the daemon's own
+// event log (scheduler reconcile, lifecycle, wake detection), newest first.
+func (s *Server) handleSystemLog(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, "GET") {
+		return
+	}
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	logs, err := s.deps.Logs.List(limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	if logs == nil {
+		logs = []db.DaemonLog{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"logs": logs})
+}
+
 // writeTaskError maps db errors onto the envelope table.
 func writeTaskError(w http.ResponseWriter, err error, slug string) {
 	if errors.Is(err, db.ErrNotFound) {

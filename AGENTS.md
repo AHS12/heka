@@ -223,6 +223,17 @@ HeroUI v3 sets its own CSS variables (`--foreground`, `--background`, etc.). The
 bridged to the app's palette in the theme selector blocks. Without this bridge, HeroUI
 components render with incorrect colors in light/dark mode.
 
+### 9. Windows Pipe ACL Across Elevation
+Objects created by an elevated process are owned by `BUILTIN\Administrators` (the
+elevated token's default owner). A static owner-only pipe SDDL
+(`D:P(A;;GA;;;OW)`) therefore locks the same user's non-elevated CLI/GUI/watchdog
+out of an elevated daemon with `ERROR_ACCESS_DENIED` — which reads as "daemon is
+not running". The pipe SDDL MUST be built at runtime with the user's SID
+(`internal/ipc/transport_windows.go`): `D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;<userSID>)`.
+Dial failures are classified by errno in `internal/ipc/client.go`
+(`ErrDaemonNotRunning` / `ErrDaemonAccessDenied` / `ErrDaemonUnreachable`) — never
+revert to string-matching error text.
+
 ---
 
 ## Spec-Driven Development
