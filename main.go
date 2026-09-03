@@ -34,7 +34,7 @@ const (
 	defaultWinHeight = 940
 )
 
-var appVersion = "0.7.5"
+var appVersion = "0.7.6"
 
 //go:embed all:frontend/dist
 var assets embed.FS

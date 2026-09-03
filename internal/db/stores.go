@@ -394,12 +394,15 @@ func (s *RunStore) ListBySchedule(scheduleID string, limit int) ([]Run, error) {
 	return scanRuns(rows)
 }
 
-// CountBySchedule counts schedule-triggered runs started at or after since
-// (missed-run reconciliation, SPEC-09 §3).
+// CountBySchedule counts schedule-triggered runs started strictly after
+// since (missed-run reconciliation, SPEC-09 §3). The bound is exclusive:
+// since is usually the previous window's own run timestamp (started_at ==
+// finished_at at second precision for fast runs), and counting it again
+// would mask exactly one occurrence in every subsequent window.
 func (s *RunStore) CountBySchedule(scheduleID string, since time.Time) (int, error) {
 	var n int
 	err := s.db.sql.QueryRow(
-		`SELECT COUNT(*) FROM runs WHERE schedule_id = ? AND trigger = 'schedule' AND started_at >= ?`,
+		`SELECT COUNT(*) FROM runs WHERE schedule_id = ? AND trigger = 'schedule' AND started_at > ?`,
 		scheduleID, since.UTC().Format(time.RFC3339),
 	).Scan(&n)
 	return n, err
