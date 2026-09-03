@@ -29,9 +29,8 @@ func (s *Scheduler) Reconcile() error {
 
 // ReconcileWithReason is Reconcile with the caller's trigger recorded in the
 // daemon log: "startup", "wake", "resume", "manual", or "periodic". Every
-// non-periodic pass logs its outcome even when nothing was missed, so the
-// Logs → System view shows the mechanism running; periodic passes stay quiet
-// unless they actually catch something.
+// pass logs its outcome — including the quiet periodic heartbeat — so the
+// Logs → System view proves the mechanism is alive (PRD §7.1 visibility).
 func (s *Scheduler) ReconcileWithReason(reason string) error {
 	s.reconcileMu.Lock()
 	defer s.reconcileMu.Unlock()
@@ -76,10 +75,8 @@ func (s *Scheduler) ReconcileWithReason(reason string) error {
 			_ = s.db.Schedules().Save(sch)
 		}
 	}
-	if reason != "periodic" {
-		s.logf("info", "reconcile", "reconcile (%s): checked %d schedule(s), %d caught up",
-			reason, len(scheds), handled)
-	}
+	s.logf("info", "reconcile", "reconcile (%s): checked %d schedule(s), %d caught up",
+		reason, len(scheds), handled)
 	return nil
 }
 

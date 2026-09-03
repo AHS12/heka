@@ -300,6 +300,56 @@ func TestReconcileTwoMissedDays(t *testing.T) {
 	}
 }
 
+// Regression (v0.7.5 field report, 2026-09-03): a schedule run that finishes
+// in under a second stores started_at == finished_at == last_run_at (RFC3339
+// has second precision). The inclusive window boundary then counted that
+// already-accounted run as "fired" in the next window, so the missed 9:00
+// activation after a daemon restart computed missed = 1 - 1 = 0 and was
+// never caught up. The bound must be exclusive.
+func TestReconcileSubSecondRunDoesNotMaskNextTick(t *testing.T) {
+	database, sch, runner := setup(t)
+
+	// Most recent 9:00 tick at or before now; the previous run paid for the
+	// tick a day earlier and left last_run_at == its own started_at.
+	now := time.Now()
+	tick := time.Date(now.Year(), now.Month(), now.Day(), 9, 0, 0, 0, now.Location())
+	for !tick.Before(now) {
+		tick = tick.AddDate(0, 0, -1)
+	}
+	prev := tick.AddDate(0, 0, -1)
+	at := prev.UTC().Format(time.RFC3339)
+
+	saveSchedule(t, database, db.Schedule{
+		ID: "s12", Slug: "daily-check", TaskSlug: "daily", Kind: "recurring",
+		Cron: "00 09 * * *", Enabled: true, MissedPolicy: "run_now",
+		LastRunAt:  at,
+		LastStatus: "success",
+		CreatedAt:  prev.AddDate(0, 0, -1).UTC().Format(time.RFC3339),
+	})
+	// The sub-second run that produced last_run_at.
+	if err := database.Runs().Create(db.Run{
+		RunID: ulid.Make().String(), GroupID: ulid.Make().String(),
+		TaskSlug: "daily", ScheduleID: "s12", Trigger: "schedule",
+		Status: "success", StartedAt: &at, FinishedAt: &at, CreatedAt: at,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := sch.ReconcileWithReason("startup"); err != nil {
+		t.Fatal(err)
+	}
+	if runner.count() != 1 {
+		t.Fatalf("missed tick masked by previous sub-second run: fires = %d, want 1", runner.count())
+	}
+	row, _ := database.Schedules().Get("s12")
+	if got := parseTime(row.LastRunAt); got.Before(now.Add(-time.Minute)) {
+		t.Fatalf("window did not close: last_run_at = %s", row.LastRunAt)
+	}
+}
+
 func TestReconcileSkippedWhilePaused(t *testing.T) {
 	database, sch, runner := setup(t)
 	saveSchedule(t, database, db.Schedule{
@@ -396,8 +446,9 @@ func TestReconcileLogsAndRetries(t *testing.T) {
 	}
 }
 
-// A manual reconcile with nothing to do still reports "caught up" so the
-// system log proves the mechanism ran; periodic passes stay quiet.
+// Every reconcile pass — periodic heartbeat included — lands in the daemon
+// log so the system log proves the loop is alive, and a quiet pass fires
+// nothing.
 func TestReconcileManualLogsWhenQuiet(t *testing.T) {
 	database, sch, runner := setup(t)
 	saveSchedule(t, database, db.Schedule{
@@ -411,16 +462,15 @@ func TestReconcileManualLogsWhenQuiet(t *testing.T) {
 		t.Fatal(err)
 	}
 	logs, _ := database.Logs().List(10)
-	for _, l := range logs {
-		if l.Event == "reconcile" {
-			t.Fatalf("periodic pass must stay quiet, got: %+v", l)
-		}
+	if len(logs) != 1 || !strings.Contains(logs[0].Message, "periodic") ||
+		!strings.Contains(logs[0].Message, "0 caught up") {
+		t.Fatalf("periodic heartbeat not logged: %+v", logs)
 	}
 	if err := sch.ReconcileWithReason("manual"); err != nil {
 		t.Fatal(err)
 	}
 	logs, _ = database.Logs().List(10)
-	if len(logs) != 1 || !strings.Contains(logs[0].Message, "0 caught up") {
+	if len(logs) != 2 || !strings.Contains(logs[0].Message, "manual") {
 		t.Fatalf("manual quiet pass not logged: %+v", logs)
 	}
 	if runner.count() != 0 {

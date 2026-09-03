@@ -4,8 +4,6 @@
 
 <h1 align="center">Heka</h1>
 
-<p align="center"><strong>A local task runner & scheduler for programmers — with first-class AI agent support.</strong></p>
-
 <p align="center">
   <a href="https://github.com/AHS12/heka/releases">
     <img src="https://img.shields.io/github/downloads/AHS12/heka/total" alt="Downloads">
@@ -18,13 +16,17 @@
   </a>
 </p>
 
-Heka is a single desktop app: a persistent background daemon that schedules and runs
-your scripts and native executables, plus a polished GUI and a terminal CLI to manage
-them. The daemon keeps working after you close the window — tasks run on time, every
-time, whether or not anyone is watching.
+<p align="center"><strong>Set it and forget it — Heka runs it on time, every time.</strong></p>
 
-Tasks are plain YAML files, versioned, portable, and easy to inspect or generate.
-Everything is local-first: no account, no cloud, no internet required.
+Heka is a desktop app that gives your tasks a schedule. Point it at anything your
+computer can run — a script, a binary, whatever — tell Heka when to run it, and get
+on with your day. Heka sits quietly in your system tray and keeps working even after
+you close the window. It shows you what ran, what it printed, and how long it took —
+no more wondering whether that backup actually ran last night.
+
+Tasks are plain text files you can read, edit, and share. Everything stays on your
+machine: no account, no cloud, no internet required. (It also speaks JSON from the
+command line, so AI agents can drive it too.)
 
 ## Screenshots
 

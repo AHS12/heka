@@ -5,6 +5,43 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.7] - 2026-09-04
+
+A fresh coat of paint: the app icon — window, executable, installer, tray,
+and About page — is replaced with the new artwork (yellow "H" with the robot,
+clock, browser, and gear).
+
+### Changed
+- New application icon everywhere it appears: the executable and installer
+  icons (multi-size ICO rebuilt at 16–256 px), the Wails app icon, the system
+  tray icon (now generated from an exact 32 px source for crisper results),
+  and the About page logo.
+
+### Fixed
+- The dashboard "Last 7 Days" chart no longer reshuffles on every poll. The
+  stats endpoint flattened its per-date build map in randomized Go map
+  order, so the days arrived scrambled (e.g. 09-03 first) each time the
+  dashboard re-fetched; run history is now sorted by date ascending.
+
+## [0.7.6] - 2026-09-03
+
+A reliability patch for the missed-run machinery, prompted by a field report:
+a daily 9:00 schedule missed its activation while the daemon was down, and
+reconcile kept insisting there was nothing to catch up.
+
+### Fixed
+- Missed-run reconciliation no longer masks the next occurrence when the
+  previous run finished within the same second it started. Such sub-second
+  runs store `started_at == finished_at == last_run_at` (RFC 3339 has second
+  precision), and the inclusive window boundary counted that already-
+  accounted run as "fired" in the next window — so `missed` computed as
+  `1 - 1 = 0` and the missed activation was never caught up. The boundary is
+  now exclusive.
+- The periodic reconcile pass now logs its outcome every tick to
+  Logs → System (`reconcile (periodic): checked N schedule(s), M caught up`),
+  proving the loop is alive; previously it stayed silent unless it actually
+  caught something.
+
 ## [0.7.5] - 2026-09-03
 
 This release is about the part of Heka you see first. The Home screen, the

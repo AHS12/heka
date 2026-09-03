@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -394,12 +395,15 @@ func (s *RunStore) ListBySchedule(scheduleID string, limit int) ([]Run, error) {
 	return scanRuns(rows)
 }
 
-// CountBySchedule counts schedule-triggered runs started at or after since
-// (missed-run reconciliation, SPEC-09 §3).
+// CountBySchedule counts schedule-triggered runs started strictly after
+// since (missed-run reconciliation, SPEC-09 §3). The bound is exclusive:
+// since is usually the previous window's own run timestamp (started_at ==
+// finished_at at second precision for fast runs), and counting it again
+// would mask exactly one occurrence in every subsequent window.
 func (s *RunStore) CountBySchedule(scheduleID string, since time.Time) (int, error) {
 	var n int
 	err := s.db.sql.QueryRow(
-		`SELECT COUNT(*) FROM runs WHERE schedule_id = ? AND trigger = 'schedule' AND started_at >= ?`,
+		`SELECT COUNT(*) FROM runs WHERE schedule_id = ? AND trigger = 'schedule' AND started_at > ?`,
 		scheduleID, since.UTC().Format(time.RFC3339),
 	).Scan(&n)
 	return n, err
@@ -659,10 +663,15 @@ func (s *RunStore) Stats() (StatsResult, error) {
 			entry.Failed += d.Count
 		}
 	}
+	// Flatten in fixed date order — map iteration is randomized, and an
+	// unsorted run_history reshuffles the dashboard chart on every poll.
 	out.RunHistory = make([]DayStats, 0, len(historyMap))
 	for _, v := range historyMap {
 		out.RunHistory = append(out.RunHistory, *v)
 	}
+	sort.Slice(out.RunHistory, func(i, j int) bool {
+		return out.RunHistory[i].Date < out.RunHistory[j].Date
+	})
 
 	// Status distribution (all time)
 	sRows, err := s.db.sql.Query(`SELECT status, COUNT(*) AS n FROM runs GROUP BY status`)
