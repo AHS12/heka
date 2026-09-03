@@ -4,8 +4,6 @@
 
 <h1 align="center">Heka</h1>
 
-<p align="center"><strong>A local task runner & scheduler for programmers — with first-class AI agent support.</strong></p>
-
 <p align="center">
   <a href="https://github.com/AHS12/heka/releases">
     <img src="https://img.shields.io/github/downloads/AHS12/heka/total" alt="Downloads">
@@ -17,6 +15,8 @@
     <img src="https://img.shields.io/github/v/release/AHS12/heka" alt="Latest Release">
   </a>
 </p>
+
+<p align="center"><strong>A local task runner & scheduler for programmers — with first-class AI agent support.</strong></p>
 
 Heka is a single desktop app: a persistent background daemon that schedules and runs
 your scripts and native executables, plus a polished GUI and a terminal CLI to manage

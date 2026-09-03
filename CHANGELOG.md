@@ -5,6 +5,24 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.7] - 2026-09-04
+
+A fresh coat of paint: the app icon — window, executable, installer, tray,
+and About page — is replaced with the new artwork (yellow "H" with the robot,
+clock, browser, and gear).
+
+### Changed
+- New application icon everywhere it appears: the executable and installer
+  icons (multi-size ICO rebuilt at 16–256 px), the Wails app icon, the system
+  tray icon (now generated from an exact 32 px source for crisper results),
+  and the About page logo.
+
+### Fixed
+- The dashboard "Last 7 Days" chart no longer reshuffles on every poll. The
+  stats endpoint flattened its per-date build map in randomized Go map
+  order, so the days arrived scrambled (e.g. 09-03 first) each time the
+  dashboard re-fetched; run history is now sorted by date ascending.
+
 ## [0.7.6] - 2026-09-03
 
 A reliability patch for the missed-run machinery, prompted by a field report:
