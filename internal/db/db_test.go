@@ -2,6 +2,7 @@ package db
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -450,6 +451,54 @@ func TestLogStore(t *testing.T) {
 	}
 	if len(rows) != 0 {
 		t.Fatalf("Prune(left) left %d rows", len(rows))
+	}
+}
+
+// Regression (v0.7.6 field report): the dashboard "Last 7 Days" chart
+// reshuffled on every poll because Stats flattened its per-date build map in
+// randomized Go map order. run_history must come back sorted by date.
+func TestStatsRunHistoryOrdered(t *testing.T) {
+	d := openTest(t)
+	store := d.Runs()
+
+	// Three days with runs, inserted newest-first; each day gets a success
+	// and a failed run so per-status buckets fill too.
+	want := map[string][2]int{} // date -> {success, failed}
+	for i := 0; i < 3; i++ {
+		day := time.Now().UTC().AddDate(0, 0, -i).Format("2006-01-02")
+		want[day] = [2]int{1, 1}
+		for _, status := range []string{"success", "failed"} {
+			at := time.Now().UTC().AddDate(0, 0, -i).Format(time.RFC3339)
+			started := at
+			r := Run{
+				RunID: fmt.Sprintf("run-%s-%s", day, status), GroupID: "g",
+				TaskSlug: "daily", Trigger: "manual", Status: status,
+				StartedAt: &started, FinishedAt: &started, CreatedAt: at,
+			}
+			if err := store.Create(r); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	for attempt := 0; attempt < 10; attempt++ {
+		stats, err := store.Stats()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(stats.RunHistory) != len(want) {
+			t.Fatalf("run_history = %d day(s), want %d: %+v",
+				len(stats.RunHistory), len(want), stats.RunHistory)
+		}
+		for i, day := range stats.RunHistory {
+			if i > 0 && day.Date < stats.RunHistory[i-1].Date {
+				t.Fatalf("run_history not sorted on attempt %d: %+v", attempt, stats.RunHistory)
+			}
+			if day.Success != want[day.Date][0] || day.Failed != want[day.Date][1] {
+				t.Fatalf("day %s = success %d failed %d, want %d/%d",
+					day.Date, day.Success, day.Failed, want[day.Date][0], want[day.Date][1])
+			}
+		}
 	}
 }
 

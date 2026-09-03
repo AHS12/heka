@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -662,10 +663,15 @@ func (s *RunStore) Stats() (StatsResult, error) {
 			entry.Failed += d.Count
 		}
 	}
+	// Flatten in fixed date order — map iteration is randomized, and an
+	// unsorted run_history reshuffles the dashboard chart on every poll.
 	out.RunHistory = make([]DayStats, 0, len(historyMap))
 	for _, v := range historyMap {
 		out.RunHistory = append(out.RunHistory, *v)
 	}
+	sort.Slice(out.RunHistory, func(i, j int) bool {
+		return out.RunHistory[i].Date < out.RunHistory[j].Date
+	})
 
 	// Status distribution (all time)
 	sRows, err := s.db.sql.Query(`SELECT status, COUNT(*) AS n FROM runs GROUP BY status`)
