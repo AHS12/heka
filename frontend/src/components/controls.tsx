@@ -5,7 +5,7 @@ import type {ReactNode, InputHTMLAttributes} from 'react'
 import {Select, Label, ListBox, DatePicker, DateField, Calendar, TimeField} from '@heroui/react'
 import type {TimeValue} from '@heroui/react'
 import type {DateValue, CalendarDateTime} from '@internationalized/date'
-import {parseDate, parseDateTime} from '@internationalized/date'
+import {parseDate, parseDateTime, Time} from '@internationalized/date'
 
 export const inputCls =
   'w-full rounded-lg border border-zinc-200 bg-white/70 px-2.5 py-1.5 text-sm ' +
@@ -368,6 +368,56 @@ export function DateTimePickerField({
         </>
       )}
     </DatePicker>
+  )
+}
+
+/** Parse an "HH:MM" (24h) string into an internationalized Time, or null. */
+export function parseHHMM(value: string | null | undefined): Time | null {
+  if (!value) return null
+  const m = /^(\d{1,2}):(\d{2})/.exec(value.trim())
+  if (!m) return null
+  const h = parseInt(m[1], 10)
+  const min = parseInt(m[2], 10)
+  if (h > 23 || min > 59) return null
+  return new Time(h, min)
+}
+
+/** Format a TimeValue as "HH:MM" (24h), or null. */
+export function timeToHHMM(v: TimeValue | null | undefined): string | null {
+  if (!v) return null
+  return `${String(v.hour).padStart(2, '0')}:${String(v.minute).padStart(2, '0')}`
+}
+
+/** A themed HeroUI TimeField bound to an "HH:MM" (24h) string — segmented
+ *  hour/minute entry per locale, no native dropdown. */
+export function TimePickerField({
+  value,
+  onChange,
+  className,
+  'aria-label': ariaLabel,
+}: {
+  value: string
+  onChange: (hhmm: string) => void
+  className?: string
+  'aria-label'?: string
+}) {
+  return (
+    <TimeField
+      aria-label={ariaLabel}
+      granularity="minute"
+      value={parseHHMM(value)}
+      onChange={(v) => {
+        const hhmm = timeToHHMM(v as TimeValue | null)
+        if (hhmm) onChange(hhmm)
+      }}
+      className={className}
+    >
+      <TimeField.Group className={dateFieldGroupCls}>
+        <TimeField.Input>
+          {(segment) => <TimeField.Segment segment={segment} />}
+        </TimeField.Input>
+      </TimeField.Group>
+    </TimeField>
   )
 }
 

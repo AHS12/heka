@@ -70,6 +70,15 @@ func (s *stubClient) ReconcileSchedules() error {
 	return nil
 }
 
+func (s *stubClient) RunBackup() (string, error) { return "", s.err }
+func (s *stubClient) BackupStatus() (ipc.BackupStatusDTO, error) {
+	return ipc.BackupStatusDTO{}, s.err
+}
+func (s *stubClient) BackupHistory(int) ([]ipc.BackupJobDTO, error) { return nil, s.err }
+func (s *stubClient) TestBackupDestinations() (ipc.BackupTestDTO, error) {
+	return ipc.BackupTestDTO{}, s.err
+}
+
 // newTestApp wires a stub client into an App with captured output.
 func newTestApp(stub *stubClient) (*App, *bytes.Buffer, *bytes.Buffer) {
 	a := NewApp(config.Config{}, stub)

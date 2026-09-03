@@ -42,6 +42,7 @@ type Daemon struct {
 	db        *db.DB
 	exec      *executor.Executor
 	scheduler *scheduler.Scheduler
+	backup    *BackupManager
 	version   string
 
 	execCtx    context.Context
@@ -229,6 +230,9 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 		})
 	})
 
+	// Backup manager (Settings → Backup): archive jobs + schedule loop.
+	d.backup = newBackupManager(cfg, database, version, resolver)
+
 	// Scheduler (SPEC-09).
 	d.scheduler = scheduler.New(database, d.exec)
 	if err := d.scheduler.Sync(); err != nil {
@@ -247,6 +251,7 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 	go d.syncLoop()
 	go d.retentionLoop()
 	go d.reconcileLoop()
+	go d.backup.Loop(d.shutdown)
 
 	handler := ipc.NewServer(ipc.Deps{
 		Health:        d.health,
@@ -255,7 +260,11 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 		Schedules:     database.Schedules(),
 		Logs:          database.Logs(),
 		SyncSchedules: d.scheduler.Sync,
-		Reconcile: func() error { return d.scheduler.ReconcileWithReason("manual") },
+		Reconcile: func() error {
+			err := d.scheduler.ReconcileWithReason("manual")
+			d.backup.Reconcile("manual")
+			return err
+		},
 		Secrets:       database.Secrets(),
 		TaskFiles:     taskFS{dir: cfg.TasksDir},
 		SyncTasks:     func() error { d.syncTasks(); return nil },
@@ -264,9 +273,17 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 		Pause:         d.Pause,
 		Resume:        d.Resume,
 		IsPaused:      d.SchedulerPaused,
-		GetSettings:    d.getSettings,
+		GetSettings:   d.getSettings,
 		UpdateSettings: d.updateSettings,
 		PreviewSound:   func(preset string) error { return notify.PlaySound(preset, preset) },
+
+		GetBackupConfig:        d.backup.getConfig,
+		UpdateBackupConfig:     d.backup.updateConfig,
+		RunBackup:              d.backup.runNow,
+		BackupStatus:           d.backup.status,
+		BackupHistory:          d.backup.history,
+		TestBackupDestinations: d.backup.test,
+		SecretsUsage:           func() (map[string][]string, error) { return secretsUsage(database) },
 	}).Handler()
 
 	return d, handler, nil
@@ -297,12 +314,15 @@ func (d *Daemon) logf(level, event, format string, args ...any) {
 	_ = d.db.Logs().Add(level, event, msg)
 }
 
-// reconcile runs one missed-run pass with the caller's reason recorded in the
-// daemon log ("startup", "wake", "resume", "manual", "periodic").
+// reconcile runs one missed-work pass with the caller's reason recorded in
+// the daemon log ("startup", "wake", "resume", "manual", "periodic"): both
+// task schedules and the backup schedule catch up through the same pipeline.
+// Fire-and-forget by design — failures land in the log.
 func (d *Daemon) reconcile(reason string) {
 	if err := d.scheduler.ReconcileWithReason(reason); err != nil {
 		d.logf("warn", "reconcile", "reconcile (%s) failed: %v", reason, err)
 	}
+	d.backup.Reconcile(reason)
 }
 
 // heartbeatLoop keeps the heartbeat fresh while running. A gap between ticks
@@ -384,9 +404,7 @@ func (d *Daemon) reconcileLoop() {
 			if d.scheduler.IsPaused() {
 				continue
 			}
-			if err := d.scheduler.Reconcile(); err != nil {
-				fmt.Fprintf(os.Stderr, "heka: reconcile missed runs: %v\n", err)
-			}
+			d.reconcile("periodic")
 			// Re-read interval: a KV change shrinks/extends the next tick.
 			if next := d.reconcileInterval(); next != current {
 				current = next

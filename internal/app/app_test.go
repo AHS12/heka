@@ -66,6 +66,21 @@ func (s *stubCaller) GetSettings() (ipc.SettingsDTO, error) { return ipc.Setting
 func (s *stubCaller) UpdateSettings(ipc.SettingsDTO) error  { return s.err }
 func (s *stubCaller) PreviewSound(string) error             { return s.err }
 
+func (s *stubCaller) GetBackupConfig() (ipc.BackupConfigDTO, error) {
+	return ipc.BackupConfigDTO{}, s.err
+}
+func (s *stubCaller) UpdateBackupConfig(ipc.BackupConfigDTO) error { return s.err }
+func (s *stubCaller) RunBackup() (string, error)                   { return "", s.err }
+func (s *stubCaller) BackupStatus() (ipc.BackupStatusDTO, error) {
+	return ipc.BackupStatusDTO{}, s.err
+}
+func (s *stubCaller) BackupHistory(int) ([]ipc.BackupJobDTO, error) { return nil, s.err }
+func (s *stubCaller) TestBackupDestinations() (ipc.BackupTestDTO, error) {
+	return ipc.BackupTestDTO{}, s.err
+}
+func (s *stubCaller) SecretsUsage() (map[string][]string, error) { return nil, s.err }
+func (s *stubCaller) Shutdown() error                            { return s.err }
+
 func newAppWith(caller ipcCaller, started *int, startErr error) *App {
 	a := NewApp("Heka", "0.1.0")
 	a.client = caller

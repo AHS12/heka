@@ -3,6 +3,7 @@ package ipc
 import (
 	"time"
 
+	"heka/internal/core/backup"
 	"heka/internal/core/task"
 )
 
@@ -162,6 +163,59 @@ type SettingsDTO struct {
 // SoundPreviewRequest is the request body for POST /v1/settings/sound-preview.
 type SoundPreviewRequest struct {
 	Preset string `json:"preset"`
+}
+
+// BackupConfigDTO is the wire shape for backup settings. Secret material
+// (passphrase, S3 keys) never appears here — the UI manages those through
+// the secrets API; PassphraseSet only tells it whether the vault entry
+// exists.
+type BackupConfigDTO struct {
+	Schedule      backup.ScheduleSpec `json:"schedule"`
+	LocalDir      string              `json:"local_dir"`
+	KeepLastLocal int                 `json:"keep_last_local"`
+	S3            backup.S3Config     `json:"s3"`
+	Includes      backup.Includes     `json:"includes"`
+	PassphraseSet bool                `json:"passphrase_set"`
+}
+
+// BackupDestinationResult is one destination's outcome inside a backup job.
+type BackupDestinationResult struct {
+	Type string `json:"type"` // local | s3
+	OK   bool   `json:"ok"`
+	Path string `json:"path,omitempty"` // local file path or remote object key
+	Err  string `json:"error,omitempty"`
+}
+
+// BackupJobDTO is one backup history row on the wire.
+type BackupJobDTO struct {
+	ID           string                     `json:"id"`
+	Trigger      string                     `json:"trigger"` // manual | scheduled
+	Status       string                     `json:"status"`  // running | success | partial | failed
+	StartedAt    string                     `json:"started_at"`
+	FinishedAt   string                     `json:"finished_at,omitempty"`
+	SizeBytes    int64                      `json:"size_bytes,omitempty"`
+	LocalPath    string                     `json:"local_path,omitempty"`
+	Destinations []BackupDestinationResult  `json:"destinations,omitempty"`
+	Err          string                     `json:"error,omitempty"`
+}
+
+// BackupStatusDTO answers GET /v1/backup/status.
+type BackupStatusDTO struct {
+	Running   bool          `json:"running"`
+	Current   *BackupJobDTO `json:"current,omitempty"`
+	Last      *BackupJobDTO `json:"last,omitempty"`
+	NextRunAt string        `json:"next_run_at,omitempty"`
+}
+
+// BackupTestDTO answers POST /v1/backup/test.
+type BackupTestDTO struct {
+	Local *BackupDestinationResult `json:"local,omitempty"`
+	S3    *BackupDestinationResult `json:"s3,omitempty"`
+}
+
+// BackupRunResponse is the immediate answer to POST /v1/backup/run.
+type BackupRunResponse struct {
+	JobID string `json:"job_id"`
 }
 
 // errEnvelope is the wire shape for errors.

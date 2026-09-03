@@ -75,6 +75,23 @@ func migrate(d *DB) error {
 	return nil
 }
 
+// MaxMigrationVersion reports the newest schema version embedded in this
+// binary. Restore paths use it to refuse archives written by a newer build
+// (forward-only migrations mean an older binary can never read a newer DB).
+func MaxMigrationVersion() int {
+	migrations, err := loadMigrations()
+	if err != nil {
+		return 0
+	}
+	max := 0
+	for _, m := range migrations {
+		if m.version > max {
+			max = m.version
+		}
+	}
+	return max
+}
+
 func applyMigration(d *DB, m migration) error {
 	tx, err := d.sql.Begin()
 	if err != nil {

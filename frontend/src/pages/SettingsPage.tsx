@@ -5,6 +5,7 @@
 import {useEffect, useRef, useState} from 'react'
 import type {ReactNode} from 'react'
 import {useQuery, useQueryClient, useMutation} from '@tanstack/react-query'
+import {useSearchParams} from 'react-router-dom'
 import {
   apiErrorDetails,
   listSecrets,
@@ -24,22 +25,24 @@ import {
   resumeScheduler,
 } from '../lib/api'
 import {useHealth} from '../lib/query'
+import {SECRETS_KEY, isBackupSecret, backupSecretWarning} from '../lib/secrets'
 import {useTheme, LIGHT_VARIANTS, DARK_VARIANTS} from '../lib/theme'
 import type {ThemeVariant} from '../lib/theme'
 import {useAccent, ACCENT_COLORS, ACCENT_PRESETS} from '../lib/accent'
 import type {Accent} from '../lib/accent'
 import type {ThemeChoice} from '../lib/theme'
 import {useAnimations} from '../lib/animations'
-import {Field, SelectField, TextInput, pillBtn} from '../components/controls'
-import {Switch, Tabs} from '@heroui/react'
+import {Field, SelectField, TextInput, pillBtn, primaryBtn} from '../components/controls'
+import {Switch, Tabs, Modal} from '@heroui/react'
+import {AppDialog, dialogHeaderCls, dialogBodyCls, dialogFooterCls} from '../components/AppDialog'
+import {BackupSection} from '../components/settings/BackupSection'
 
-const SECRETS_KEY = ['secrets'] as const
-
-type SettingsTab = 'appearance' | 'data' | 'startup' | 'reliability' | 'retention' | 'notifications' | 'secrets'
+type SettingsTab = 'appearance' | 'data' | 'backup' | 'startup' | 'reliability' | 'retention' | 'notifications' | 'secrets'
 
 const SETTINGS_TABS: Array<{id: SettingsTab; label: string; detail: string}> = [
   {id: 'appearance', label: 'Appearance', detail: 'Theme, accent, and motion'},
   {id: 'data', label: 'Data', detail: 'Local storage locations'},
+  {id: 'backup', label: 'Backup', detail: 'Automatic backups & restore'},
   {id: 'startup', label: 'Startup', detail: 'Launch with your system'},
   {id: 'reliability', label: 'Reliability', detail: 'Scheduler and watchdog'},
   {id: 'retention', label: 'Retention', detail: 'Run history lifetime'},
@@ -62,11 +65,19 @@ function useNarrowSettings() {
 }
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
+  // The active tab lives in the URL (?tab=…) so /secrets and /backups can
+  // link back to the exact section they came from, and refreshes keep it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const raw = searchParams.get('tab')
+  const activeTab: SettingsTab = SETTINGS_TABS.some((t) => t.id === raw)
+    ? (raw as SettingsTab)
+    : 'appearance'
+  const selectTab = (tab: SettingsTab) => setSearchParams({tab}, {replace: true})
   const narrow = useNarrowSettings()
   const panels: Record<SettingsTab, ReactNode> = {
     appearance: <AppearanceSection />,
     data: <DataDirSection />,
+    backup: <BackupSection />,
     startup: <StartupSection />,
     reliability: <ReliabilitySection />,
     retention: <RetentionSection />,
@@ -83,10 +94,10 @@ export function SettingsPage() {
       <Tabs
         orientation={narrow ? 'horizontal' : 'vertical'}
         selectedKey={activeTab}
-        onSelectionChange={(key) => setActiveTab(key as SettingsTab)}
+        onSelectionChange={(key) => selectTab(key as SettingsTab)}
         className="grid items-start gap-4 md:grid-cols-[13rem_minmax(0,1fr)]"
       >
-        <div className="self-start overflow-x-auto rounded-2xl border border-zinc-200/80 bg-white/45 p-1.5 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/25 md:overflow-visible">
+        <div className="self-start overflow-x-auto rounded-2xl border border-zinc-200/80 bg-white/45 p-1.5 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/25 md:sticky md:top-6 md:overflow-visible">
           <Tabs.List aria-label="Settings sections" className="flex min-w-max gap-1.5 md:min-w-0 md:flex-col md:items-stretch">
             {SETTINGS_TABS.map((tab) => (
               <Tabs.Tab
@@ -712,9 +723,9 @@ function SecretsSection() {
   const [key, setKey] = useState('')
   const [value, setValue] = useState('')
   const [errors, setErrors] = useState<string[]>([])
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const keys = useQuery({queryKey: SECRETS_KEY, queryFn: listSecrets})
-
   const add = useMutation({
     mutationFn: ({key, value}: {key: string; value: string}) =>
       setSecret(key, value),
@@ -735,9 +746,20 @@ function SecretsSection() {
 
   return (
     <section className="space-y-3">
-      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-        Secrets
-      </h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          Secrets
+        </h3>
+        <a
+          href="#/secrets"
+          className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/80 px-3 py-1 text-xs font-medium shadow-sm transition-colors hover:border-accent hover:text-accent dark:border-zinc-700/60 dark:bg-zinc-900/70"
+        >
+          Browse &amp; manage all secrets
+          <svg aria-hidden viewBox="0 0 16 16" className="size-3 fill-current">
+            <path d="M4.5 3 8 6.5 11.5 3 13 4.5 8 9.5 3 4.5z" transform="rotate(-90 8 6.5)" />
+          </svg>
+        </a>
+      </div>
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
         Values are encrypted at rest and injected at run time. Reference them
         in tasks as <code className="rounded bg-zinc-100 px-1 py-0.5 dark:bg-zinc-800">{'${KEY}'}</code> in
@@ -798,13 +820,23 @@ function SecretsSection() {
               key={k}
               className="flex items-center justify-between rounded-xl border border-zinc-200/80 bg-white/60 px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900/50"
             >
-              <code className="font-mono text-xs text-zinc-700 dark:text-zinc-300">
-                {k}
-              </code>
+              <span className="flex min-w-0 items-center gap-2">
+                <code className="truncate font-mono text-xs text-zinc-700 dark:text-zinc-300">
+                  {k}
+                </code>
+                {isBackupSecret(k) && (
+                  <span
+                    title="Managed by Heka's automatic backups"
+                    className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent"
+                  >
+                    backup
+                  </span>
+                )}
+              </span>
               <button
                 type="button"
                 aria-label={`Delete secret ${k}`}
-                onClick={() => remove.mutate(k)}
+                onClick={() => setConfirmDelete(k)}
                 className="text-xs text-zinc-400 outline-none hover:text-red-500 focus-visible:ring-2 focus-visible:ring-accent-ring"
               >
                 Delete
@@ -812,6 +844,53 @@ function SecretsSection() {
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Delete confirm — every key asks first; backup-managed keys get an
+          extra warning because the daemon (not tasks) depends on them. */}
+      {confirmDelete !== null && (
+        <AppDialog isOpen onOpenChange={(open) => !open && setConfirmDelete(null)} size="sm">
+          <Modal.Header className={dialogHeaderCls}>
+            <div>
+              <Modal.Heading className="text-lg font-semibold">Delete {confirmDelete}?</Modal.Heading>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                {isBackupSecret(confirmDelete)
+                  ? 'This key is managed by Heka\'s automatic backups — the daemon uses it directly, tasks never reference it.'
+                  : 'Tasks referencing it will fail to resolve it at run time.'}
+              </p>
+            </div>
+            <Modal.CloseTrigger aria-label="Close delete confirmation" isDisabled={remove.isPending} />
+          </Modal.Header>
+          <Modal.Body className={dialogBodyCls}>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
+              {isBackupSecret(confirmDelete)
+                ? backupSecretWarning(confirmDelete)
+                : 'This cannot be undone. The key must be added again before tasks can use it.'}
+            </div>
+          </Modal.Body>
+          <Modal.Footer className={dialogFooterCls}>
+            <button
+              type="button"
+              className={pillBtn}
+              onClick={() => setConfirmDelete(null)}
+              disabled={remove.isPending}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={primaryBtn}
+              disabled={remove.isPending}
+              onClick={() => {
+                const k = confirmDelete
+                setConfirmDelete(null)
+                remove.mutate(k)
+              }}
+            >
+              {remove.isPending ? 'Deleting…' : 'Delete anyway'}
+            </button>
+          </Modal.Footer>
+        </AppDialog>
       )}
     </section>
   )

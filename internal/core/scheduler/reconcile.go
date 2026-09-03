@@ -72,6 +72,11 @@ func (s *Scheduler) ReconcileWithReason(reason string) error {
 			// the next pass starts fresh. Transient failures leave it open.
 			handled++
 			sch.LastRunAt = db.Now()
+			// The catch-up fired outside the cron engine, so nothing else
+			// advances next_run_at — re-derive it from the spec.
+			if next := nextRunOf(sch.Cron, now); next != "" {
+				sch.NextRunAt = next
+			}
 			_ = s.db.Schedules().Save(sch)
 		}
 	}

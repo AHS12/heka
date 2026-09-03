@@ -17,8 +17,10 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"heka/internal/config"
+	"heka/internal/core/backup"
 	"heka/internal/core/task"
 	"heka/internal/daemon"
+	"heka/internal/db"
 	"heka/internal/ipc"
 	"heka/internal/osapp"
 )
@@ -72,6 +74,14 @@ type ipcCaller interface {
 	GetSettings() (ipc.SettingsDTO, error)
 	UpdateSettings(s ipc.SettingsDTO) error
 	PreviewSound(preset string) error
+	GetBackupConfig() (ipc.BackupConfigDTO, error)
+	UpdateBackupConfig(cfg ipc.BackupConfigDTO) error
+	RunBackup() (string, error)
+	BackupStatus() (ipc.BackupStatusDTO, error)
+	BackupHistory(limit int) ([]ipc.BackupJobDTO, error)
+	TestBackupDestinations() (ipc.BackupTestDTO, error)
+	SecretsUsage() (map[string][]string, error)
+	Shutdown() error
 }
 
 // ErrDialogCanceled is the sentinel for a user canceling an open/save dialog;
@@ -809,6 +819,217 @@ func (a *App) PreviewSound(preset string) error {
 		return err
 	}
 	return wrapIPCError(client.PreviewSound(preset))
+}
+
+// ---- Backup & restore (Settings → Backup). Config/status/history are thin
+// IPC passthroughs; restore is a local maintenance operation that requires
+// the daemon to be stopped, so it runs in-process over the shared
+// internal/core/backup package.
+
+// GetBackupConfig returns the backup settings (non-secret fields only).
+func (a *App) GetBackupConfig() (ipc.BackupConfigDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return ipc.BackupConfigDTO{}, err
+	}
+	c, err := client.GetBackupConfig()
+	if err != nil {
+		return ipc.BackupConfigDTO{}, wrapIPCError(err)
+	}
+	return c, nil
+}
+
+// UpdateBackupConfig persists the backup settings.
+func (a *App) UpdateBackupConfig(cfg ipc.BackupConfigDTO) error {
+	client, err := a.cfgClient()
+	if err != nil {
+		return err
+	}
+	return wrapIPCError(client.UpdateBackupConfig(cfg))
+}
+
+// RunBackup triggers a backup job; it runs asynchronously in the daemon.
+func (a *App) RunBackup() (string, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return "", err
+	}
+	id, err := client.RunBackup()
+	if err != nil {
+		return "", wrapIPCError(err)
+	}
+	return id, nil
+}
+
+// BackupStatus returns the current/last backup job and next scheduled run.
+func (a *App) BackupStatus() (ipc.BackupStatusDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return ipc.BackupStatusDTO{}, err
+	}
+	s, err := client.BackupStatus()
+	if err != nil {
+		return ipc.BackupStatusDTO{}, wrapIPCError(err)
+	}
+	return s, nil
+}
+
+// BackupHistory lists recent backup jobs, newest first.
+func (a *App) BackupHistory(limit int) ([]ipc.BackupJobDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := client.BackupHistory(limit)
+	if err != nil {
+		return nil, wrapIPCError(err)
+	}
+	return jobs, nil
+}
+
+// TestBackupDestinations probes every configured destination once.
+func (a *App) TestBackupDestinations() (ipc.BackupTestDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return ipc.BackupTestDTO{}, err
+	}
+	res, err := client.TestBackupDestinations()
+	if err != nil {
+		return ipc.BackupTestDTO{}, wrapIPCError(err)
+	}
+	return res, nil
+}
+
+// SecretsUsage maps each vault key to the task slugs referencing it.
+func (a *App) SecretsUsage() (map[string][]string, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return nil, err
+	}
+	usage, err := client.SecretsUsage()
+	if err != nil {
+		return nil, wrapIPCError(err)
+	}
+	return usage, nil
+}
+
+// Shutdown asks the daemon to stop gracefully — the restore flow's first
+// step (restore itself refuses to run while the daemon owns the data).
+func (a *App) Shutdown() error {
+	client, err := a.cfgClient()
+	if err != nil {
+		return err
+	}
+	return wrapIPCError(client.Shutdown())
+}
+
+// RestoreManifestDTO is the restore-preview payload: the decrypted archive
+// manifest plus restore-relevant validation notes.
+type RestoreManifestDTO struct {
+	Manifest      backup.Manifest `json:"manifest"`
+	Supported     bool            `json:"supported"`
+	HasConfig     bool            `json:"has_config"`
+	HasArtifacts  bool            `json:"has_artifacts"`
+	PreviewError  string          `json:"preview_error,omitempty"`
+}
+
+// InspectBackup decrypts an archive's manifest for the restore preview.
+// Read-only: nothing on disk is touched.
+func (a *App) InspectBackup(path, passphrase string) (RestoreManifestDTO, error) {
+	m, err := backup.Inspect(path, passphrase)
+	out := RestoreManifestDTO{Manifest: m, HasConfig: m.HasConfig, HasArtifacts: m.HasArtifacts}
+	if err != nil {
+		out.PreviewError = err.Error()
+		return out, err
+	}
+	if m.SchemaVersion > db.MaxMigrationVersion() {
+		out.PreviewError = backup.ErrBackupTooNew.Error()
+		return out, backup.ErrBackupTooNew
+	}
+	out.Supported = true
+	return out, nil
+}
+
+// RestoreResultDTO summarizes a completed restore.
+type RestoreResultDTO struct {
+	SafetyBackupPath  string          `json:"safety_backup_path"`
+	RestoredConfig    bool            `json:"restored_config"`
+	RestoredArtifacts bool            `json:"restored_artifacts"`
+	Manifest          backup.Manifest `json:"manifest"`
+}
+
+// RestoreBackup replaces live data with the archive contents. The daemon
+// must be stopped — the restore refuses (typed error) while it answers.
+func (a *App) RestoreBackup(path, passphrase string, includeConfig, includeArtifacts bool) (RestoreResultDTO, error) {
+	cfg, err := a.resolvedCfg()
+	if err != nil {
+		return RestoreResultDTO{}, err
+	}
+	res, err := backup.Restore(backup.RestoreOptions{
+		ZipPath:          path,
+		Passphrase:       passphrase,
+		DataDir:          cfg.DataDir,
+		TasksDir:         cfg.TasksDir,
+		ArtifactsDir:     cfg.RunArtifactsDir,
+		IncludeConfig:    includeConfig,
+		IncludeArtifacts: includeArtifacts,
+		CurrentSchema:    db.MaxMigrationVersion(),
+		DaemonRunning:    a.daemonLikelyRunning,
+	})
+	if err != nil {
+		return RestoreResultDTO{}, err
+	}
+	return RestoreResultDTO{
+		SafetyBackupPath:  res.SafetyBackupPath,
+		RestoredConfig:    res.RestoredConfig,
+		RestoredArtifacts: res.RestoredArtifacts,
+		Manifest:          res.Manifest,
+	}, nil
+}
+
+// PickBackupFile opens a file picker constrained to backup archives.
+func (a *App) PickBackupFile() (string, error) {
+	if a.ctx == nil {
+		return "", errors.New("dialog unavailable before startup")
+	}
+	path, err := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title: "Choose a Heka backup archive",
+		Filters: []wruntime.FileFilter{
+			{DisplayName: "Heka backups", Pattern: "*.zip"},
+			{DisplayName: "All files", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	if path == "" {
+		return "", ErrDialogCanceled
+	}
+	return path, nil
+}
+
+// daemonLikelyRunning reports whether an IPC health check answers — used as
+// the hard restore gate.
+func (a *App) daemonLikelyRunning() bool {
+	client, err := a.cfgClient()
+	if err != nil {
+		return false
+	}
+	h, err := client.Health()
+	if err != nil {
+		return false
+	}
+	return h.Core != ""
+}
+
+// resolvedCfg loads the effective configuration (same fallback as cfgClient).
+func (a *App) resolvedCfg() (config.Config, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cfg != nil {
+		return *a.cfg, nil
+	}
+	return a.loadCfg()
 }
 
 // OpenURL opens an external http(s) link in the user's default browser —

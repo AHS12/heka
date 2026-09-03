@@ -48,6 +48,24 @@ func (s *Server) handleSecret(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleSecretsUsage serves GET /v1/secrets/usage — for each vault key, the
+// task slugs that reference it. Keys only; values never leave the daemon.
+func (s *Server) handleSecretsUsage(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, "GET") {
+		return
+	}
+	if s.deps.SecretsUsage == nil {
+		writeError(w, http.StatusNotImplemented, "not_implemented", "usage map not available")
+		return
+	}
+	usage, err := s.deps.SecretsUsage()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, usage)
+}
+
 func (s *Server) setSecret(w http.ResponseWriter, r *http.Request, key string) {
 	limitBody(w, r)
 	var body struct {

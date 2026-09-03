@@ -478,6 +478,59 @@ func TestReconcileManualLogsWhenQuiet(t *testing.T) {
 	}
 }
 
+// Regression (v0.8.0 field report): a daily schedule missed while the daemon
+// was down, then caught up by reconcile, kept showing yesterday as NEXT RUN —
+// reconcile closed the window without re-deriving next_run_at, and Sync's
+// attempt read a zero-valued cron entry before cron.Start.
+func TestReconcileAdvancesNextRunAfterCatchUp(t *testing.T) {
+	database, sch, runner := setup(t)
+	saveSchedule(t, database, db.Schedule{
+		ID: "s13", Slug: "daily-check", TaskSlug: "daily", Kind: "recurring",
+		Cron: "00 09 * * *", Enabled: true, MissedPolicy: "run_now",
+		LastRunAt: time.Now().Add(-48 * time.Hour).Format(time.RFC3339),
+		CreatedAt: time.Now().Add(-72 * time.Hour).Format(time.RFC3339),
+	})
+	// Sync without Start: exactly the pre-cron.Start state at daemon boot.
+	if err := sch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := sch.ReconcileWithReason("startup"); err != nil {
+		t.Fatal(err)
+	}
+	if runner.count() != 1 {
+		t.Fatalf("catch-up fires = %d, want 1", runner.count())
+	}
+	row, err := database.Schedules().Get("s13")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := parseTime(row.NextRunAt)
+	if next.IsZero() || !next.After(time.Now()) {
+		t.Fatalf("next_run_at not advanced past now after catch-up: %q", row.NextRunAt)
+	}
+}
+
+// Sync must persist a future next_run_at even before cron.Start, whose
+// entries carry a zero Next.
+func TestSyncPersistsNextRunBeforeStart(t *testing.T) {
+	database, sch, _ := setup(t)
+	saveSchedule(t, database, db.Schedule{
+		ID: "s14", Slug: "pre-start", TaskSlug: "daily", Kind: "recurring",
+		Cron: "00 09 * * *", Enabled: true, MissedPolicy: "skip", CreatedAt: db.Now(),
+	})
+	if err := sch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	row, err := database.Schedules().Get("s14")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := parseTime(row.NextRunAt)
+	if next.IsZero() || !next.After(time.Now()) {
+		t.Fatalf("next_run_at not persisted by Sync before Start: %q", row.NextRunAt)
+	}
+}
+
 func TestValidateSchedule(t *testing.T) {
 	good := db.Schedule{Slug: "nightly", TaskSlug: "daily", Kind: "recurring", Cron: "@daily"}
 	if err := ValidateSchedule(good); err != nil {

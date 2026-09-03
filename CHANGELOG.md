@@ -5,6 +5,72 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-04
+
+Backup & restore, plus a proper home for a growing vault. Every archive is an
+AES-256-encrypted zip that captures the complete Heka state — a consistent
+SQLite snapshot, the vault key, the canonical task YAML files, and the user
+config — so a restore brings back exactly what was there, secrets included.
+
+### Added
+- Automatic backups on a configurable schedule — every N hours (up to a
+  year), daily, weekly, or monthly at a local time — with missed-run
+  catch-up: if Heka was closed at the scheduled time, the missed backup
+  runs once at startup.
+- Local destination (custom folder + keep-latest retention, default inside
+  the data directory) and an S3-compatible remote destination — AWS S3,
+  Cloudflare R2, Backblaze B2, MinIO — with its own keep-latest pruning and
+  a one-click "Test connection" that exercises the bucket end to end.
+- S3 credentials live in the secrets vault (`BACKUP_S3_ACCESS_KEY_ID`,
+  `BACKUP_S3_SECRET_ACCESS_KEY`), same write-only discipline as every other
+  secret.
+- Archive encryption with a passphrase stored in the vault
+  (`BACKUP_PASSPHRASE`) so scheduled backups run unattended — with a loud
+  warning that losing it means losing the backups, since restore on a new
+  machine asks for it.
+- Manual "Back up now" with live status, a job history view (trigger,
+  status, size, per-destination outcomes), and desktop notifications when a
+  scheduled backup fails.
+- A guided restore flow: pick an archive, verify it with the passphrase,
+  preview exactly what it contains (created when, which Heka version, task
+  counts), choose optional parts (config.yaml, run artifacts), and let the
+  app stop the daemon, restore, and prompt to start it again. A safety
+  backup of the previous state is written automatically before anything is
+  overwritten; archives from newer Heka versions are refused, and checksums
+  guard against truncated or tampered archives.
+- A dedicated Backup section in Settings with all of the above, and
+  `heka backup create|status|history|test` plus `heka restore` in the CLI.
+- A dedicated secrets manager page (`/secrets`, linked from Settings →
+  Secrets) built for large vaults: search, sort, "unused only" filter,
+  per-key usage tracking (which tasks reference `${KEY}`), bulk delete with
+  confirmation, pagination, and per-key value replacement. Keys stay the
+  only thing ever displayed — values remain write-only.
+
+### Changed
+- Backup catch-up is now part of the missed-run reconcile pipeline: a missed
+  auto-backup runs once on daemon start, on wake from sleep, on the periodic
+  reconcile cadence, and from the "Reconcile now" button — not only via the
+  backup loop's own tick. A reconciled backup is labeled "catch-up" in the
+  job history, and the missed window is recorded in the system log
+  (Logs → System), alongside new events for manual starts and schedule
+  arming.
+- The backup time-of-day picker is a themed segmented field (HeroUI
+  TimeField) instead of the native browser time dropdown, which overflowed
+  the panel.
+
+### Fixed
+- The Schedules page no longer shows a stale NEXT RUN after a missed run
+  was caught up. Reconcile closed the miss window without re-deriving
+  `next_run_at`, and the startup path read a cron entry that only carries a
+  value once the engine starts — so a daily 9:00 schedule kept showing
+  yesterday's 9:00 as next. Both paths now compute the next occurrence
+  directly from the cron spec.
+- S3 "Test connection" now saves pending edits first (endpoint, bucket,
+  keys, Use HTTPS), so it tests exactly what is on screen. Enabling the S3
+  destination also defaults to HTTPS — plain HTTP is 301-redirected by
+  Cloudflare and friends, which previously surfaced as a wall of HTML; the
+  redirect now produces a clear, actionable error instead.
+
 ## [0.7.7] - 2026-09-04
 
 A fresh coat of paint: the app icon — window, executable, installer, tray,

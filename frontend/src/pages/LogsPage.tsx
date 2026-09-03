@@ -216,8 +216,8 @@ function SystemView() {
         <p className="text-sm text-zinc-400">Loading system log…</p>
       ) : entries.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-zinc-300 px-4 py-10 text-center text-sm text-zinc-400 dark:border-zinc-700">
-          No system events yet. The daemon logs here when it starts, reconciles missed
-          schedules, or wakes from sleep.
+          No system events yet. The daemon logs here when it starts, reconciles
+          missed schedules or backups, runs an archive backup, or wakes from sleep.
         </div>
       ) : (
         <SystemLogTable entries={entries} />
