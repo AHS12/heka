@@ -566,6 +566,44 @@ func TestCountOccurrences(t *testing.T) {
 	}
 }
 
+// Regression (v0.8.0 field report): reconcile counted field-based cron specs
+// against UTC ticks. Stored window bounds are UTC (db.Now), and robfig
+// evaluates a time.Local schedule in the zone of the passed-in time, so
+// "00 09 * * *" on a UTC+6 machine counted 09:00 UTC ticks (15:00 local)
+// while the running engine fires 09:00 local — a PC boot at 11:32 local
+// after a missed 09:00 run reported "0 caught up" and silently dropped it.
+// Bounds must be evaluated in the daemon's local zone.
+func TestCountOccurrencesEvaluatesLocalTicks(t *testing.T) {
+	old := time.Local
+	time.Local = time.FixedZone("TEST+6", 6*60*60)
+	defer func() { time.Local = old }()
+
+	// Window mirroring the report: last run 23:20:03 local, boot 11:32:13
+	// local the next day. The 09:00 local tick (03:00 UTC) is inside; the
+	// 09:00 UTC tick (15:00 local) is not.
+	start := time.Date(2026, 9, 3, 17, 20, 3, 0, time.UTC)
+	end := time.Date(2026, 9, 4, 5, 32, 13, 0, time.UTC)
+	if n := countOccurrences("00 09 * * *", start, end); n != 1 {
+		t.Fatalf("local 09:00 tick in window: count = %d, want 1", n)
+	}
+}
+
+// nextRunOf must derive ticks in the daemon's local zone too: feeding it the
+// stored UTC form of 11:32 local must yield tomorrow's 09:00 local tick
+// (03:00 UTC), not the UTC-shifted 09:00 UTC (15:00 local) of today.
+func TestNextRunOfEvaluatesLocalTicks(t *testing.T) {
+	old := time.Local
+	time.Local = time.FixedZone("TEST+6", 6*60*60)
+	defer func() { time.Local = old }()
+
+	from := time.Date(2026, 9, 4, 5, 32, 13, 0, time.UTC) // 11:32 local
+	next := parseTime(nextRunOf("00 09 * * *", from))
+	want := time.Date(2026, 9, 5, 3, 0, 0, 0, time.UTC) // Sep 5 09:00 local
+	if next.IsZero() || !next.Equal(want) {
+		t.Fatalf("nextRunOf = %v, want %v", next.UTC(), want)
+	}
+}
+
 func TestPauseResume(t *testing.T) {
 	database, sch, runner := setup(t)
 	saveSchedule(t, database, db.Schedule{

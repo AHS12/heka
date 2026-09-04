@@ -389,11 +389,12 @@ func runAtOf(t time.Time) string {
 
 // nextRunOf computes the next activation of a cron spec independently of the
 // running engine (usable before cron.Start and after reconcile catch-ups).
-// Empty string for an invalid spec.
+// Evaluated in the daemon's local zone to match the live engine (see
+// countOccurrences) — empty string for an invalid spec.
 func nextRunOf(spec string, from time.Time) string {
 	sched, err := specParser.Parse(spec)
 	if err != nil {
 		return ""
 	}
-	return runAtOf(sched.Next(from))
+	return runAtOf(sched.Next(from.Local()))
 }

@@ -148,6 +148,13 @@ func (s *Scheduler) logf(level, event, format string, args ...any) {
 
 // countOccurrences walks the cron spec from start to end (newest window
 // first) and counts activations. Bounded defensively.
+//
+// Both bounds are converted to the daemon's local zone before evaluation.
+// Stored timestamps are UTC (db.Now), and robfig evaluates a time.Local
+// schedule in the zone of the passed-in time — leaving the UTC strings
+// would count field-based specs ("00 09 * * *") against UTC ticks while
+// the running engine fires local ticks, so a boot between the local tick
+// and its UTC twin silently dropped the missed run (v0.8.0 field report).
 func countOccurrences(spec string, start, end time.Time) int {
 	if end.Before(start) {
 		return 0
@@ -156,6 +163,7 @@ func countOccurrences(spec string, start, end time.Time) int {
 	if err != nil {
 		return 0
 	}
+	start, end = start.Local(), end.Local()
 	count := 0
 	for next := sched.Next(start); next.Before(end) && count < 1000; next = sched.Next(next) {
 		count++
