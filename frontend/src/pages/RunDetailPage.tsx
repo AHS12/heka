@@ -34,12 +34,12 @@ export function LogDetailPage() {
   )
 
   if (isLoading) {
-    return <p className="text-sm text-zinc-400">Loading log…</p>
+    return <p className="text-sm text-foreground/50">Loading log…</p>
   }
 
   if (!run) {
     return (
-      <div className="text-sm text-zinc-500">
+      <div className="text-sm text-foreground/55">
         Log not found.{' '}
         <Link to="/logs" className="text-accent hover:underline">Back to logs</Link>
       </div>
@@ -51,14 +51,14 @@ export function LogDetailPage() {
       <div className="flex items-center gap-3">
         <Link
           to="/logs"
-          className="text-sm text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+          className="text-sm text-foreground/50 hover:text-foreground/75"
         >
           ← Logs
         </Link>
         <h2 className="text-lg font-semibold">Log Detail</h2>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm shadow-zinc-900/5 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 rounded-2xl border border-border/80 bg-surface/70 p-4 shadow-sm shadow-zinc-900/5 backdrop-blur-sm sm:grid-cols-3 lg:grid-cols-4">
         <MetaItem label="Task" value={run.task_slug} />
         <MetaItem label="Status">
           <StatusChip status={run.status} />
@@ -108,10 +108,10 @@ function MetaItem({
 }) {
   return (
     <div className="space-y-0.5">
-      <div className="text-xs text-zinc-400 dark:text-zinc-500">{label}</div>
+      <div className="text-xs text-foreground/50">{label}</div>
       <div
         title={title}
-        className={`text-sm font-medium text-zinc-800 dark:text-zinc-100 ${className ?? ''}`}
+        className={`text-sm font-medium text-foreground ${className ?? ''}`}
       >
         {children ?? value}
       </div>

@@ -68,7 +68,7 @@ export function WebhookEditor({
   return (
     <div className="space-y-3">
       {rows.length === 0 && (
-        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+        <p className="text-xs text-foreground/50">
           No webhook notifications configured.
         </p>
       )}
@@ -77,7 +77,7 @@ export function WebhookEditor({
         return (
           <div
             key={i}
-            className="relative space-y-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-4 py-3 pr-10 dark:border-zinc-800 dark:bg-zinc-900/30"
+            className="relative space-y-2 rounded-xl border border-border/80 bg-surface-secondary/50 px-4 py-3 pr-10"
           >
             {/* Close button pinned top-right */}
             <RemoveRow
@@ -106,7 +106,7 @@ export function WebhookEditor({
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mr-3 inline-flex items-center gap-1 text-xs text-zinc-400 underline-offset-2 hover:text-zinc-600 hover:underline dark:text-zinc-500 dark:hover:text-zinc-300"
+                className="mr-3 inline-flex items-center gap-1 text-xs text-foreground/50 underline-offset-2 hover:text-foreground/75 hover:underline"
               >
                 How to create a {link.label} ↗
               </a>
@@ -116,7 +116,7 @@ export function WebhookEditor({
             {row.format === 'telegram' ? (
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <span className="mb-1 block text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                  <span className="mb-1 block text-[11px] font-medium text-foreground/50">
                     Bot Token
                   </span>
                   <SecretValue
@@ -126,7 +126,7 @@ export function WebhookEditor({
                   />
                 </div>
                 <div>
-                  <span className="mb-1 block text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                  <span className="mb-1 block text-[11px] font-medium text-foreground/50">
                     Chat ID
                   </span>
                   <SecretValue
@@ -138,7 +138,7 @@ export function WebhookEditor({
               </div>
             ) : (
               <div>
-                <span className="mb-1 block text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                <span className="mb-1 block text-[11px] font-medium text-foreground/50">
                   Webhook URL
                 </span>
                 <SecretValue
@@ -150,7 +150,7 @@ export function WebhookEditor({
             )}
 
             {/* Hint */}
-            <p className="text-[11px] leading-relaxed text-zinc-400 dark:text-zinc-500">
+            <p className="text-[11px] leading-relaxed text-foreground/50">
               {guide.hint}
             </p>
           </div>

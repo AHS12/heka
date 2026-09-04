@@ -81,15 +81,15 @@ function clampHours(n: number): number {
 }
 
 function card() {
-  return 'rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60'
+  return 'rounded-2xl border border-border/80 bg-surface/70 p-4 shadow-sm backdrop-blur-sm'
 }
 
 function sectionTitle() {
-  return 'text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400'
+  return 'text-xs font-semibold uppercase tracking-wide text-foreground/55'
 }
 
 function fieldLabel() {
-  return 'mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400'
+  return 'mb-1 block text-xs font-medium text-foreground/55'
 }
 
 function ToggleRow({
@@ -104,10 +104,10 @@ function ToggleRow({
   onChange: (on: boolean) => void
 }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-zinc-200/80 bg-white/60 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+    <div className="flex items-center justify-between rounded-xl border border-border/80 bg-surface/60 px-4 py-3">
       <div className="min-w-0 pr-3">
-        <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{label}</p>
-        {hint && <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{hint}</p>}
+        <p className="text-sm font-medium text-foreground">{label}</p>
+        {hint && <p className="mt-0.5 text-xs text-foreground/55">{hint}</p>}
       </div>
       <button
         type="button"
@@ -116,7 +116,7 @@ function ToggleRow({
         aria-label={label}
         onClick={() => onChange(!checked)}
         className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent-ring ${
-          checked ? 'bg-accent' : 'bg-zinc-300 dark:bg-zinc-700'
+          checked ? 'bg-accent' : 'bg-foreground/25'
         }`}
       >
         <span
@@ -271,7 +271,7 @@ export function BackupSection() {
     // leave the panel stuck on "Loading…".
     return (
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Backup</h3>
+        <h3 className="text-sm font-semibold text-foreground/75">Backup</h3>
         <FormErrors errors={apiErrorDetails(config.error)} title="Backup settings could not be loaded" />
         <button type="button" className={primaryBtn} onClick={() => config.refetch()}>
           Retry
@@ -281,7 +281,7 @@ export function BackupSection() {
   }
 
   if (config.isLoading || !draft) {
-    return <p className="text-sm text-zinc-400">Loading backup settings…</p>
+    return <p className="text-sm text-foreground/50">Loading backup settings…</p>
   }
 
   const last = status.data?.last
@@ -296,13 +296,13 @@ export function BackupSection() {
           of the card, and round again back at rest. */}
       <div
         ref={headerRef}
-        className={`sticky top-0 z-10 -mx-4 -mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-zinc-200/80 bg-white/85 px-4 py-3 backdrop-blur-sm transition-[border-radius] duration-300 ease-out sm:-mx-5 sm:-mt-5 sm:px-5 dark:border-zinc-800 dark:bg-zinc-950/70 ${
+        className={`sticky top-0 z-10 -mx-4 -mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border/80 bg-surface/85 px-4 py-3 backdrop-blur-sm transition-[border-radius] duration-300 ease-out sm:-mx-5 sm:-mt-5 sm:px-5 ${
           pinned ? 'rounded-none' : 'rounded-t-2xl'
         }`}
       >
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Backup</h3>
-          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+          <h3 className="text-sm font-semibold text-foreground/75">Backup</h3>
+          <p className="mt-0.5 text-xs text-foreground/55">
             Encrypted archives of your tasks, schedules, secrets, and settings.
           </p>
         </div>
@@ -326,7 +326,7 @@ export function BackupSection() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className={sectionTitle()}>Status</p>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-300">
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-foreground/75">
               {running ? (
                 <span className="inline-flex items-center gap-1.5 font-medium text-accent">
                   <svg className="size-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -341,14 +341,14 @@ export function BackupSection() {
                     Last backup:{' '}
                     <JobStatus job={last} />
                   </span>
-                  <span className="text-zinc-500 dark:text-zinc-400">{formatStamp(last.finished_at || last.started_at)}</span>
-                  {!!last.size_bytes && <span className="text-zinc-500 dark:text-zinc-400">{formatBytes(last.size_bytes)}</span>}
+                  <span className="text-foreground/55">{formatStamp(last.finished_at || last.started_at)}</span>
+                  {!!last.size_bytes && <span className="text-foreground/55">{formatBytes(last.size_bytes)}</span>}
                 </>
               ) : (
-                <span className="text-zinc-500 dark:text-zinc-400">No backup yet</span>
+                <span className="text-foreground/55">No backup yet</span>
               )}
               {status.data?.next_run_at && (
-                <span className="text-zinc-500 dark:text-zinc-400">Next: {formatStamp(status.data.next_run_at)}</span>
+                <span className="text-foreground/55">Next: {formatStamp(status.data.next_run_at)}</span>
               )}
             </div>
           </div>
@@ -483,11 +483,11 @@ export function BackupSection() {
                   value={draft.keep_last_local || 5}
                   onChange={(e) => patch({keep_last_local: Math.max(1, parseInt(e.target.value) || 1)})}
                 />
-                <span className="text-xs text-zinc-400">backups</span>
+                <span className="text-xs text-foreground/50">backups</span>
               </div>
             </div>
           </div>
-          <p className="text-xs text-zinc-400 dark:text-zinc-500">
+          <p className="text-xs text-foreground/50">
             Archives are AES-256 encrypted zip files.
           </p>
 
@@ -510,7 +510,7 @@ export function BackupSection() {
             }}
           />
           {s3Enabled && (
-            <div className="space-y-3 rounded-xl border border-zinc-200/70 bg-white/40 p-3 dark:border-zinc-800 dark:bg-zinc-950/20">
+            <div className="space-y-3 rounded-xl border border-border/70 bg-surface/40 p-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Endpoint" hint="R2 example: <account>.r2.cloudflarestorage.com">
                   <TextInput
@@ -572,7 +572,7 @@ export function BackupSection() {
                       value={draft.s3.keep_last ?? 0}
                       onChange={(e) => patch({s3: {...draft.s3, keep_last: Math.max(0, parseInt(e.target.value) || 0)}})}
                     />
-                    <span className="text-xs text-zinc-400">0 = keep all</span>
+                    <span className="text-xs text-foreground/50">0 = keep all</span>
                   </div>
                 </Field>
                 <div className="flex items-end pb-1">
@@ -628,11 +628,11 @@ export function BackupSection() {
         <p className={sectionTitle()}>Encryption</p>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Archive passphrase</p>
-            <p className="mt-0.5 max-w-xl text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-sm font-medium text-foreground">Archive passphrase</p>
+            <p className="mt-0.5 max-w-xl text-xs text-foreground/55">
               Every archive is encrypted with it. Heka keeps a copy in the vault so scheduled
               backups run unattended — but restoring on a new machine asks for it.
-              <span className="font-medium text-zinc-700 dark:text-zinc-200">
+              <span className="font-medium text-foreground/75">
                 {' '}If you lose the passphrase, the backup cannot be restored — store it safely.
               </span>
             </p>
@@ -760,7 +760,7 @@ function PassphraseDialog({
           <Modal.Heading className="text-lg font-semibold">
             {changing ? 'Change archive passphrase' : 'Archive passphrase'}
           </Modal.Heading>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1 text-xs text-foreground/55">
             {changing
               ? 'Existing archives stay encrypted with the old passphrase — you still need it to restore them.'
               : 'Encrypts every backup archive, local and remote.'}

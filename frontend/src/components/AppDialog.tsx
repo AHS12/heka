@@ -30,7 +30,7 @@ export function AppDialog({
           className="max-h-[calc(100dvh-1.5rem)] w-full"
         >
           <Modal.Dialog
-            className={`overflow-hidden rounded-[1.25rem] border border-zinc-200/90 bg-[color:var(--background)] text-[color:var(--foreground)] shadow-2xl shadow-zinc-950/25 outline-none dark:border-zinc-700/80 ${dialogClassName ?? ''}`}
+            className={`overflow-hidden rounded-[1.25rem] border border-border/90 bg-[color:var(--background)] text-[color:var(--foreground)] shadow-2xl shadow-zinc-950/25 outline-none ${dialogClassName ?? ''}`}
           >
             {children}
           </Modal.Dialog>
@@ -41,9 +41,9 @@ export function AppDialog({
 }
 
 export const dialogHeaderCls =
-  'flex items-start justify-between gap-4 border-b border-zinc-200/80 bg-white/60 px-5 py-4 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/35'
+  'flex items-start justify-between gap-4 border-b border-border/80 bg-surface/60 px-5 py-4 backdrop-blur'
 
 export const dialogBodyCls = 'min-h-0 overflow-y-auto px-5 py-4'
 
 export const dialogFooterCls =
-  'flex items-center justify-end gap-2 border-t border-zinc-200/80 bg-white/70 px-5 py-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/45'
+  'flex items-center justify-end gap-2 border-t border-border/80 bg-surface/70 px-5 py-3 backdrop-blur'

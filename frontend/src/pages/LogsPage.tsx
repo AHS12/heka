@@ -19,14 +19,14 @@ function ViewToggle({view, onChange}: {view: LogView; onChange: (v: LogView) => 
       className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
         view === v
           ? 'bg-accent text-accent-contrast shadow-sm shadow-zinc-900/10'
-          : 'text-zinc-500 hover:bg-zinc-200/70 dark:text-zinc-400 dark:hover:bg-zinc-800/70'
+          : 'text-foreground/55 hover:bg-surface-secondary/70'
       }`}
     >
       {label}
     </button>
   )
   return (
-    <div className="inline-flex items-center rounded-full border border-zinc-200/80 bg-white/80 p-0.5 shadow-sm shadow-zinc-900/5 dark:border-zinc-700/60 dark:bg-zinc-900/70">
+    <div className="inline-flex items-center rounded-full border border-border/80 bg-surface/80 p-0.5 shadow-sm shadow-zinc-900/5">
       {btn('runs', 'Runs')}
       {btn('system', 'System')}
     </div>
@@ -116,7 +116,7 @@ function RunsView() {
           onClick={toggleSort}
           aria-label={isDesc ? 'Sort oldest first' : 'Sort newest first'}
           title={isDesc ? 'Newest first' : 'Oldest first'}
-          className="inline-flex items-center gap-1 rounded-full border border-zinc-200/80 bg-white/80 px-2.5 py-1 text-xs font-medium shadow-sm shadow-zinc-900/5 outline-none transition-colors hover:bg-zinc-200/70 dark:border-zinc-700/60 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:bg-zinc-800/70"
+          className="inline-flex items-center gap-1 rounded-full border border-border/80 bg-surface/80 px-2.5 py-1 text-xs font-medium shadow-sm shadow-zinc-900/5 outline-none transition-colors hover:bg-surface-secondary/70"
         >
           <svg className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
@@ -137,7 +137,7 @@ function RunsView() {
               p.set('order', order)
               setSearchParams(p, {replace: true})
             }}
-            className="rounded-full border border-zinc-200/80 bg-white/80 px-2.5 py-1 text-xs font-medium shadow-sm shadow-zinc-900/5 outline-none transition-colors hover:bg-zinc-200/70 dark:border-zinc-700/60 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:bg-zinc-800/70"
+            className="rounded-full border border-border/80 bg-surface/80 px-2.5 py-1 text-xs font-medium shadow-sm shadow-zinc-900/5 outline-none transition-colors hover:bg-surface-secondary/70"
           >
             Clear
           </button>
@@ -152,9 +152,9 @@ function RunsView() {
       />
 
       {isLoading ? (
-        <p className="text-sm text-zinc-400">Loading logs…</p>
+        <p className="text-sm text-foreground/50">Loading logs…</p>
       ) : runs.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-300 px-4 py-10 text-center text-sm text-zinc-400 dark:border-zinc-700">
+        <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-foreground/50">
           {filters.q ? 'No matching log output found.' : 'No logs yet.'}
         </div>
       ) : (
@@ -164,7 +164,7 @@ function RunsView() {
             linkPrefix="/logs"
             highlight={filters.q}
           />
-          <div className="flex items-center justify-between text-xs text-zinc-400 dark:text-zinc-500">
+          <div className="flex items-center justify-between text-xs text-foreground/50">
             <span>
               {runs.length} shown · {data?.total ?? 0} total
             </span>
@@ -173,7 +173,7 @@ function RunsView() {
                 <button
                   type="button"
                   onClick={goPrev}
-                  className="rounded-lg border border-zinc-200 px-2 py-1 dark:border-zinc-700"
+                  className="rounded-lg border border-border px-2 py-1"
                 >
                   ← Newer
                 </button>
@@ -182,7 +182,7 @@ function RunsView() {
                 <button
                   type="button"
                   onClick={goNext}
-                  className="rounded-lg border border-zinc-200 px-2 py-1 dark:border-zinc-700"
+                  className="rounded-lg border border-border px-2 py-1"
                 >
                   Older →
                 </button>
@@ -206,16 +206,16 @@ function SystemView() {
         <button
           type="button"
           onClick={() => void systemLog.refetch()}
-          className="rounded-full border border-zinc-200/80 bg-white/80 px-2.5 py-1 text-xs font-medium shadow-sm shadow-zinc-900/5 outline-none transition-colors hover:bg-zinc-200/70 dark:border-zinc-700/60 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:bg-zinc-800/70"
+          className="rounded-full border border-border/80 bg-surface/80 px-2.5 py-1 text-xs font-medium shadow-sm shadow-zinc-900/5 outline-none transition-colors hover:bg-surface-secondary/70"
         >
           Refresh
         </button>
       </div>
 
       {systemLog.isLoading ? (
-        <p className="text-sm text-zinc-400">Loading system log…</p>
+        <p className="text-sm text-foreground/50">Loading system log…</p>
       ) : entries.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-300 px-4 py-10 text-center text-sm text-zinc-400 dark:border-zinc-700">
+        <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-foreground/50">
           No system events yet. The daemon logs here when it starts, reconciles
           missed schedules or backups, runs an archive backup, or wakes from sleep.
         </div>

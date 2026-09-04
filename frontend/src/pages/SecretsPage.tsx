@@ -117,22 +117,22 @@ export function SecretsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Secrets</h2>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1 text-xs text-foreground/55">
             {allKeys.length} key{allKeys.length === 1 ? '' : 's'} in the vault · values are
             encrypted at rest and never shown — reference them in tasks as{' '}
-            <code className="rounded bg-zinc-100 px-1 py-0.5 dark:bg-zinc-800">{'${KEY}'}</code>.
+            <code className="rounded bg-surface-secondary px-1 py-0.5">{'${KEY}'}</code>.
           </p>
         </div>
         <a
           href="#/settings?tab=secrets"
-          className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/80 px-3 py-1 text-xs font-medium shadow-sm transition-colors hover:border-accent hover:text-accent dark:border-zinc-700/60 dark:bg-zinc-900/70"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/80 px-3 py-1 text-xs font-medium shadow-sm transition-colors hover:border-accent hover:text-accent"
         >
           Back to settings
         </a>
       </div>
 
       {/* Add */}
-      <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+      <div className="rounded-2xl border border-border/80 bg-surface/70 p-4 shadow-sm backdrop-blur-sm">
         <div className="flex flex-wrap gap-2">
           <Field label="Key">
             <TextInput
@@ -177,7 +177,7 @@ export function SecretsPage() {
       </div>
 
       {/* Browse */}
-      <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+      <div className="rounded-2xl border border-border/80 bg-surface/70 p-4 shadow-sm backdrop-blur-sm">
         <div className="flex flex-wrap items-center gap-2">
           <TextInput
             aria-label="Search keys"
@@ -206,7 +206,7 @@ export function SecretsPage() {
             className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
               unusedOnly
                 ? 'border-accent bg-accent/10 text-accent'
-                : 'border-zinc-200/80 bg-white/80 text-zinc-600 hover:border-accent hover:text-accent dark:border-zinc-700/60 dark:bg-zinc-900/70 dark:text-zinc-300'
+                : 'border-border/80 bg-surface/80 text-foreground/75 hover:border-accent hover:text-accent'
             }`}
           >
             Unused only
@@ -219,9 +219,9 @@ export function SecretsPage() {
         </div>
 
         {keys.isLoading || usage.isLoading ? (
-          <p className="mt-3 text-xs text-zinc-400">Loading…</p>
+          <p className="mt-3 text-xs text-foreground/50">Loading…</p>
         ) : filtered.length === 0 ? (
-          <div className="mt-3 rounded-2xl border border-dashed border-zinc-300 px-4 py-10 text-center text-sm text-zinc-400 dark:border-zinc-700">
+          <div className="mt-3 rounded-2xl border border-dashed border-field-border px-4 py-10 text-center text-sm text-foreground/50">
             {allKeys.length === 0
               ? 'No secrets yet — add one above.'
               : 'No keys match the current filters.'}
@@ -233,7 +233,7 @@ export function SecretsPage() {
               return (
                 <li
                   key={k}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200/80 bg-white/60 px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900/50"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border/80 bg-surface/60 px-3 py-2 text-sm"
                 >
                   <label className="flex min-w-0 items-center gap-2.5">
                     <input
@@ -243,7 +243,7 @@ export function SecretsPage() {
                       checked={selected.has(k)}
                       onChange={() => toggleSelect(k)}
                     />
-                    <code className="truncate font-mono text-xs text-zinc-700 dark:text-zinc-300">
+                    <code className="truncate font-mono text-xs text-foreground/75">
                       {k}
                     </code>
                   </label>
@@ -259,7 +259,7 @@ export function SecretsPage() {
                     {usedBy.length > 0 ? (
                       <span
                         title={`Used by: ${usedBy.join(', ')}`}
-                        className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                        className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-foreground/75"
                       >
                         used by {usedBy.length} task{usedBy.length === 1 ? '' : 's'}
                       </span>
@@ -275,7 +275,7 @@ export function SecretsPage() {
                         setEditKey(k)
                         setEditValue('')
                       }}
-                      className="text-xs text-zinc-400 outline-none hover:text-accent focus-visible:ring-2 focus-visible:ring-accent-ring"
+                      className="text-xs text-foreground/50 outline-none hover:text-accent focus-visible:ring-2 focus-visible:ring-accent-ring"
                     >
                       Set value
                     </button>
@@ -283,7 +283,7 @@ export function SecretsPage() {
                       type="button"
                       aria-label={`Delete secret ${k}`}
                       onClick={() => setConfirmDelete(k)}
-                      className="text-xs text-zinc-400 outline-none hover:text-red-500 focus-visible:ring-2 focus-visible:ring-accent-ring"
+                      className="text-xs text-foreground/50 outline-none hover:text-red-500 focus-visible:ring-2 focus-visible:ring-accent-ring"
                     >
                       Delete
                     </button>
@@ -313,7 +313,7 @@ export function SecretsPage() {
           <Modal.Header className={dialogHeaderCls}>
             <div>
               <Modal.Heading className="text-lg font-semibold">Set value</Modal.Heading>
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="mt-1 text-xs text-foreground/55">
                 Replaces the stored value of <code className="font-mono">{editKey}</code>. The old
                 value cannot be read back.
               </p>
@@ -356,14 +356,14 @@ export function SecretsPage() {
               <Modal.Heading className="text-lg font-semibold">
                 Delete {selected.size} secret{selected.size === 1 ? '' : 's'}?
               </Modal.Heading>
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="mt-1 text-xs text-foreground/55">
                 Tasks referencing them will fail to resolve {'${KEY}'} at run time.
               </p>
             </div>
             <Modal.CloseTrigger aria-label="Close bulk delete dialog" isDisabled={removeMany.isPending} />
           </Modal.Header>
           <Modal.Body className={dialogBodyCls}>
-            <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-zinc-600 dark:text-zinc-300">
+            <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-foreground/75">
               {[...selected].map((k) => (
                 <li key={k} className="font-mono">
                   {k}
@@ -396,7 +396,7 @@ export function SecretsPage() {
           <Modal.Header className={dialogHeaderCls}>
             <div>
               <Modal.Heading className="text-lg font-semibold">Delete {confirmDelete}?</Modal.Heading>
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="mt-1 text-xs text-foreground/55">
                 {isBackupSecret(confirmDelete)
                   ? 'This key is managed by Heka\'s automatic backups — the daemon uses it directly, tasks never reference it.'
                   : 'Tasks referencing it will fail to resolve it at run time.'}

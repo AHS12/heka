@@ -122,7 +122,7 @@ export function RestoreDialog({onClose, onDone}: {onClose: () => void; onDone: (
       <Modal.Header className={dialogHeaderCls}>
         <div>
           <Modal.Heading className="text-lg font-semibold">Restore from backup</Modal.Heading>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1 text-xs text-foreground/55">
             Replaces your current tasks, schedules, secrets, and settings with the archive's.
           </p>
         </div>
@@ -166,22 +166,22 @@ export function RestoreDialog({onClose, onDone}: {onClose: () => void; onDone: (
 
         {phase === 'preview' && m && (
           <div className="space-y-3">
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl border border-zinc-200/80 bg-white/60 px-3.5 py-3 text-xs dark:border-zinc-800 dark:bg-zinc-900/50">
-              <dt className="text-zinc-500 dark:text-zinc-400">Created</dt>
-              <dd className="text-zinc-800 dark:text-zinc-200">{formatStamp(m.created_at)}</dd>
-              <dt className="text-zinc-500 dark:text-zinc-400">Heka version</dt>
-              <dd className="text-zinc-800 dark:text-zinc-200">{m.app_version || '—'}</dd>
-              <dt className="text-zinc-500 dark:text-zinc-400">Created on</dt>
-              <dd className="truncate text-zinc-800 dark:text-zinc-200">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl border border-border/80 bg-surface/60 px-3.5 py-3 text-xs">
+              <dt className="text-foreground/55">Created</dt>
+              <dd className="text-foreground">{formatStamp(m.created_at)}</dd>
+              <dt className="text-foreground/55">Heka version</dt>
+              <dd className="text-foreground">{m.app_version || '—'}</dd>
+              <dt className="text-foreground/55">Created on</dt>
+              <dd className="truncate text-foreground">
                 {m.hostname ? `${m.hostname} (${m.os}/${m.arch})` : '—'}
               </dd>
-              <dt className="text-zinc-500 dark:text-zinc-400">Contents</dt>
-              <dd className="text-zinc-800 dark:text-zinc-200">
+              <dt className="text-foreground/55">Contents</dt>
+              <dd className="text-foreground">
                 {m.counts.tasks} tasks · {m.counts.schedules} schedules · {m.counts.secrets} secrets
                 {m.includes.run_history ? ` · ${m.counts.runs} runs` : ''}
               </dd>
             </dl>
-            <label className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-200">
+            <label className="flex items-start gap-2 text-sm text-foreground/75">
               <input
                 type="checkbox"
                 className="mt-0.5 accent-[var(--accent)]"
@@ -191,15 +191,15 @@ export function RestoreDialog({onClose, onDone}: {onClose: () => void; onDone: (
               />
               <span>
                 Restore config.yaml
-                {!inspect?.has_config && <span className="text-zinc-400"> (not in this archive)</span>}
+                {!inspect?.has_config && <span className="text-foreground/50"> (not in this archive)</span>}
                 {inspect?.has_config && (
-                  <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+                  <span className="block text-xs text-foreground/55">
                     It may contain path overrides for a different machine — review after restoring.
                   </span>
                 )}
               </span>
             </label>
-            <label className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-200">
+            <label className="flex items-start gap-2 text-sm text-foreground/75">
               <input
                 type="checkbox"
                 className="mt-0.5 accent-[var(--accent)]"
@@ -209,7 +209,7 @@ export function RestoreDialog({onClose, onDone}: {onClose: () => void; onDone: (
               />
               <span>
                 Restore run artifact files
-                {!inspect?.has_artifacts && <span className="text-zinc-400"> (not in this archive)</span>}
+                {!inspect?.has_artifacts && <span className="text-foreground/50"> (not in this archive)</span>}
               </span>
             </label>
             <FormErrors errors={errors} title="Restore failed" />
@@ -222,7 +222,7 @@ export function RestoreDialog({onClose, onDone}: {onClose: () => void; onDone: (
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">{workingLabel}</p>
+            <p className="text-sm text-foreground/55">{workingLabel}</p>
           </div>
         )}
 
@@ -251,11 +251,11 @@ export function RestoreDialog({onClose, onDone}: {onClose: () => void; onDone: (
               </div>
             </div>
             {daemonRestarted ? (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-foreground/55">
                 Daemon starting — your data will appear in a moment.
               </p>
             ) : (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-foreground/55">
                 The daemon is stopped. Start it to load the restored data.
               </p>
             )}

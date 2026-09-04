@@ -5,7 +5,7 @@ export function Placeholder({title}: {title: string}) {
   return (
     <section data-testid="placeholder-page">
       <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="mt-1 text-sm text-foreground/55">
         This page lands in SPEC-13/14.
       </p>
     </section>

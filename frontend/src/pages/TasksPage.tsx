@@ -135,9 +135,9 @@ export function TasksPage() {
       </div>
 
       {tasks.isLoading ? (
-        <p className="text-sm text-zinc-400">Loading tasks…</p>
+        <p className="text-sm text-foreground/50">Loading tasks…</p>
       ) : rows.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-300 px-4 py-10 text-center text-sm text-zinc-400 dark:border-zinc-700">
+        <div className="rounded-2xl border border-dashed border-field-border px-4 py-10 text-center text-sm text-foreground/50">
           {tasks.data?.length === 0
             ? 'No tasks yet — create one or import a YAML file.'
             : 'No tasks match the filters.'}
@@ -173,7 +173,7 @@ export function TasksPage() {
         <div
           role="status"
           data-testid="toast"
-          className="fixed bottom-5 right-5 rounded-xl border border-zinc-200 bg-white/90 px-4 py-2.5 text-sm shadow-lg backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/90"
+          className="fixed bottom-5 right-5 rounded-xl border border-field-border bg-surface/90 px-4 py-2.5 text-sm shadow-lg backdrop-blur"
         >
           {toast}
         </div>

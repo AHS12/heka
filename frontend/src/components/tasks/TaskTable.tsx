@@ -69,24 +69,24 @@ function TaskCard({
     <div
       data-testid={`task-row-${t.slug}`}
       onClick={() => onOpen(t.slug)}
-      className="group cursor-pointer rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm shadow-zinc-900/5 backdrop-blur transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:shadow-zinc-900/20"
+      className="group cursor-pointer rounded-2xl border border-border/80 bg-surface/70 p-4 shadow-sm shadow-zinc-900/5 backdrop-blur transition-shadow hover:shadow-md dark:hover:shadow-zinc-900/20"
     >
       {/* Header: identity + controls */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100" title={t.slug}>
+            <span className="truncate text-sm font-semibold text-foreground" title={t.slug}>
               {t.name}
             </span>
             <span
               className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                TYPE_BADGE[t.type] ?? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+                TYPE_BADGE[t.type] ?? 'bg-surface-secondary text-foreground/75'
               }`}
             >
               {t.type}
             </span>
           </div>
-          <div className="mt-0.5 truncate text-xs text-zinc-400 dark:text-zinc-500" title={t.slug}>
+          <div className="mt-0.5 truncate text-xs text-foreground/50" title={t.slug}>
             {t.slug}
           </div>
         </div>
@@ -96,7 +96,7 @@ function TaskCard({
             type="button"
             onClick={() => onRun(t.slug)}
             aria-label={`Run ${t.slug}`}
-            className="inline-flex items-center gap-1 rounded-lg border border-zinc-200/80 bg-white/80 px-2.5 py-1 text-xs font-medium text-zinc-700 outline-none transition-colors hover:border-accent/50 hover:text-accent focus-visible:ring-2 focus-visible:ring-accent-ring dark:border-zinc-700/60 dark:bg-zinc-900/70 dark:text-zinc-200"
+            className="inline-flex items-center gap-1 rounded-lg border border-field-border/80 bg-surface/80 px-2.5 py-1 text-xs font-medium text-foreground/75 outline-none transition-colors hover:border-accent/50 hover:text-accent focus-visible:ring-2 focus-visible:ring-accent-ring"
           >
             <svg className="size-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
               <path d="M8 5v14l11-7z" />
@@ -120,7 +120,7 @@ function TaskCard({
               <button
                 type="button"
                 onClick={() => setConfirming(false)}
-                className="rounded-md px-2 py-1 text-xs text-zinc-500 outline-none hover:bg-zinc-200/70 dark:hover:bg-zinc-800"
+                className="rounded-md px-2 py-1 text-xs text-foreground/55 outline-none hover:bg-surface-secondary/70"
               >
                 No
               </button>
@@ -129,7 +129,7 @@ function TaskCard({
             <button
               type="button"
               onClick={() => setConfirming(true)}
-              className="rounded-lg p-1.5 text-zinc-400 outline-none hover:bg-red-100 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-accent-ring dark:hover:bg-red-950/50 dark:hover:text-red-400"
+              className="rounded-lg p-1.5 text-foreground/50 outline-none hover:bg-red-100 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-accent-ring dark:hover:bg-red-950/50 dark:hover:text-red-400"
               aria-label={`Delete task ${t.slug}`}
             >
               <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -142,9 +142,9 @@ function TaskCard({
       </div>
 
       {/* Detail row */}
-      <div className="mt-3 flex flex-wrap items-start gap-x-6 gap-y-3 border-t border-zinc-100 pt-3 dark:border-zinc-800/60">
+      <div className="mt-3 flex flex-wrap items-start gap-x-6 gap-y-3 border-t border-border/60 pt-3">
         <DetailBlock label="Runtime">
-          <span className="text-xs text-zinc-600 dark:text-zinc-300">
+          <span className="text-xs text-foreground/75">
             {t.type} · {t.runtime}
           </span>
         </DetailBlock>
@@ -156,7 +156,7 @@ function TaskCard({
               <DateTime iso={t.last_run_at} />
             </div>
           ) : (
-            <span className="text-xs text-zinc-400 dark:text-zinc-500">Never</span>
+            <span className="text-xs text-foreground/50">Never</span>
           )}
         </DetailBlock>
 

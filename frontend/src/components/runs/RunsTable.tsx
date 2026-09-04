@@ -38,7 +38,7 @@ export function RunsTable({
       <>
         {start > 0 && '…'}
         {snippet.slice(0, matchStart)}
-        <mark className="bg-yellow-200 text-zinc-900 dark:bg-yellow-800 dark:text-yellow-100">
+        <mark className="bg-yellow-200 text-foreground dark:bg-yellow-800 dark:text-yellow-100">
           {snippet.slice(matchStart, matchEnd)}
         </mark>
         {snippet.slice(matchEnd)}
@@ -48,10 +48,10 @@ export function RunsTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/70 shadow-sm shadow-zinc-900/5 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+    <div className="overflow-hidden rounded-2xl border border-border/80 bg-surface/70 shadow-sm shadow-zinc-900/5 backdrop-blur-sm">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-zinc-200/80 text-xs uppercase tracking-wide text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
+          <tr className="border-b border-border/80 text-xs uppercase tracking-wide text-foreground/50">
             <th className="px-4 py-2.5 font-medium">Task</th>
             <th className="px-3 py-2.5 font-medium">Status</th>
             <th className="px-3 py-2.5 font-medium">Trigger</th>
@@ -65,7 +65,7 @@ export function RunsTable({
             <tr
               key={r.run_id}
               data-testid={`run-row-${r.run_id}`}
-              className="border-b border-zinc-100 last:border-0 hover:bg-zinc-100/60 dark:border-zinc-800/60 dark:hover:bg-zinc-800/40"
+              className="border-b border-border/60 last:border-0 hover:bg-surface-secondary/60"
             >
               <td className="px-4 py-2.5">
                 <Link
@@ -75,7 +75,7 @@ export function RunsTable({
                   {r.task_slug}
                 </Link>
                 {highlight && r.stdout && (
-                  <div className="mt-0.5 max-w-xs truncate text-xs text-zinc-400 dark:text-zinc-500">
+                  <div className="mt-0.5 max-w-xs truncate text-xs text-foreground/50">
                     {highlightSnippet(r.stdout)}
                   </div>
                 )}
@@ -83,13 +83,13 @@ export function RunsTable({
               <td className="px-3 py-2.5">
                 <StatusChip status={r.status} />
               </td>
-              <td className="px-3 py-2.5 text-xs text-zinc-500 dark:text-zinc-400">
+              <td className="px-3 py-2.5 text-xs text-foreground/55">
                 {r.trigger}
               </td>
-              <td className="px-3 py-2.5 text-xs text-zinc-500 dark:text-zinc-400">
+              <td className="px-3 py-2.5 text-xs text-foreground/55">
                 {formatTime(r.started_at)}
               </td>
-              <td className="px-3 py-2.5 text-xs text-zinc-500 dark:text-zinc-400">
+              <td className="px-3 py-2.5 text-xs text-foreground/55">
                 {formatDuration(r.duration_ms)}
               </td>
               <td className="px-3 py-2.5">
@@ -102,7 +102,7 @@ export function RunsTable({
                     {r.exit_code}
                   </span>
                 ) : (
-                  <span className="text-xs text-zinc-400">—</span>
+                  <span className="text-xs text-foreground/50">—</span>
                 )}
               </td>
             </tr>

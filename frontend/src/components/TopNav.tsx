@@ -16,22 +16,18 @@ const NAV_ITEMS = [
 ]
 
 const PILL =
-  'rounded-full border border-zinc-200/80 bg-white/80 px-3.5 py-1.5 ' +
-  'text-sm font-medium shadow-sm shadow-zinc-900/5 backdrop-blur-md ' +
+  'rounded-full border border-border/80 bg-surface/80 px-3.5 py-1.5 ' +
+  'text-sm font-medium text-foreground/75 shadow-sm shadow-zinc-900/5 backdrop-blur-md ' +
   'outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent-ring ' +
   'aria-[current=page]:border-accent aria-[current=page]:bg-accent ' +
   'aria-[current=page]:text-accent-contrast ' +
-  'text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 ' +
-  'dark:border-zinc-700/60 dark:bg-zinc-900/70 dark:text-zinc-300 ' +
-  'dark:hover:bg-zinc-800/70 dark:hover:text-zinc-50'
+  'hover:bg-surface-secondary/70 hover:text-foreground'
 
 const ICON_PILL =
-  'grid size-9 place-items-center rounded-full border border-zinc-200/80 ' +
-  'bg-white/80 shadow-sm shadow-zinc-900/5 backdrop-blur-md outline-none ' +
+  'grid size-9 place-items-center rounded-full border border-border/80 ' +
+  'bg-surface/80 text-foreground/75 shadow-sm shadow-zinc-900/5 backdrop-blur-md outline-none ' +
   'transition-colors focus-visible:ring-2 focus-visible:ring-accent-ring ' +
-  'text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900 ' +
-  'dark:border-zinc-700/60 dark:bg-zinc-900/70 dark:text-zinc-300 ' +
-  'dark:hover:bg-zinc-800/70 dark:hover:text-zinc-50'
+  'hover:bg-surface-secondary/70 hover:text-foreground'
 
 function GearIcon() {
   return (
@@ -77,7 +73,7 @@ export function TopNav() {
     <header className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-4">
       <div className="mr-2 flex items-baseline gap-1.5">
         <span className="font-brand text-sm font-bold tracking-wider">Heka</span>
-        <span className="text-xs text-zinc-400 dark:text-zinc-500">
+        <span className="text-xs text-foreground/50">
           v{APP_VERSION}
         </span>
       </div>

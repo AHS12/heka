@@ -94,6 +94,26 @@
   --gradient-end: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 4%, oklch(0.97 0.002 80));
 }
 
+/* ======================== HIGH-CONTRAST (light) — near-black on pure white, strong borders ======================== */
+[data-theme="high-contrast-light"] {
+  color-scheme: light;
+
+  --foreground: oklch(0.12 0 0);               /* near-black */
+  --background: oklch(1.0 0 0);                /* pure white */
+
+  --surface: oklch(1.0 0 0);
+  --surface-secondary: oklch(0.94 0 0);
+  --field-background: oklch(1.0 0 0);
+  --field-foreground: var(--foreground);
+  --field-border: oklch(0.45 0 0);             /* DARK borders for contrast */
+
+  --border: oklch(0.50 0 0);                   /* DARK borders */
+
+  --gradient-start: oklch(1.0 0 0);
+  --gradient-mid: oklch(0.98 0 0);
+  --gradient-end: oklch(1.0 0 0);
+}
+
 /* ======================== HIGH-CONTRAST (dark) — light borders, max readability ======================== */
 [data-theme="high-contrast"] {
   color-scheme: dark;
@@ -114,25 +134,45 @@
   --gradient-end: oklch(0.05 0 0);
 }
 
-/* ======================== GRADIENT-DARK ======================== */
-[data-theme="gradient-dark"] {
+/* ======================== KHAKI-DARK (dark) — warm brown twin of khaki ======================== */
+[data-theme="khaki-dark"] {
   color-scheme: dark;
 
-  --foreground: oklch(0.95 0 0);
-  --background: oklch(0.14 0.005 286);
+  --foreground: oklch(0.93 0.012 85);          /* warm cream-white */
+  --background: oklch(0.15 0.012 70);          /* warm near-black brown */
 
-  --surface: oklch(0.18 0.004 286);
-  --surface-secondary: oklch(0.22 0.004 286);
+  --surface: oklch(0.19 0.014 72);
+  --surface-secondary: oklch(0.23 0.016 74);
   --field-background: var(--surface);
   --field-foreground: var(--foreground);
-  --field-border: oklch(0.30 0.005 286);
+  --field-border: oklch(0.32 0.025 70);
 
-  --border: oklch(0.28 0.005 286);
+  --border: oklch(0.30 0.025 68);
 
-  /* Dark gradient tinted by accent */
-  --gradient-start: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 8%, oklch(0.14 0.005 286));
-  --gradient-mid: oklch(0.13 0.004 286);
-  --gradient-end: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 5%, oklch(0.16 0.005 286));
+  --gradient-start: oklch(0.16 0.014 72);
+  --gradient-mid: oklch(0.14 0.012 70);
+  --gradient-end: oklch(0.17 0.014 74);
+}
+
+/* ======================== CRT-DARK (dark) — accent-phosphor terminal ======================== */
+[data-theme="crt-dark"] {
+  color-scheme: dark;
+
+  --foreground: oklch(0.96 0.005 260);         /* near-white, faint cool tint */
+  --background: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 3%, oklch(0.10 0.012 260));
+
+  --surface: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 5%, oklch(0.13 0.012 260));
+  --surface-secondary: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 8%, oklch(0.16 0.012 260));
+  --field-background: var(--surface);
+  --field-foreground: var(--foreground);
+  --field-border: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 20%, oklch(0.24 0.012 260));
+
+  --border: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 16%, oklch(0.22 0.012 260));
+
+  /* Accent-washed ambient gradient — the phosphor glow */
+  --gradient-start: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 10%, oklch(0.10 0.012 260));
+  --gradient-mid: oklch(0.11 0.012 260);
+  --gradient-end: color-mix(in oklch, var(--accent, oklch(0.55 0.22 250)) 5%, oklch(0.13 0.012 260));
 }
 
 /* ======================== BASE STYLES ======================== */
@@ -302,7 +342,7 @@ code, pre, .font-mono {
   border-radius: inherit;
 }
 
-/* Scanline overlay — CRT texture for crt and gradient-dark themes */
+/* Scanline overlay — CRT texture for the crt and crt-dark themes */
 .scanline-overlay {
   position: relative;
 }
@@ -323,8 +363,21 @@ code, pre, .font-mono {
   transition: opacity 0.4s ease;
 }
 [data-theme="crt"] .scanline-overlay::after,
-[data-theme="gradient-dark"] .scanline-overlay::after {
+[data-theme="crt-dark"] .scanline-overlay::after {
   opacity: 1;
+}
+
+/* Dark phosphor glass: black scanlines vanish on a near-black screen, so
+   CRT-dark draws faint light lines instead (slightly stronger than light
+   mode to survive the dark background). */
+[data-theme="crt-dark"] .scanline-overlay::after {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.028) 2px,
+    rgba(255, 255, 255, 0.028) 4px
+  );
 }
 
 /* Page entrance animation — apply to <Outlet> wrappers */

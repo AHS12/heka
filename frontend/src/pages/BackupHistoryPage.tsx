@@ -38,14 +38,14 @@ export function BackupHistoryPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Backup history</h2>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1 text-xs text-foreground/55">
             Every archive job, newest first — manual runs and the automatic schedule.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <a
             href="#/settings?tab=backup"
-            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/80 px-3 py-1 text-xs font-medium shadow-sm transition-colors hover:border-accent hover:text-accent dark:border-zinc-700/60 dark:bg-zinc-900/70"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/80 px-3 py-1 text-xs font-medium shadow-sm transition-colors hover:border-accent hover:text-accent"
           >
             Back to settings
           </a>
@@ -68,7 +68,7 @@ export function BackupHistoryPage() {
           items={STATUS_OPTIONS}
         />
         {history.data && (
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="text-xs text-foreground/55">
             {filtered.length} of {jobs.length} shown
           </span>
         )}
@@ -79,9 +79,9 @@ export function BackupHistoryPage() {
       )}
 
       {history.isLoading ? (
-        <p className="text-sm text-zinc-400">Loading history…</p>
+        <p className="text-sm text-foreground/50">Loading history…</p>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-300 px-4 py-10 text-center text-sm text-zinc-400 dark:border-zinc-700">
+        <div className="rounded-2xl border border-dashed border-field-border px-4 py-10 text-center text-sm text-foreground/50">
           {jobs.length === 0
             ? 'No backups yet — run one from Settings → Backup.'
             : 'No jobs match the current filter.'}
@@ -112,28 +112,28 @@ export function BackupHistoryPage() {
 
 function JobRow({job}: {job: BackupJob}) {
   return (
-    <li className="rounded-2xl border border-zinc-200/80 bg-white/70 px-4 py-3 text-sm shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+    <li className="rounded-2xl border border-border/80 bg-surface/70 px-4 py-3 text-sm shadow-sm backdrop-blur-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-center gap-2.5">
           <JobStatus job={job} />
-          <span className="font-medium text-zinc-800 dark:text-zinc-200">
+          <span className="font-medium text-foreground">
             {formatStamp(job.finished_at || job.started_at)}
           </span>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="text-xs text-foreground/55">
             {job.trigger === 'scheduled' ? 'automatic' : 'manual'}
             {job.size_bytes ? ` · ${formatBytes(job.size_bytes)}` : ''}
           </span>
         </span>
-        <span className="text-[11px] text-zinc-400 dark:text-zinc-500">job {job.id}</span>
+        <span className="text-[11px] text-foreground/50">job {job.id}</span>
       </div>
       {job.local_path && (
-        <p className="mt-1.5 truncate font-mono text-[11px] text-zinc-500 dark:text-zinc-400" title={job.local_path}>
+        <p className="mt-1.5 truncate font-mono text-[11px] text-foreground/55" title={job.local_path}>
           {job.local_path}
         </p>
       )}
       {job.error && <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{job.error}</p>}
       {!!job.destinations?.length && (
-        <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+        <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-foreground/55">
           {job.destinations.map((d) => (
             <span key={d.type}>
               {d.type}: {d.ok ? 'ok' : d.error || 'failed'}

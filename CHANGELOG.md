@@ -9,7 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 A correctness pass over notifications and run artifacts: every webhook
 payload now identifies the task it came from, notifications report the real
-trigger, and the declared-but-dead `capture_output` setting is gone.
+trigger, and the declared-but-dead `capture_output` setting is gone. Dark
+themes get a precision pass of their own: CRT Dark replaces Gradient Dark,
+and both dark themes now paint every page consistently.
+
+### Changed
+- Gradient Dark is replaced by **CRT Dark**: an accent-phosphor dark theme
+  with scanlines and an accent-tinted ambient wash (pick the green accent
+  for a classic terminal). Users who had Gradient Dark are migrated
+  automatically. CRT Dark's scanlines are drawn as faint light lines so the
+  texture is actually visible on a near-black screen.
+- **Khaki Dark** joins the dark roster — the warm brown twin of the light
+  Khaki default — and **High Contrast is now available in light mode too**
+  (near-black text on pure white with strong dark borders, mirroring the
+  dark variant). Variants survive mode switches via the quick-toggle.
+- Every surface, border, and text color across the app now derives from the
+  theme tokens instead of hardcoded grays — previously only the Dashboard
+  did. High Contrast (light or dark) and CRT Dark now look identical in
+  quality on every page and dialog: true-black panels, light borders,
+  properly bright text. Light themes are visually unchanged.
 
 ### Fixed
 - Webhook notifications name the task and its outcome. Payloads read like
