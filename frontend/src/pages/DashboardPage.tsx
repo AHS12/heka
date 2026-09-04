@@ -355,7 +355,7 @@ function RunDialog({open, onClose}: {open: boolean; onClose: () => void}) {
       <Modal.Header className={dialogHeaderCls}>
         <div>
           <Modal.Heading className="text-lg font-semibold">Run a task</Modal.Heading>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1 text-xs text-foreground/55">
             Trigger a manual run — output lands in Logs.
           </p>
         </div>

@@ -1,21 +1,24 @@
 // lib/theme.ts (SPEC-12 §4) — Theme mode (light/dark/system) and visual
-// variant. Light variants: khaki, crt. Dark variants: gradient, high-contrast.
-// Both are persisted to localStorage. The resolved data-theme value is
-// applied on <html>, and the .dark class is toggled so HeroUI and Tailwind agree.
+// variant. Light variants: khaki, crt, high-contrast. Dark variants: crt,
+// khaki-dark, high-contrast. Both are persisted to localStorage. The resolved
+// data-theme value is applied on <html>, and the .dark class is toggled so
+// HeroUI and Tailwind agree.
 import {create} from 'zustand'
 
 export type ThemeChoice = 'light' | 'dark' | 'system'
 export type ResolvedTheme = 'light' | 'dark'
 
-/** Light-only variants */
-export type LightVariant = 'khaki' | 'crt'
-/** Dark-only variants */
-export type DarkVariant = 'gradient' | 'high-contrast'
+/** Variants offered in light mode. 'crt' and 'high-contrast' share ids with
+ *  their dark counterparts; only the data-theme mapping differs. */
+export type LightVariant = 'khaki' | 'crt' | 'high-contrast'
+/** Variants offered in dark mode. 'khaki-dark' is the warm twin of light
+ *  khaki; crt and high-contrast share ids across modes. */
+export type DarkVariant = 'crt' | 'khaki-dark' | 'high-contrast'
 /** Union of all variants */
 export type ThemeVariant = LightVariant | DarkVariant
 
-export const LIGHT_VARIANTS: LightVariant[] = ['khaki', 'crt']
-export const DARK_VARIANTS: DarkVariant[] = ['gradient', 'high-contrast']
+export const LIGHT_VARIANTS: LightVariant[] = ['khaki', 'crt', 'high-contrast']
+export const DARK_VARIANTS: DarkVariant[] = ['crt', 'khaki-dark', 'high-contrast']
 export const THEME_VARIANTS: ThemeVariant[] = [...LIGHT_VARIANTS, ...DARK_VARIANTS]
 
 const MODE_KEY = 'heka-theme'
@@ -38,10 +41,13 @@ export function resolveTheme(choice: ThemeChoice): ResolvedTheme {
 /** Map (mode, variant) → the data-theme string applied to <html>. */
 function resolveDataTheme(mode: ResolvedTheme, variant: ThemeVariant): string {
   if (mode === 'light') {
-    return variant === 'crt' ? 'crt' : 'khaki'
+    if (variant === 'crt') return 'crt'
+    if (variant === 'high-contrast') return 'high-contrast-light'
+    return 'khaki'
   }
   // dark
-  return variant === 'high-contrast' ? 'high-contrast' : 'gradient-dark'
+  if (variant === 'khaki-dark') return 'khaki-dark'
+  return variant === 'high-contrast' ? 'high-contrast' : 'crt-dark'
 }
 
 /** Return a valid variant for the given mode. If the stored variant belongs
@@ -75,9 +81,11 @@ function initialMode(): ThemeChoice {
 
 function initialVariant(): ThemeVariant {
   const stored = localStorage.getItem(VARIANT_KEY)
-  if (stored === 'khaki' || stored === 'crt' || stored === 'gradient' || stored === 'high-contrast') {
+  if (stored === 'khaki' || stored === 'crt' || stored === 'khaki-dark' || stored === 'high-contrast') {
     return stored as ThemeVariant
   }
+  // Unknown value (e.g. 'gradient' — replaced by the dark crt variant in
+  // v0.8.1) falls back to the mode default via coerceVariant on apply.
   return 'khaki'
 }
 

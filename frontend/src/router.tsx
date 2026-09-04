@@ -11,6 +11,8 @@ import {SchedulesPage} from './pages/SchedulesPage'
 import {LogsPage} from './pages/LogsPage'
 import {LogDetailPage} from './pages/RunDetailPage'
 import {AboutPage} from './pages/AboutPage'
+import {SecretsPage} from './pages/SecretsPage'
+import {BackupHistoryPage} from './pages/BackupHistoryPage'
 
 export function AppRouter() {
   return (
@@ -25,6 +27,8 @@ export function AppRouter() {
           <Route path="logs" element={<LogsPage />} />
           <Route path="logs/:runId" element={<LogDetailPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="secrets" element={<SecretsPage />} />
+          <Route path="backups" element={<BackupHistoryPage />} />
           <Route path="about" element={<AboutPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

@@ -66,7 +66,7 @@ export function ScheduleForm({draft, onChange, tasks, errors}: {
             isInvalid={Boolean(fieldError('task', 'task_slug'))}
             value={draft.taskSlug}
             onChange={(taskSlug) => update({taskSlug})}
-            items={tasks.map((task) => ({id: task.slug, label: `${task.name} (${task.slug})`}))}
+            items={tasks.map((task) => ({id: task.slug, label: task.name}))}
             placeholder="Choose task…"
           />
         </Field>
@@ -87,7 +87,7 @@ export function ScheduleForm({draft, onChange, tasks, errors}: {
           />
         </Field>
       </div>
-      <div className="rounded-xl border border-zinc-200/80 bg-white/55 p-4 dark:border-zinc-800 dark:bg-zinc-950/25">
+      <div className="rounded-xl border border-border/80 bg-surface/55 p-4">
         {draft.kind === 'recurring' ? (
           <RecurrenceBuilder value={draft.recurrence} onChange={(recurrence) => update({recurrence})} />
         ) : (

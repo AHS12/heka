@@ -156,11 +156,10 @@ describe('TasksPage', () => {
         runtime: 'custom',
         script: 'run.sh',
         timeout: 60,
-        capture_output: true,
       },
     } as never)
     mGetTaskYAML.mockResolvedValue(
-      'version: 1\nname: Backup\nslug: backup\ntype: script\nruntime: custom\nscript: run.sh\ntimeout: 60\ncapture_output: true\n'
+      'version: 1\nname: Backup\nslug: backup\ntype: script\nruntime: custom\nscript: run.sh\ntimeout: 60\n'
     )
     const user = userEvent.setup()
 

@@ -34,7 +34,6 @@ const validTask = {
   runtime: 'custom',
   script: 'run.sh',
   timeout: 60,
-  capture_output: true,
 } as unknown as task.Task
 
 const validDTO = {enabled: true, updated_at: '', task: validTask} as unknown as app.TaskDTO
@@ -46,7 +45,6 @@ type: script
 runtime: custom
 script: run.sh
 timeout: 60
-capture_output: true
 `
 
 function renderEditor(initialEntry = '/tasks/new') {

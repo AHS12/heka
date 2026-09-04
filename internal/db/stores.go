@@ -20,6 +20,7 @@ func (d *DB) Runs() *RunStore           { return &RunStore{db: d} }
 func (d *DB) Secrets() *SecretStore     { return &SecretStore{db: d} }
 func (d *DB) KV() *KVStore              { return &KVStore{db: d} }
 func (d *DB) Logs() *LogStore           { return &LogStore{db: d} }
+func (d *DB) Backups() *BackupStore     { return &BackupStore{db: d} }
 
 // Task is the index row derived from a canonical task YAML (SPEC-04 §5).
 // The YAML file remains the source of truth; this is a cached index.
@@ -880,6 +881,113 @@ func (s *LogStore) Prune(before time.Time) error {
 	_, err := s.db.sql.Exec(`DELETE FROM daemon_log WHERE ts < ?`,
 		before.UTC().Format(time.RFC3339))
 	return err
+}
+
+// BackupJob is one archive backup attempt (migration 0003). Config lives in
+// kv (backup_config); this table is history only. DestinationsJSON holds the
+// per-destination outcomes (local/s3) as a JSON array.
+type BackupJob struct {
+	ID               string
+	Trigger          string // manual | scheduled
+	Status           string // running | success | partial | failed
+	StartedAt        string
+	FinishedAt       *string
+	SizeBytes        *int64
+	LocalPath        string
+	DestinationsJSON string
+	Error            string
+}
+
+// BackupStore is the backup job history.
+type BackupStore struct {
+	db *DB
+}
+
+// Insert records a job that just started (status running).
+func (s *BackupStore) Insert(j BackupJob) error {
+	_, err := s.db.sql.Exec(
+		`INSERT INTO backups (id, trigger, status, started_at, finished_at, size_bytes,
+		                      local_path, destinations_json, error)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		j.ID, j.Trigger, j.Status, j.StartedAt, j.FinishedAt, j.SizeBytes,
+		j.LocalPath, j.DestinationsJSON, j.Error)
+	return err
+}
+
+// Update overwrites a job row (used to record the terminal state).
+func (s *BackupStore) Update(j BackupJob) error {
+	_, err := s.db.sql.Exec(
+		`UPDATE backups SET status = ?, finished_at = ?, size_bytes = ?,
+		                   local_path = ?, destinations_json = ?, error = ?
+		 WHERE id = ?`,
+		j.Status, j.FinishedAt, j.SizeBytes, j.LocalPath, j.DestinationsJSON,
+		j.Error, j.ID)
+	return err
+}
+
+// Get returns one job row.
+func (s *BackupStore) Get(id string) (BackupJob, error) {
+	return s.scanOne(s.db.sql.QueryRow(
+		`SELECT id, trigger, status, started_at, finished_at, size_bytes,
+		        local_path, destinations_json, COALESCE(error, '')
+		   FROM backups WHERE id = ?`, id))
+}
+
+// List returns the newest jobs, newest first.
+func (s *BackupStore) List(limit int) ([]BackupJob, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.db.sql.Query(
+		`SELECT id, trigger, status, started_at, finished_at, size_bytes,
+		        local_path, destinations_json, COALESCE(error, '')
+		   FROM backups ORDER BY started_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []BackupJob
+	for rows.Next() {
+		j, err := s.scanRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, j)
+	}
+	return out, rows.Err()
+}
+
+// Latest returns the most recent job, or ErrNotFound when history is empty.
+func (s *BackupStore) Latest() (BackupJob, error) {
+	return s.scanOne(s.db.sql.QueryRow(
+		`SELECT id, trigger, status, started_at, finished_at, size_bytes,
+		        local_path, destinations_json, COALESCE(error, '')
+		   FROM backups ORDER BY started_at DESC LIMIT 1`))
+}
+
+// Prune keeps only the newest keep jobs.
+func (s *BackupStore) Prune(keep int) error {
+	_, err := s.db.sql.Exec(
+		`DELETE FROM backups WHERE id NOT IN (
+		     SELECT id FROM backups ORDER BY started_at DESC LIMIT ?)`, keep)
+	return err
+}
+
+func (s *BackupStore) scanOne(row *sql.Row) (BackupJob, error) {
+	var j BackupJob
+	err := row.Scan(&j.ID, &j.Trigger, &j.Status, &j.StartedAt, &j.FinishedAt,
+		&j.SizeBytes, &j.LocalPath, &j.DestinationsJSON, &j.Error)
+	if err == sql.ErrNoRows {
+		return BackupJob{}, ErrNotFound
+	}
+	return j, err
+}
+
+func (s *BackupStore) scanRow(rows *sql.Rows) (BackupJob, error) {
+	var j BackupJob
+	err := rows.Scan(&j.ID, &j.Trigger, &j.Status, &j.StartedAt, &j.FinishedAt,
+		&j.SizeBytes, &j.LocalPath, &j.DestinationsJSON, &j.Error)
+	return j, err
 }
 
 func scanRuns(rows *sql.Rows) ([]Run, error) {

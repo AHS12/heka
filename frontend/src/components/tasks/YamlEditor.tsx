@@ -32,7 +32,7 @@ export function YamlEditor({
       )}
       <div
         data-testid="yaml-editor"
-        className="heka-scroll overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50/80 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent-ring dark:border-zinc-700 dark:bg-zinc-900/70"
+        className="heka-scroll overflow-hidden rounded-xl border border-field-border bg-surface-secondary/80 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent-ring"
       >
         <CodeMirror
           value={value}

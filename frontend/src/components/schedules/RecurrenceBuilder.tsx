@@ -131,7 +131,7 @@ export function RecurrenceBuilder({
               ]}
             />
           </Field>
-          <span className="mb-2 text-xs text-zinc-400 dark:text-zinc-500">
+          <span className="mb-2 text-xs text-foreground/50">
             → <code className="font-mono">{recurrenceToCron(value)}</code>
           </span>
         </div>
@@ -161,7 +161,7 @@ export function RecurrenceBuilder({
               className="w-20"
             />
           </Field>
-          <span className="mb-2 text-xs text-zinc-400 dark:text-zinc-500">
+          <span className="mb-2 text-xs text-foreground/50">
             → <code className="font-mono">{recurrenceToCron(value)}</code>
           </span>
         </div>
@@ -200,7 +200,7 @@ export function RecurrenceBuilder({
               className="w-20"
             />
           </Field>
-          <span className="mb-2 text-xs text-zinc-400 dark:text-zinc-500">
+          <span className="mb-2 text-xs text-foreground/50">
             → <code className="font-mono">{recurrenceToCron(value)}</code>
           </span>
         </div>
@@ -241,7 +241,7 @@ export function RecurrenceBuilder({
               className="w-20"
             />
           </Field>
-          <span className="mb-2 text-xs text-zinc-400 dark:text-zinc-500">
+          <span className="mb-2 text-xs text-foreground/50">
             → <code className="font-mono">{recurrenceToCron(value)}</code>
           </span>
         </div>

@@ -56,14 +56,14 @@ export function OutputViewer({run}: {run: Run}) {
         <button
           type="button"
           onClick={handleCopy}
-          className="rounded-lg px-2 py-1 text-xs text-zinc-500 outline-none hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+          className="rounded-lg px-2 py-1 text-xs text-foreground/55 outline-none hover:bg-surface-secondary"
         >
           {copied ? 'Copied!' : 'Copy'}
         </button>
       </div>
-      <pre className="max-h-96 overflow-auto rounded-xl border border-zinc-200 bg-zinc-50 p-3 font-mono text-xs text-zinc-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200">
+      <pre className="max-h-96 overflow-auto rounded-xl border border-border bg-surface-secondary p-3 font-mono text-xs text-foreground">
         {output || (
-          <span className="text-zinc-400 dark:text-zinc-500">No output</span>
+          <span className="text-foreground/50">No output</span>
         )}
       </pre>
     </div>
@@ -75,13 +75,13 @@ export function AttemptList({runs}: {runs: Run[]}) {
 
   return (
     <div className="space-y-2">
-      <h4 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+      <h4 className="text-xs font-semibold text-foreground/55">
         Attempts ({runs.length})
       </h4>
-      <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+      <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full text-left text-xs">
           <thead>
-            <tr className="border-b border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+            <tr className="border-b border-border bg-surface-secondary text-foreground/55">
               <th className="px-3 py-1.5 font-medium">#</th>
               <th className="px-3 py-1.5 font-medium">Status</th>
               <th className="px-3 py-1.5 font-medium">Duration</th>
@@ -91,20 +91,20 @@ export function AttemptList({runs}: {runs: Run[]}) {
           </thead>
           <tbody>
             {runs.map((r) => (
-              <tr key={r.run_id} className="border-b border-zinc-100 last:border-0 dark:border-zinc-800/60">
-                <td className="px-3 py-1.5 font-mono text-zinc-600 dark:text-zinc-300">
+              <tr key={r.run_id} className="border-b border-border/60 last:border-0">
+                <td className="px-3 py-1.5 font-mono text-foreground/75">
                   {r.attempt + 1}
                 </td>
                 <td className="px-3 py-1.5">
                   <StatusInline status={r.status} />
                 </td>
-                <td className="px-3 py-1.5 text-zinc-500 dark:text-zinc-400">
+                <td className="px-3 py-1.5 text-foreground/55">
                   {formatDuration(r.duration_ms)}
                 </td>
-                <td className="px-3 py-1.5 font-mono text-zinc-600 dark:text-zinc-300">
+                <td className="px-3 py-1.5 font-mono text-foreground/75">
                   {r.exit_code ?? '—'}
                 </td>
-                <td className="px-3 py-1.5 text-zinc-500 dark:text-zinc-400">
+                <td className="px-3 py-1.5 text-foreground/55">
                   {formatTime(r.started_at)}
                 </td>
               </tr>
@@ -124,7 +124,7 @@ function StatusInline({status}: {status: string}) {
     timed_out: 'text-amber-600 dark:text-amber-400',
   }
   return (
-    <span className={`font-medium ${colors[status] ?? 'text-zinc-500 dark:text-zinc-400'}`}>
+    <span className={`font-medium ${colors[status] ?? 'text-foreground/55'}`}>
       {status.replace(/_/g, ' ')}
     </span>
   )

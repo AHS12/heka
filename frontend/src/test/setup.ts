@@ -84,6 +84,17 @@ vi.mock('@wailsjs/go/app/App', () => ({
   TasksDir: vi.fn().mockResolvedValue(''),
   OpenDataDir: vi.fn(),
   OpenURL: vi.fn(),
+  GetBackupConfig: vi.fn(),
+  UpdateBackupConfig: vi.fn(),
+  RunBackup: vi.fn(),
+  BackupStatus: vi.fn(),
+  BackupHistory: vi.fn(),
+  TestBackupDestinations: vi.fn(),
+  SecretsUsage: vi.fn(),
+  InspectBackup: vi.fn(),
+  RestoreBackup: vi.fn(),
+  PickBackupFile: vi.fn(),
+  Shutdown: vi.fn(),
 }))
 
 // CodeMirror measures text with Range.getClientRects on every animation
@@ -146,3 +157,6 @@ vi.mocked(bindings.ListSecrets).mockResolvedValue([])
 vi.mocked(bindings.ListSchedules).mockResolvedValue([])
 vi.mocked(bindings.ListRuns).mockResolvedValue({runs: [], total: 0} as any)
 vi.mocked(bindings.ListSystemLog).mockResolvedValue([] as any)
+vi.mocked(bindings.SecretsUsage).mockResolvedValue({} as any)
+vi.mocked(bindings.BackupStatus).mockResolvedValue({running: false} as any)
+vi.mocked(bindings.BackupHistory).mockResolvedValue([] as any)

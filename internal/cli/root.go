@@ -30,6 +30,10 @@ type APIClient interface {
 	ListRuns(filters ipc.RunFilters) (ipc.RunListResult, error)
 	ListSchedules() ([]ipc.Schedule, error)
 	ReconcileSchedules() error
+	RunBackup() (string, error)
+	BackupStatus() (ipc.BackupStatusDTO, error)
+	BackupHistory(limit int) ([]ipc.BackupJobDTO, error)
+	TestBackupDestinations() (ipc.BackupTestDTO, error)
 }
 
 // App wires one command invocation. stdout/stderr are injectable for tests.
@@ -94,6 +98,7 @@ func NewApp(cfg config.Config, client APIClient) *App {
 	root.AddCommand(
 		a.listCmd(), a.runCmd(), a.statusCmd(), a.logsCmd(),
 		a.enableCmd(), a.disableCmd(), a.schedulesCmd(),
+		a.backupCmd(), a.restoreCmd(),
 		a.daemonCmd(),
 	)
 	a.root = root

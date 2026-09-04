@@ -30,7 +30,7 @@ function InfoRow({label, value}: {label: string; value: string}) {
   return (
     <span className="flex items-center justify-between gap-6">
       <span>{label}</span>
-      <span className="font-medium text-zinc-700 dark:text-zinc-200">{value}</span>
+      <span className="font-medium text-foreground/75">{value}</span>
     </span>
   )
 }
@@ -49,11 +49,11 @@ export function HealthTooltipBody({
   const paused = live && d.scheduler !== 'running'
   return (
     <div className="flex min-w-[190px] flex-col gap-1 py-0.5">
-      <span className="text-xs font-medium text-zinc-900 dark:text-zinc-50">
+      <span className="text-xs font-medium text-foreground">
         {LABEL[mode]}
       </span>
       {live && (
-        <div className="flex flex-col gap-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+        <div className="flex flex-col gap-0.5 text-[11px] text-foreground/55">
           <InfoRow label="Version" value={`v${d.version}`} />
           <InfoRow label="Core" value={d.core} />
           <InfoRow label="Scheduler" value={d.scheduler} />
@@ -66,7 +66,7 @@ export function HealthTooltipBody({
         </span>
       )}
       {mode === 'not-running' && (
-        <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+        <span className="text-[11px] text-foreground/55">
           Start it from the banner above the page.
         </span>
       )}
@@ -89,7 +89,7 @@ export function DaemonStatusIcon({mode}: {mode: DaemonMode}) {
           className="grid size-6 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
         >
           <span
-            className={`inline-block size-2.5 rounded-full ring-2 ring-zinc-200/80 ring-offset-1 ring-offset-white transition-colors dark:ring-zinc-700/80 dark:ring-offset-zinc-950 ${DOT[mode]}`}
+            className={`inline-block size-2.5 rounded-full ring-2 ring-border/80 ring-offset-1 ring-offset-background transition-colors ${DOT[mode]}`}
           />
         </button>
       </Focusable>

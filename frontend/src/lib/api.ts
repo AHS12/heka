@@ -50,6 +50,17 @@ import {
   TasksDir,
   OpenDataDir,
   OpenURL,
+  GetBackupConfig,
+  UpdateBackupConfig,
+  RunBackup,
+  BackupStatus,
+  BackupHistory,
+  TestBackupDestinations,
+  SecretsUsage,
+  InspectBackup,
+  RestoreBackup,
+  PickBackupFile,
+  Shutdown,
 } from '@wailsjs/go/app/App'
 import type {task} from '@wailsjs/go/models'
 
@@ -77,6 +88,8 @@ export type ErrorCode =
   | 'conflict'
   | 'already_running'
   | 'invalid_task'
+  | 'invalid_backup_config'
+  | 'backup_busy'
   | 'canceled'
   | 'unknown'
 
@@ -102,6 +115,8 @@ const KNOWN_CODES: ReadonlySet<string> = new Set([
   'conflict',
   'already_running',
   'invalid_task',
+  'invalid_backup_config',
+  'backup_busy',
 ])
 
 function toAPIError(err: unknown): Error {
@@ -662,6 +677,208 @@ export async function updateSettings(s: Settings): Promise<void> {
 export async function previewSound(preset: string): Promise<void> {
   try {
     await PreviewSound(preset)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+// ---- Backup & restore (Settings → Backup).
+
+export interface BackupSchedule {
+  kind: 'off' | 'interval' | 'daily' | 'weekly' | 'monthly'
+  every_hours?: number
+  at_time?: string
+  /** weekly: 0=Sunday…6=Saturday */
+  weekday?: number
+  /** monthly: 1–28 */
+  day_of_month?: number
+}
+
+export interface BackupS3 {
+  endpoint?: string
+  region?: string
+  bucket?: string
+  prefix?: string
+  use_ssl?: boolean
+  keep_last?: number
+}
+
+export interface BackupIncludes {
+  run_history: boolean
+  artifacts: boolean
+}
+
+/** Non-secret backup config; the passphrase travels via the secrets API. */
+export interface BackupConfig {
+  schedule: BackupSchedule
+  local_dir: string
+  keep_last_local: number
+  s3: BackupS3
+  includes: BackupIncludes
+  passphrase_set: boolean
+}
+
+export interface BackupDestinationResult {
+  type: 'local' | 's3'
+  ok: boolean
+  path?: string
+  error?: string
+}
+
+export interface BackupJob {
+  id: string
+  trigger: 'manual' | 'scheduled'
+  status: 'running' | 'success' | 'partial' | 'failed'
+  started_at: string
+  finished_at?: string
+  size_bytes?: number
+  local_path?: string
+  destinations?: BackupDestinationResult[]
+  error?: string
+}
+
+export interface BackupStatus {
+  running: boolean
+  current?: BackupJob | null
+  last?: BackupJob | null
+  next_run_at?: string
+}
+
+export interface BackupTestResult {
+  local?: BackupDestinationResult | null
+  s3?: BackupDestinationResult | null
+}
+
+export interface BackupManifest {
+  format_version: number
+  app_version?: string
+  created_at: string
+  hostname?: string
+  os?: string
+  arch?: string
+  schema_version: number
+  counts: {tasks: number; schedules: number; secrets: number; runs: number}
+  includes: BackupIncludes
+  has_config: boolean
+  has_artifacts: boolean
+  checksums: {db: string; secret_key: string}
+}
+
+/** Inspect result for the restore preview (read-only). */
+export interface RestoreManifest {
+  manifest: BackupManifest
+  supported: boolean
+  has_config: boolean
+  has_artifacts: boolean
+  preview_error?: string
+}
+
+export interface RestoreResult {
+  safety_backup_path: string
+  restored_config: boolean
+  restored_artifacts: boolean
+  manifest: BackupManifest
+}
+
+export async function getBackupConfig(): Promise<BackupConfig> {
+  try {
+    return (await GetBackupConfig()) as unknown as BackupConfig
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function updateBackupConfig(c: BackupConfig): Promise<void> {
+  try {
+    await UpdateBackupConfig(c as unknown as Parameters<typeof UpdateBackupConfig>[0])
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function runBackupNow(): Promise<string> {
+  try {
+    return await RunBackup()
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function getBackupStatus(): Promise<BackupStatus> {
+  try {
+    return (await BackupStatus()) as unknown as BackupStatus
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function getBackupHistory(limit = 20): Promise<BackupJob[]> {
+  try {
+    const result = (await BackupHistory(limit)) as unknown as BackupJob[] | null
+    return result ?? []
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function testBackupDestinations(): Promise<BackupTestResult> {
+  try {
+    return (await TestBackupDestinations()) as unknown as BackupTestResult
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function inspectBackup(path: string, passphrase: string): Promise<RestoreManifest> {
+  try {
+    return (await InspectBackup(path, passphrase)) as unknown as RestoreManifest
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+/** Restores an archive; refuses while the daemon is running. */
+export async function restoreBackup(
+  path: string,
+  passphrase: string,
+  includeConfig: boolean,
+  includeArtifacts: boolean
+): Promise<RestoreResult> {
+  try {
+    return (await RestoreBackup(
+      path,
+      passphrase,
+      includeConfig,
+      includeArtifacts
+    )) as unknown as RestoreResult
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+/** Archive file picker; cancel resolves to code 'canceled'. */
+export async function pickBackupFile(): Promise<string> {
+  try {
+    return await PickBackupFile()
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+/** Asks the daemon to stop gracefully (restore flow's first step). */
+export async function shutdownDaemon(): Promise<void> {
+  try {
+    await Shutdown()
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+/** Vault key → task slugs referencing it (secrets manager page). */
+export async function getSecretsUsage(): Promise<Record<string, string[]>> {
+  try {
+    const result = (await SecretsUsage()) as unknown as Record<string, string[]> | null
+    return result ?? {}
   } catch (err) {
     throw toAPIError(err)
   }

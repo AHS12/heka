@@ -10,7 +10,7 @@
 import type {task} from '@wailsjs/go/models'
 
 export type TaskType = 'script' | 'binary'
-export type WebhookFormat = 'slack' | 'pumble' | 'discord' | 'telegram' | 'generic'
+export type WebhookFormat = 'slack' | 'discord' | 'telegram' | 'generic'
 
 /** The schema's runtime enum (SPEC-04 §runtime, executor runtime table).
  *  Anything beyond this list is expressible through the YAML tab. */
@@ -38,7 +38,6 @@ export interface TaskDraft {
   timeout: number
   maxAttempts: number
   delaySeconds: number
-  captureOutput: boolean
   notifyOn: string[]
   webhooks: WebhookDraft[]
 }
@@ -59,7 +58,6 @@ export function emptyDraft(): TaskDraft {
     timeout: 60,
     maxAttempts: 1,
     delaySeconds: 0,
-    captureOutput: true,
     notifyOn: [],
     webhooks: [],
   }
@@ -85,7 +83,6 @@ export function draftFromTask(t: task.Task): TaskDraft {
     timeout: t.timeout,
     maxAttempts: t.retry?.max_attempts ?? 1,
     delaySeconds: t.retry?.delay_seconds ?? 0,
-    captureOutput: t.capture_output ?? true,
     notifyOn: t.notify_on ?? [],
     webhooks: (t.notify?.webhooks ?? []).map((w) => ({
       format: (w.format as WebhookFormat) ?? 'generic',
@@ -114,7 +111,6 @@ export function draftToTask(d: TaskDraft): task.Task {
         : undefined,
     timeout: d.timeout,
     retry: {max_attempts: d.maxAttempts, delay_seconds: d.delaySeconds},
-    capture_output: d.captureOutput,
     notify_on: d.notifyOn.length ? d.notifyOn : undefined,
     notify:
       d.webhooks.length > 0
@@ -176,7 +172,6 @@ export function draftToYAML(d: TaskDraft): string {
   if (d.maxAttempts > 1 || d.delaySeconds > 0) {
     lines.push(`retry:`, `  max_attempts: ${d.maxAttempts}`, `  delay_seconds: ${d.delaySeconds}`)
   }
-  lines.push(`capture_output: ${d.captureOutput}`)
   if (d.notifyOn.length > 0) {
     lines.push(`notify_on: [${d.notifyOn.join(', ')}]`)
   }

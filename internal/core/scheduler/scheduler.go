@@ -151,7 +151,10 @@ func (s *Scheduler) registerLocked(sch db.Schedule) {
 			return
 		}
 		s.recs[sch.ID] = record{entryID: id}
-		s.setNextRunTime(sch.ID, runAtOf(s.cron.Entry(id).Next))
+		// Derive from the parsed spec: cron entries carry a zero Next until
+		// cron.Start initializes them, so Entry(id).Next is unusable here and
+		// a startup before Start would leave next_run_at stale forever.
+		s.setNextRunTime(sch.ID, nextRunOf(sch.Cron, time.Now()))
 	case "onetime":
 		delay := time.Until(parseTime(sch.RunAt))
 		if delay < 0 {
@@ -382,4 +385,16 @@ func runAtOf(t time.Time) string {
 		return ""
 	}
 	return t.UTC().Format(time.RFC3339)
+}
+
+// nextRunOf computes the next activation of a cron spec independently of the
+// running engine (usable before cron.Start and after reconcile catch-ups).
+// Evaluated in the daemon's local zone to match the live engine (see
+// countOccurrences) — empty string for an invalid spec.
+func nextRunOf(spec string, from time.Time) string {
+	sched, err := specParser.Parse(spec)
+	if err != nil {
+		return ""
+	}
+	return runAtOf(sched.Next(from.Local()))
 }

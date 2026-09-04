@@ -5,6 +5,124 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-09-04
+
+A correctness pass over notifications and run artifacts: every webhook
+payload now identifies the task it came from, notifications report the real
+trigger, and the declared-but-dead `capture_output` setting is gone. Dark
+themes get a precision pass of their own: CRT Dark replaces Gradient Dark,
+and both dark themes now paint every page consistently.
+
+### Changed
+- Gradient Dark is replaced by **CRT Dark**: an accent-phosphor dark theme
+  with scanlines and an accent-tinted ambient wash (pick the green accent
+  for a classic terminal). Users who had Gradient Dark are migrated
+  automatically. CRT Dark's scanlines are drawn as faint light lines so the
+  texture is actually visible on a near-black screen.
+- **Khaki Dark** joins the dark roster — the warm brown twin of the light
+  Khaki default — and **High Contrast is now available in light mode too**
+  (near-black text on pure white with strong dark borders, mirroring the
+  dark variant). Variants survive mode switches via the quick-toggle.
+- Every surface, border, and text color across the app now derives from the
+  theme tokens instead of hardcoded grays — previously only the Dashboard
+  did. High Contrast (light or dark) and CRT Dark now look identical in
+  quality on every page and dialog: true-black panels, light borders,
+  properly bright text. Light themes are visually unchanged.
+
+### Fixed
+- Webhook notifications name the task and its outcome. Payloads read like
+  the desktop toast — "deploy — Failed • Trigger: schedule • Duration:
+  5.1s" — instead of a bare "Trigger: … • Duration: …" that gave no way to
+  tell which task ran.
+- Scheduled runs no longer notify as "Trigger: manual". The completion
+  callback now receives the actual trigger (manual, schedule, cli, system)
+  through the executor's group result.
+- Missed-run reconciliation and the NEXT RUN display evaluate cron specs in
+  the daemon's local timezone. Stored windows are UTC while the running
+  engine fires local ticks, so on a UTC+6 machine a daily 9:00 schedule that
+  fired while the PC was off reported "0 caught up" at boot and silently
+  dropped the missed run.
+- Webhook format "pumble" validates again. Pumble incoming webhooks accept
+  Slack-style payloads, so the editor now offers a single "Slack / Pumble"
+  option that saves the canonical "slack" format; existing YAML with
+  "pumble" loads as-is and re-exports as "slack".
+- Per-run artifacts (stdout.log, stderr.log, run.json) land under the
+  global runs folder (`<data_dir>/runs`, configurable via
+  `run_artifacts_dir`) unless a task sets `output_dir`. They previously went
+  to the task's working directory, leaving the configured runs root — and
+  the "run artifacts" part of backups — empty.
+
+### Removed
+- The `capture_output` task field. It had no behavioral effect (output is
+  always capped and stored on the run row). Existing YAML files keep
+  parsing; the field is dropped the next time the task is saved.
+
+## [0.8.0] - 2026-09-04
+
+Backup & restore, plus a proper home for a growing vault. Every archive is an
+AES-256-encrypted zip that captures the complete Heka state — a consistent
+SQLite snapshot, the vault key, the canonical task YAML files, and the user
+config — so a restore brings back exactly what was there, secrets included.
+
+### Added
+- Automatic backups on a configurable schedule — every N hours (up to a
+  year), daily, weekly, or monthly at a local time — with missed-run
+  catch-up: if Heka was closed at the scheduled time, the missed backup
+  runs once at startup.
+- Local destination (custom folder + keep-latest retention, default inside
+  the data directory) and an S3-compatible remote destination — AWS S3,
+  Cloudflare R2, Backblaze B2, MinIO — with its own keep-latest pruning and
+  a one-click "Test connection" that exercises the bucket end to end.
+- S3 credentials live in the secrets vault (`BACKUP_S3_ACCESS_KEY_ID`,
+  `BACKUP_S3_SECRET_ACCESS_KEY`), same write-only discipline as every other
+  secret.
+- Archive encryption with a passphrase stored in the vault
+  (`BACKUP_PASSPHRASE`) so scheduled backups run unattended — with a loud
+  warning that losing it means losing the backups, since restore on a new
+  machine asks for it.
+- Manual "Back up now" with live status, a job history view (trigger,
+  status, size, per-destination outcomes), and desktop notifications when a
+  scheduled backup fails.
+- A guided restore flow: pick an archive, verify it with the passphrase,
+  preview exactly what it contains (created when, which Heka version, task
+  counts), choose optional parts (config.yaml, run artifacts), and let the
+  app stop the daemon, restore, and prompt to start it again. A safety
+  backup of the previous state is written automatically before anything is
+  overwritten; archives from newer Heka versions are refused, and checksums
+  guard against truncated or tampered archives.
+- A dedicated Backup section in Settings with all of the above, and
+  `heka backup create|status|history|test` plus `heka restore` in the CLI.
+- A dedicated secrets manager page (`/secrets`, linked from Settings →
+  Secrets) built for large vaults: search, sort, "unused only" filter,
+  per-key usage tracking (which tasks reference `${KEY}`), bulk delete with
+  confirmation, pagination, and per-key value replacement. Keys stay the
+  only thing ever displayed — values remain write-only.
+
+### Changed
+- Backup catch-up is now part of the missed-run reconcile pipeline: a missed
+  auto-backup runs once on daemon start, on wake from sleep, on the periodic
+  reconcile cadence, and from the "Reconcile now" button — not only via the
+  backup loop's own tick. A reconciled backup is labeled "catch-up" in the
+  job history, and the missed window is recorded in the system log
+  (Logs → System), alongside new events for manual starts and schedule
+  arming.
+- The backup time-of-day picker is a themed segmented field (HeroUI
+  TimeField) instead of the native browser time dropdown, which overflowed
+  the panel.
+
+### Fixed
+- The Schedules page no longer shows a stale NEXT RUN after a missed run
+  was caught up. Reconcile closed the miss window without re-deriving
+  `next_run_at`, and the startup path read a cron entry that only carries a
+  value once the engine starts — so a daily 9:00 schedule kept showing
+  yesterday's 9:00 as next. Both paths now compute the next occurrence
+  directly from the cron spec.
+- S3 "Test connection" now saves pending edits first (endpoint, bucket,
+  keys, Use HTTPS), so it tests exactly what is on screen. Enabling the S3
+  destination also defaults to HTTPS — plain HTTP is 301-redirected by
+  Cloudflare and friends, which previously surfaced as a wall of HTML; the
+  redirect now produces a clear, actionable error instead.
+
 ## [0.7.7] - 2026-09-04
 
 A fresh coat of paint: the app icon — window, executable, installer, tray,

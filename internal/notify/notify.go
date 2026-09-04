@@ -129,8 +129,11 @@ func (n *Notifier) NotifyTaskResult(r TaskResult) {
 		}
 	}
 
+	// Webhooks have no separate title field: the task name and outcome go
+	// inline so every payload identifies itself ("deploy — Failed •
+	// Trigger: schedule • …"), matching what the desktop toast shows.
 	for _, wb := range r.Task.Notify.Webhooks {
-		n.deliverWebhook(wb, message)
+		n.deliverWebhook(wb, fmt.Sprintf("%s • %s", title, message))
 	}
 }
 

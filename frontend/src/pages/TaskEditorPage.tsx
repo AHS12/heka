@@ -181,12 +181,12 @@ export function TaskEditorPage({
   if (taskQuery.isLoading || (!isNew && !draft)) {
     if (!dialog) {
       if (taskQuery.isLoading) {
-        return <p className="text-sm text-zinc-400">Loading…</p>
+        return <p className="text-sm text-foreground/50">Loading…</p>
       }
       return (
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">Task not found</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm text-foreground/55">
             <span data-testid="task-missing">{slug}</span> does not exist.
           </p>
           <Link to="/tasks" className={pillBtn}>
@@ -205,9 +205,9 @@ export function TaskEditorPage({
         </Modal.Header>
         <Modal.Body className={dialogBodyCls}>
           {taskQuery.data || taskQuery.isLoading ? (
-            <p className="text-sm text-zinc-400">Loading…</p>
+            <p className="text-sm text-foreground/50">Loading…</p>
           ) : (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="text-sm text-foreground/55">
               <span data-testid="task-missing">{editingSlug}</span> does not exist. It may have
               been deleted from the tasks directory.
             </p>
@@ -223,7 +223,7 @@ export function TaskEditorPage({
   }
 
   if (!draft) {
-    return <p className="text-sm text-zinc-400">Loading…</p>
+    return <p className="text-sm text-foreground/50">Loading…</p>
   }
 
   const renaming = renamePlan(editingSlug, draft).isRenaming
@@ -304,7 +304,7 @@ export function TaskEditorPage({
             <Modal.Heading className="text-lg font-semibold">
               {isNew ? 'Create task' : 'Edit task'}
             </Modal.Heading>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 text-xs text-foreground/55">
               {isNew
                 ? 'Define what runs, how it runs, and how Heka reports the result.'
                 : `Editing “${draft.name || editingSlug}” — changes apply to future runs.`}

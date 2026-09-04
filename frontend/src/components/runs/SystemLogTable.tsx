@@ -15,10 +15,10 @@ const levelCls: Record<string, string> = {
 /** The daemon's own event log (scheduler reconcile, lifecycle, wake detection). */
 export function SystemLogTable({entries}: {entries: SystemLogEntry[]}) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/70 shadow-sm shadow-zinc-900/5 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+    <div className="overflow-hidden rounded-2xl border border-border/80 bg-surface/70 shadow-sm shadow-zinc-900/5 backdrop-blur-sm">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-zinc-200/80 text-xs uppercase tracking-wide text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
+          <tr className="border-b border-border/80 text-xs uppercase tracking-wide text-foreground/50">
             <th className="px-4 py-2.5 font-medium">Time</th>
             <th className="px-3 py-2.5 font-medium">Level</th>
             <th className="px-3 py-2.5 font-medium">Event</th>
@@ -30,21 +30,21 @@ export function SystemLogTable({entries}: {entries: SystemLogEntry[]}) {
             <tr
               key={e.id}
               data-testid={`system-log-row-${e.id}`}
-              className="border-b border-zinc-100 last:border-0 hover:bg-zinc-100/60 dark:border-zinc-800/60 dark:hover:bg-zinc-800/40"
+              className="border-b border-border/60 last:border-0 hover:bg-surface-secondary/60"
             >
-              <td className="whitespace-nowrap px-4 py-2.5 text-xs text-zinc-500 dark:text-zinc-400">
+              <td className="whitespace-nowrap px-4 py-2.5 text-xs text-foreground/55">
                 {formatTime(e.ts)}
               </td>
               <td className="px-3 py-2.5">
                 <span
                   className={`text-xs font-semibold uppercase ${
-                    levelCls[e.level] ?? 'text-zinc-500 dark:text-zinc-400'
+                    levelCls[e.level] ?? 'text-foreground/55'
                   }`}
                 >
                   {e.level}
                 </span>
               </td>
-              <td className="px-3 py-2.5 text-xs text-zinc-500 dark:text-zinc-400">{e.event}</td>
+              <td className="px-3 py-2.5 text-xs text-foreground/55">{e.event}</td>
               <td className="px-3 py-2.5 break-words">{e.message}</td>
             </tr>
           ))}

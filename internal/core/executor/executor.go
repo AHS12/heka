@@ -73,10 +73,11 @@ func (h *Handle) Err() error {
 }
 
 // GroupResult is the group-completion summary (SPEC-11 §3): daemon-side
-// consumers (notifications) read final status, duration, and exit code.
+// consumers (notifications) read trigger, final status, duration, and exit code.
 type GroupResult struct {
 	GroupID     string
 	TaskSlug    string
+	Trigger     string // manual|schedule|cli|system
 	FinalStatus string // success|failed|timed_out|cancelled
 	Duration    time.Duration
 	ExitCode    int
@@ -159,19 +160,16 @@ func (e *Executor) Start(ctx context.Context, t *task.Task, opt Options) (*Handl
 // context cancellation; then releases the slug lock, fires the completion
 // callback, writes the run manifest, and closes the handle.
 func (e *Executor) runGroup(ctx context.Context, t *task.Task, opt Options, trigger string, h *Handle) {
-	// Resolve the per-run output directory. Priority:
-	//   1. task.OutputDir (resolved relative to WorkingDir)
-	//   2. task's working directory (if set)
-	//   3. global artifacts root
+	// Resolve the per-run output directory: the task's output_dir overrides
+	// the global artifacts root (config run_artifacts_dir, default
+	// <data_dir>/runs); an empty root disables file capture.
 	resolved := t.Resolve(opt.BaseDir)
-	outDir := ""
+	outDir := e.artifactsDir
 	if t.OutputDir != "" {
 		outDir = t.OutputDir
 		if !filepath.IsAbs(outDir) {
 			outDir = filepath.Join(resolved.WorkingDir, outDir)
 		}
-	} else if resolved.WorkingDir != "" {
-		outDir = resolved.WorkingDir
 	}
 	ga := e.openGroupArtifactsAt(outDir, h.GroupID)
 	if ga != nil {
@@ -201,6 +199,7 @@ func (e *Executor) runGroup(ctx context.Context, t *task.Task, opt Options, trig
 			cb(GroupResult{
 				GroupID:     h.GroupID,
 				TaskSlug:    t.Slug,
+				Trigger:     trigger,
 				FinalStatus: last.status,
 				Duration:    last.duration,
 				ExitCode:    last.exitCode,

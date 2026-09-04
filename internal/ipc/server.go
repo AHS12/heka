@@ -32,6 +32,17 @@ type Deps struct {
 	GetSettings    func() SettingsDTO
 	UpdateSettings func(SettingsDTO) error
 	PreviewSound   func(preset string) error
+
+	// Backup subsystem (Settings → Backup).
+	GetBackupConfig        func() BackupConfigDTO
+	UpdateBackupConfig     func(BackupConfigDTO) error
+	RunBackup              func() (string, error)
+	BackupStatus           func() BackupStatusDTO
+	BackupHistory          func(limit int) ([]BackupJobDTO, error)
+	TestBackupDestinations func() BackupTestDTO
+
+	// SecretsUsage maps each vault key to the task slugs referencing it.
+	SecretsUsage func() (map[string][]string, error)
 }
 
 // TaskFilesystem is the filesystem half of task CRUD (SPEC-13 §1). The daemon
@@ -108,6 +119,16 @@ func (s *Server) Handler() http.Handler {
 	// Settings (SPEC-16 §2).
 	mux.HandleFunc("/v1/settings", s.handleSettings)
 	mux.HandleFunc("/v1/settings/sound-preview", s.handleSoundPreview)
+
+	// Backup (Settings → Backup).
+	mux.HandleFunc("/v1/backup/config", s.handleBackupConfig)
+	mux.HandleFunc("/v1/backup/run", s.handleBackupRun)
+	mux.HandleFunc("/v1/backup/status", s.handleBackupStatus)
+	mux.HandleFunc("/v1/backup/history", s.handleBackupHistory)
+	mux.HandleFunc("/v1/backup/test", s.handleBackupTest)
+
+	// Secrets usage map (secrets manager page): key → task slugs referencing it.
+	mux.HandleFunc("/v1/secrets/usage", s.handleSecretsUsage)
 
 	// Unknown routes → JSON 404 envelope.
 	mux.HandleFunc("/", notFound)

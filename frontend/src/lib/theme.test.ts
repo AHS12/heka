@@ -42,16 +42,16 @@ describe('theme store', () => {
     setPrefersDark(true)
     const {useTheme} = await loadTheme()
     expect(useTheme.getState().resolved).toBe('dark')
-    // Default dark variant is gradient (gradient-dark data-theme)
-    expect(document.documentElement.dataset.theme).toBe('gradient-dark')
+    // Default dark variant is crt (crt-dark data-theme)
+    expect(document.documentElement.dataset.theme).toBe('crt-dark')
   })
 
   it('persists an explicit choice to localStorage', async () => {
     const {useTheme} = await loadTheme()
     useTheme.getState().setTheme('dark')
     expect(localStorage.getItem('heka-theme')).toBe('dark')
-    // Dark mode applies gradient-dark by default
-    expect(document.documentElement.dataset.theme).toBe('gradient-dark')
+    // Dark mode applies crt-dark by default
+    expect(document.documentElement.dataset.theme).toBe('crt-dark')
   })
 
   it('restores the persisted choice on next launch', async () => {
@@ -59,7 +59,42 @@ describe('theme store', () => {
     const {useTheme} = await loadTheme()
     expect(useTheme.getState().choice).toBe('dark')
     expect(useTheme.getState().resolved).toBe('dark')
-    expect(document.documentElement.dataset.theme).toBe('gradient-dark')
+    expect(document.documentElement.dataset.theme).toBe('crt-dark')
+  })
+
+  it('migrates the removed gradient dark variant to crt-dark', async () => {
+    localStorage.setItem('heka-theme', 'dark')
+    localStorage.setItem('heka-theme-variant', 'gradient')
+    await loadTheme()
+    expect(document.documentElement.dataset.theme).toBe('crt-dark')
+  })
+
+  it('applies high-contrast-light when light mode picks the high-contrast variant', async () => {
+    localStorage.setItem('heka-theme', 'light')
+    localStorage.setItem('heka-theme-variant', 'high-contrast')
+    const {useTheme} = await loadTheme()
+    expect(useTheme.getState().resolved).toBe('light')
+    expect(document.documentElement.dataset.theme).toBe('high-contrast-light')
+    // The .dark class must stay off so Tailwind dark: variants never fire.
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+  })
+
+  it('keeps the shared high-contrast id when switching between modes', async () => {
+    localStorage.setItem('heka-theme', 'light')
+    localStorage.setItem('heka-theme-variant', 'high-contrast')
+    const {useTheme} = await loadTheme()
+    useTheme.getState().setTheme('dark')
+    expect(document.documentElement.dataset.theme).toBe('high-contrast')
+    useTheme.getState().setTheme('light')
+    expect(document.documentElement.dataset.theme).toBe('high-contrast-light')
+  })
+
+  it('maps the dark khaki variant to the khaki-dark data-theme', async () => {
+    localStorage.setItem('heka-theme', 'dark')
+    localStorage.setItem('heka-theme-variant', 'khaki-dark')
+    const {useTheme} = await loadTheme()
+    expect(useTheme.getState().resolved).toBe('dark')
+    expect(document.documentElement.dataset.theme).toBe('khaki-dark')
   })
 
   it('ignores garbage in localStorage', async () => {

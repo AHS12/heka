@@ -479,3 +479,54 @@ func (c *Client) UpdateSettings(s SettingsDTO) error {
 func (c *Client) PreviewSound(preset string) error {
 	return c.do("POST", "/v1/settings/sound-preview", SoundPreviewRequest{Preset: preset}, nil)
 }
+
+// GetBackupConfig returns the backup settings (Settings → Backup).
+func (c *Client) GetBackupConfig() (BackupConfigDTO, error) {
+	var out BackupConfigDTO
+	return out, c.do("GET", "/v1/backup/config", nil, &out)
+}
+
+// UpdateBackupConfig persists backup settings.
+func (c *Client) UpdateBackupConfig(cfg BackupConfigDTO) error {
+	return c.do("PUT", "/v1/backup/config", cfg, nil)
+}
+
+// RunBackup triggers a backup job; it runs asynchronously in the daemon.
+func (c *Client) RunBackup() (string, error) {
+	var out BackupRunResponse
+	err := c.do("POST", "/v1/backup/run", nil, &out)
+	return out.JobID, err
+}
+
+// BackupStatus polls the current/last backup job and next scheduled run.
+func (c *Client) BackupStatus() (BackupStatusDTO, error) {
+	var out BackupStatusDTO
+	return out, c.do("GET", "/v1/backup/status", nil, &out)
+}
+
+// BackupHistory lists recent backup jobs, newest first.
+func (c *Client) BackupHistory(limit int) ([]BackupJobDTO, error) {
+	path := "/v1/backup/history"
+	if limit > 0 {
+		path += "?limit=" + fmt.Sprint(limit)
+	}
+	var out struct {
+		Backups []BackupJobDTO `json:"backups"`
+	}
+	err := c.do("GET", path, nil, &out)
+	return out.Backups, err
+}
+
+// TestBackupDestinations probes every configured destination once.
+func (c *Client) TestBackupDestinations() (BackupTestDTO, error) {
+	var out BackupTestDTO
+	return out, c.do("POST", "/v1/backup/test", nil, &out)
+}
+
+// SecretsUsage maps each vault key to the task slugs referencing it
+// (secrets manager page).
+func (c *Client) SecretsUsage() (map[string][]string, error) {
+	var out map[string][]string
+	err := c.do("GET", "/v1/secrets/usage", nil, &out)
+	return out, err
+}

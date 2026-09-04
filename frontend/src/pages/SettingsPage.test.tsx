@@ -4,6 +4,7 @@ import {beforeEach, describe, expect, it, vi} from 'vitest'
 import {render, screen, waitFor} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
+import {MemoryRouter} from 'react-router-dom'
 import {
   ListSecrets,
   SetSecret,
@@ -13,6 +14,7 @@ import {
   Health,
   PauseScheduler,
   ResumeScheduler,
+  GetBackupConfig,
 } from '@wailsjs/go/app/App'
 import {useTheme} from '../lib/theme'
 import {useAccent} from '../lib/accent'
@@ -25,6 +27,7 @@ const mGetSettings = vi.mocked(GetSettings)
 const mUpdateSettings = vi.mocked(UpdateSettings)
 const mPause = vi.mocked(PauseScheduler)
 const mResume = vi.mocked(ResumeScheduler)
+const mGetBackupConfig = vi.mocked(GetBackupConfig)
 
 function mockHealth(scheduler: string) {
   vi.mocked(Health).mockResolvedValue({
@@ -32,11 +35,13 @@ function mockHealth(scheduler: string) {
   })
 }
 
-function renderPage() {
+function renderPage(initialEntry = '/?tab=appearance') {
   const client = new QueryClient({defaultOptions: {queries: {retry: false}}})
   return render(
     <QueryClientProvider client={client}>
-      <SettingsPage />
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <SettingsPage />
+      </MemoryRouter>
     </QueryClientProvider>
   )
 }
@@ -52,6 +57,20 @@ beforeEach(() => {
 })
 
 describe('SettingsPage appearance', () => {
+  it('deep-links straight into a tab via ?tab=', async () => {
+    mGetBackupConfig.mockResolvedValue({
+      schedule: {kind: 'off', every_hours: 0, at_time: ''},
+      local_dir: '', keep_last_local: 5,
+      s3: {endpoint: '', region: '', bucket: '', prefix: '', use_ssl: false, keep_last: 0},
+      includes: {run_history: true, artifacts: false},
+      passphrase_set: false,
+    } as any)
+    // The back links from /secrets and /backups carry the section id.
+    renderPage('/?tab=backup')
+    expect(await screen.findByText('Encrypted archives of your tasks, schedules, secrets, and settings.')).toBeInTheDocument()
+    expect(screen.getByRole('tab', {name: /Backup/})).toHaveAttribute('aria-selected', 'true')
+  })
+
   it('switches the persisted theme', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -62,8 +81,8 @@ describe('SettingsPage appearance', () => {
     expect(screen.getAllByText('System').length).toBeGreaterThanOrEqual(1)
     useTheme.getState().setTheme('dark')
     expect(useTheme.getState().choice).toBe('dark')
-    // Default dark variant is gradient (gradient-dark data-theme)
-    expect(document.documentElement.dataset.theme).toBe('gradient-dark')
+    // Default dark variant is crt (crt-dark data-theme)
+    expect(document.documentElement.dataset.theme).toBe('crt-dark')
   })
 
   it('repoints the accent via swatches', async () => {
@@ -207,7 +226,7 @@ describe('SettingsPage secrets vault', () => {
     )
   })
 
-  it('deletes a secret by key', async () => {
+  it('deletes a secret by key after confirmation', async () => {
     mList.mockResolvedValue(['OLD_KEY'])
     mDelete.mockResolvedValue(undefined)
     const user = userEvent.setup()
@@ -216,7 +235,29 @@ describe('SettingsPage secrets vault', () => {
     await openSecrets(user)
     await screen.findByTestId('secret-list')
     await user.click(screen.getByRole('button', {name: 'Delete secret OLD_KEY'}))
+    expect(await screen.findByRole('heading', {name: 'Delete OLD_KEY?'})).toBeInTheDocument()
+    expect(mDelete).not.toHaveBeenCalled()
 
+    await user.click(screen.getByRole('button', {name: 'Delete anyway'}))
     await waitFor(() => expect(mDelete).toHaveBeenCalledWith('OLD_KEY'))
+  })
+
+  it('confirms before deleting a backup-managed secret', async () => {
+    mList.mockResolvedValue(['BACKUP_S3_ACCESS_KEY_ID'])
+    mDelete.mockResolvedValue(undefined)
+    const user = userEvent.setup()
+
+    renderPage()
+    await openSecrets(user)
+    await screen.findByTestId('secret-list')
+    // Backup badge is shown next to the key.
+    expect(screen.getByTitle("Managed by Heka's automatic backups")).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', {name: 'Delete secret BACKUP_S3_ACCESS_KEY_ID'}))
+    expect(await screen.findByRole('heading', {name: 'Delete BACKUP_S3_ACCESS_KEY_ID?'})).toBeInTheDocument()
+    expect(mDelete).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', {name: 'Delete anyway'}))
+    await waitFor(() => expect(mDelete).toHaveBeenCalledWith('BACKUP_S3_ACCESS_KEY_ID'))
   })
 })

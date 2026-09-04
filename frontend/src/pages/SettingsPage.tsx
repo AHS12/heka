@@ -5,6 +5,7 @@
 import {useEffect, useRef, useState} from 'react'
 import type {ReactNode} from 'react'
 import {useQuery, useQueryClient, useMutation} from '@tanstack/react-query'
+import {useSearchParams} from 'react-router-dom'
 import {
   apiErrorDetails,
   listSecrets,
@@ -24,22 +25,24 @@ import {
   resumeScheduler,
 } from '../lib/api'
 import {useHealth} from '../lib/query'
+import {SECRETS_KEY, isBackupSecret, backupSecretWarning} from '../lib/secrets'
 import {useTheme, LIGHT_VARIANTS, DARK_VARIANTS} from '../lib/theme'
-import type {ThemeVariant} from '../lib/theme'
+import type {ThemeVariant, ResolvedTheme} from '../lib/theme'
 import {useAccent, ACCENT_COLORS, ACCENT_PRESETS} from '../lib/accent'
 import type {Accent} from '../lib/accent'
 import type {ThemeChoice} from '../lib/theme'
 import {useAnimations} from '../lib/animations'
-import {Field, SelectField, TextInput, pillBtn} from '../components/controls'
-import {Switch, Tabs} from '@heroui/react'
+import {Field, SelectField, TextInput, pillBtn, primaryBtn} from '../components/controls'
+import {Switch, Tabs, Modal} from '@heroui/react'
+import {AppDialog, dialogHeaderCls, dialogBodyCls, dialogFooterCls} from '../components/AppDialog'
+import {BackupSection} from '../components/settings/BackupSection'
 
-const SECRETS_KEY = ['secrets'] as const
-
-type SettingsTab = 'appearance' | 'data' | 'startup' | 'reliability' | 'retention' | 'notifications' | 'secrets'
+type SettingsTab = 'appearance' | 'data' | 'backup' | 'startup' | 'reliability' | 'retention' | 'notifications' | 'secrets'
 
 const SETTINGS_TABS: Array<{id: SettingsTab; label: string; detail: string}> = [
   {id: 'appearance', label: 'Appearance', detail: 'Theme, accent, and motion'},
   {id: 'data', label: 'Data', detail: 'Local storage locations'},
+  {id: 'backup', label: 'Backup', detail: 'Automatic backups & restore'},
   {id: 'startup', label: 'Startup', detail: 'Launch with your system'},
   {id: 'reliability', label: 'Reliability', detail: 'Scheduler and watchdog'},
   {id: 'retention', label: 'Retention', detail: 'Run history lifetime'},
@@ -62,11 +65,19 @@ function useNarrowSettings() {
 }
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance')
+  // The active tab lives in the URL (?tab=…) so /secrets and /backups can
+  // link back to the exact section they came from, and refreshes keep it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const raw = searchParams.get('tab')
+  const activeTab: SettingsTab = SETTINGS_TABS.some((t) => t.id === raw)
+    ? (raw as SettingsTab)
+    : 'appearance'
+  const selectTab = (tab: SettingsTab) => setSearchParams({tab}, {replace: true})
   const narrow = useNarrowSettings()
   const panels: Record<SettingsTab, ReactNode> = {
     appearance: <AppearanceSection />,
     data: <DataDirSection />,
+    backup: <BackupSection />,
     startup: <StartupSection />,
     reliability: <ReliabilitySection />,
     retention: <RetentionSection />,
@@ -78,32 +89,32 @@ export function SettingsPage() {
     <div className="mx-auto max-w-5xl space-y-4">
       <div>
         <h2 className="text-lg font-semibold">Settings</h2>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Shape how Heka looks, starts, stores data, and protects credentials.</p>
+        <p className="mt-1 text-xs text-foreground/55">Shape how Heka looks, starts, stores data, and protects credentials.</p>
       </div>
       <Tabs
         orientation={narrow ? 'horizontal' : 'vertical'}
         selectedKey={activeTab}
-        onSelectionChange={(key) => setActiveTab(key as SettingsTab)}
+        onSelectionChange={(key) => selectTab(key as SettingsTab)}
         className="grid items-start gap-4 md:grid-cols-[13rem_minmax(0,1fr)]"
       >
-        <div className="self-start overflow-x-auto rounded-2xl border border-zinc-200/80 bg-white/45 p-1.5 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/25 md:overflow-visible">
+        <div className="self-start overflow-x-auto rounded-2xl border border-border/80 bg-surface/45 p-1.5 shadow-sm backdrop-blur-sm md:sticky md:top-6 md:overflow-visible">
           <Tabs.List aria-label="Settings sections" className="flex min-w-max gap-1.5 md:min-w-0 md:flex-col md:items-stretch">
             {SETTINGS_TABS.map((tab) => (
               <Tabs.Tab
                 key={tab.id}
                 id={tab.id}
-                className="group relative flex min-h-12 min-w-40 flex-none items-center justify-start rounded-xl px-3.5 py-2 text-left outline-none transition-colors data-[hovered=true]:bg-white/65 data-[selected=true]:bg-white/90 data-[selected=true]:shadow-sm data-[focus-visible=true]:ring-2 data-[focus-visible=true]:ring-accent-ring dark:data-[hovered=true]:bg-zinc-900/65 dark:data-[selected=true]:bg-zinc-900/90 md:min-w-0 md:items-stretch md:px-3"
+                className="group relative flex min-h-12 min-w-40 flex-none items-center justify-start rounded-xl px-3.5 py-2 text-left outline-none transition-colors data-[hovered=true]:bg-surface/65 data-[selected=true]:bg-surface/90 data-[selected=true]:shadow-sm data-[focus-visible=true]:ring-2 data-[focus-visible=true]:ring-accent-ring md:min-w-0 md:items-stretch md:px-3"
               >
                 <span className="flex min-w-0 flex-col gap-0.5">
                   <span className="block truncate text-sm font-semibold leading-tight">{tab.label}</span>
-                  <span className="block truncate text-[11px] font-normal leading-tight text-zinc-500 dark:text-zinc-400">{tab.detail}</span>
+                  <span className="block truncate text-[11px] font-normal leading-tight text-foreground/55">{tab.detail}</span>
                 </span>
                 <Tabs.Indicator className="absolute bottom-1 left-3 right-3 h-0.5 rounded-full bg-accent md:bottom-2 md:left-0 md:right-auto md:top-2 md:h-auto md:w-0.5" />
               </Tabs.Tab>
             ))}
           </Tabs.List>
         </div>
-        <Tabs.Panel id={activeTab} className="min-w-0 rounded-2xl border border-zinc-200/80 bg-white/45 p-4 shadow-sm backdrop-blur-sm outline-none dark:border-zinc-800 dark:bg-zinc-950/25 sm:p-5">
+        <Tabs.Panel id={activeTab} className="min-w-0 rounded-2xl border border-border/80 bg-surface/45 p-4 shadow-sm backdrop-blur-sm outline-none sm:p-5">
           {panels[activeTab]}
         </Tabs.Panel>
       </Tabs>
@@ -113,13 +124,18 @@ export function SettingsPage() {
 
 const VARIANT_LABELS: Record<ThemeVariant, string> = {
   'khaki': 'Khaki',
+  'khaki-dark': 'Khaki Dark',
   'crt': 'CRT',
-  'gradient': 'Gradient',
   'high-contrast': 'High Contrast',
 }
 
+/** The 'crt' id exists in both modes (light CRT / dark CRT) — disambiguate. */
+function variantLabel(variant: ThemeVariant, mode: ResolvedTheme): string {
+  return mode === 'dark' && variant === 'crt' ? 'CRT Dark' : VARIANT_LABELS[variant]
+}
+
 function AppearanceSection() {
-  const {choice, effectiveVariant, setTheme, setVariant} = useTheme()
+  const {choice, resolved, effectiveVariant, setTheme, setVariant} = useTheme()
   const {accent, customColor, setAccent, setCustomColor} = useAccent()
   const {enabled: animationsOn, setEnabled: setAnimations} = useAnimations()
 
@@ -129,7 +145,7 @@ function AppearanceSection() {
     : LIGHT_VARIANTS
   return (
     <section className="space-y-3">
-      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+      <h3 className="text-sm font-semibold text-foreground/75">
         Appearance
       </h3>
       <div className="flex flex-wrap items-center gap-3">
@@ -152,7 +168,7 @@ function AppearanceSection() {
             value={effectiveVariant}
             onChange={(v) => setVariant(v as ThemeVariant)}
             className="w-40"
-            items={variants.map((v) => ({id: v, label: VARIANT_LABELS[v]}))}
+            items={variants.map((v) => ({id: v, label: variantLabel(v, resolved)}))}
           />
         </Field>
         <div className="flex items-center gap-2 pt-5">
@@ -167,7 +183,7 @@ function AppearanceSection() {
               title={name}
               className={`size-6 rounded-full outline-none transition-transform focus-visible:ring-2 focus-visible:ring-accent-ring ${
                 accent === name
-                  ? 'scale-110 ring-2 ring-zinc-400 dark:ring-zinc-500'
+                  ? 'scale-110 ring-2 ring-foreground/50'
                   : ''
               }`}
               style={{background: ACCENT_COLORS[name]}}
@@ -176,8 +192,8 @@ function AppearanceSection() {
           <label
             className={`ml-1 flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs outline-none focus-within:ring-2 focus-within:ring-accent-ring ${
               accent === 'custom'
-                ? 'border-accent text-zinc-900 dark:text-zinc-100'
-                : 'border-zinc-200 dark:border-zinc-700'
+                ? 'border-accent text-foreground'
+                : 'border-field-border'
             }`}
           >
             <input
@@ -192,12 +208,12 @@ function AppearanceSection() {
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center justify-between rounded-xl border border-zinc-200/80 bg-white/60 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+        <div className="flex items-center justify-between rounded-xl border border-border/80 bg-surface/60 px-4 py-3">
           <div>
-            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+            <p className="text-sm font-medium text-foreground">
               Animations
             </p>
-            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="mt-0.5 text-xs text-foreground/55">
               Enable motion effects and transitions
             </p>
           </div>
@@ -227,18 +243,18 @@ function DataDirSection() {
   })
   return (
     <section className="space-y-3">
-      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Data</h3>
-      <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+      <h3 className="text-sm font-semibold text-foreground/75">Data</h3>
+      <div className="rounded-2xl border border-border/80 bg-surface/70 p-4 shadow-sm backdrop-blur-sm">
         <div className="space-y-2">
           <div>
-            <div className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Data directory</div>
-            <code className="mt-0.5 block truncate font-mono text-xs text-zinc-700 dark:text-zinc-200">
+            <div className="text-[11px] font-medium text-foreground/55">Data directory</div>
+            <code className="mt-0.5 block truncate font-mono text-xs text-foreground/75">
               {dirs.data?.data ?? '—'}
             </code>
           </div>
           <div>
-            <div className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Tasks directory</div>
-            <code className="mt-0.5 block truncate font-mono text-xs text-zinc-700 dark:text-zinc-200">
+            <div className="text-[11px] font-medium text-foreground/55">Tasks directory</div>
+            <code className="mt-0.5 block truncate font-mono text-xs text-foreground/75">
               {dirs.data?.tasks ?? '—'}
             </code>
           </div>
@@ -246,7 +262,7 @@ function DataDirSection() {
         <button
           type="button"
           onClick={() => openDataDir()}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/80 px-3 py-1 text-xs font-medium shadow-sm transition-colors hover:border-accent hover:text-accent dark:border-zinc-700/60 dark:bg-zinc-900/70"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/80 px-3 py-1 text-xs font-medium shadow-sm transition-colors hover:border-accent hover:text-accent"
         >
           <svg className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
@@ -274,7 +290,7 @@ function StartupSection() {
 
   return (
     <section className="space-y-3">
-      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+      <h3 className="text-sm font-semibold text-foreground/75">
         Startup
       </h3>
       <ToggleRow
@@ -355,7 +371,7 @@ function ReliabilitySection() {
 
   return (
     <section className="space-y-3">
-      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+      <h3 className="text-sm font-semibold text-foreground/75">
         Reliability
       </h3>
       <ToggleRow
@@ -380,7 +396,7 @@ function ReliabilitySection() {
         disabled={status.isLoading || toggle.isPending}
         onChange={(on) => { setError(null); toggle.mutate(on) }}
       />
-      <div className="rounded-xl border border-zinc-200/80 bg-white/60 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+      <div className="rounded-xl border border-border/80 bg-surface/60 px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <Field label="Missed-run reconciliation">
             <SelectField
@@ -415,7 +431,7 @@ function ReliabilitySection() {
             {saved ? 'Saved' : 'Save'}
           </button>
         </div>
-        <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="mt-1.5 text-xs text-foreground/55">
           How often the daemon checks for missed recurring schedule activations
           (e.g. after the PC was off or sleeping). The watchdog cadence
           recreates the OS task so crashes are caught sooner.
@@ -459,13 +475,13 @@ function ToggleRow({
   onChange: (on: boolean) => void
 }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-zinc-200/80 bg-white/60 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+    <div className="flex items-center justify-between rounded-xl border border-border/80 bg-surface/60 px-4 py-3">
       <div>
-        <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+        <p className="text-sm font-medium text-foreground">
           {label}
         </p>
         {hint && (
-          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-0.5 text-xs text-foreground/55">
             {hint}
           </p>
         )}
@@ -520,8 +536,8 @@ function RetentionSection() {
 
   return (
     <section className="space-y-3">
-      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Retention</h3>
-      <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+      <h3 className="text-sm font-semibold text-foreground/75">Retention</h3>
+      <div className="rounded-2xl border border-border/80 bg-surface/70 p-4 shadow-sm backdrop-blur-sm">
         <Field label="Log retention (days)">
           <div className="flex items-center gap-2">
             <input
@@ -529,9 +545,9 @@ function RetentionSection() {
               min={1}
               value={days}
               onChange={(e) => setDays(Math.max(1, parseInt(e.target.value) || 1))}
-              className="w-20 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent/30 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              className="w-20 rounded-lg border border-field-border bg-surface px-2.5 py-1.5 text-xs font-medium outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent/30 text-foreground"
             />
-            <span className="text-[11px] text-zinc-400">days</span>
+            <span className="text-[11px] text-foreground/50">days</span>
             <button
               type="button"
               disabled={mutation.isPending || days === settings.data?.log_retention_days}
@@ -546,7 +562,7 @@ function RetentionSection() {
             </button>
           </div>
         </Field>
-        <p className="mt-2 text-[11px] text-zinc-400 dark:text-zinc-500">
+        <p className="mt-2 text-[11px] text-foreground/50">
           Run history older than this is automatically pruned. Requires daemon restart to take full effect.
         </p>
       </div>
@@ -609,10 +625,10 @@ function NotificationSection() {
 
   return (
     <section className="space-y-3">
-      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+      <h3 className="text-sm font-semibold text-foreground/75">
         Notification Sounds
       </h3>
-      <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+      <div className="rounded-2xl border border-border/80 bg-surface/70 p-4 shadow-sm backdrop-blur-sm">
         <div className="space-y-3">
           <SoundRow
             label="Success sound"
@@ -689,7 +705,7 @@ function SoundRow({
         aria-label={`Preview ${label}`}
         onClick={onPreview}
         disabled={isPreviewing || value === 'silent'}
-        className="mt-5 inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-zinc-200/80 bg-white/80 text-zinc-500 shadow-sm transition-colors hover:border-accent hover:text-accent focus-visible:ring-2 focus-visible:ring-accent-ring dark:border-zinc-700/60 dark:bg-zinc-900/70 dark:text-zinc-400 disabled:opacity-50"
+        className="mt-5 inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-border/80 bg-surface/80 text-foreground/55 shadow-sm transition-colors hover:border-accent hover:text-accent focus-visible:ring-2 focus-visible:ring-accent-ring disabled:opacity-50"
       >
         {isPreviewing ? (
           <svg className="size-4 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -712,9 +728,9 @@ function SecretsSection() {
   const [key, setKey] = useState('')
   const [value, setValue] = useState('')
   const [errors, setErrors] = useState<string[]>([])
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const keys = useQuery({queryKey: SECRETS_KEY, queryFn: listSecrets})
-
   const add = useMutation({
     mutationFn: ({key, value}: {key: string; value: string}) =>
       setSecret(key, value),
@@ -735,12 +751,23 @@ function SecretsSection() {
 
   return (
     <section className="space-y-3">
-      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-        Secrets
-      </h3>
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-foreground/75">
+          Secrets
+        </h3>
+        <a
+          href="#/secrets"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/80 px-3 py-1 text-xs font-medium shadow-sm transition-colors hover:border-accent hover:text-accent"
+        >
+          Browse &amp; manage all secrets
+          <svg aria-hidden viewBox="0 0 16 16" className="size-3 fill-current">
+            <path d="M4.5 3 8 6.5 11.5 3 13 4.5 8 9.5 3 4.5z" transform="rotate(-90 8 6.5)" />
+          </svg>
+        </a>
+      </div>
+      <p className="text-xs text-foreground/55">
         Values are encrypted at rest and injected at run time. Reference them
-        in tasks as <code className="rounded bg-zinc-100 px-1 py-0.5 dark:bg-zinc-800">{'${KEY}'}</code> in
+        in tasks as <code className="rounded bg-surface-secondary px-1 py-0.5">{'${KEY}'}</code> in
         environment or webhook fields. Keys are the only thing shown here.
       </p>
 
@@ -786,9 +813,9 @@ function SecretsSection() {
       )}
 
       {keys.isLoading ? (
-        <p className="text-xs text-zinc-400">Loading…</p>
+        <p className="text-xs text-foreground/50">Loading…</p>
       ) : keys.data?.length === 0 ? (
-        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+        <p className="text-xs text-foreground/50">
           No secrets yet — add one above.
         </p>
       ) : (
@@ -796,22 +823,79 @@ function SecretsSection() {
           {(keys.data ?? []).map((k) => (
             <li
               key={k}
-              className="flex items-center justify-between rounded-xl border border-zinc-200/80 bg-white/60 px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900/50"
+              className="flex items-center justify-between rounded-xl border border-border/80 bg-surface/60 px-3 py-2 text-sm"
             >
-              <code className="font-mono text-xs text-zinc-700 dark:text-zinc-300">
-                {k}
-              </code>
+              <span className="flex min-w-0 items-center gap-2">
+                <code className="truncate font-mono text-xs text-foreground/75">
+                  {k}
+                </code>
+                {isBackupSecret(k) && (
+                  <span
+                    title="Managed by Heka's automatic backups"
+                    className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent"
+                  >
+                    backup
+                  </span>
+                )}
+              </span>
               <button
                 type="button"
                 aria-label={`Delete secret ${k}`}
-                onClick={() => remove.mutate(k)}
-                className="text-xs text-zinc-400 outline-none hover:text-red-500 focus-visible:ring-2 focus-visible:ring-accent-ring"
+                onClick={() => setConfirmDelete(k)}
+                className="text-xs text-foreground/50 outline-none hover:text-red-500 focus-visible:ring-2 focus-visible:ring-accent-ring"
               >
                 Delete
               </button>
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Delete confirm — every key asks first; backup-managed keys get an
+          extra warning because the daemon (not tasks) depends on them. */}
+      {confirmDelete !== null && (
+        <AppDialog isOpen onOpenChange={(open) => !open && setConfirmDelete(null)} size="sm">
+          <Modal.Header className={dialogHeaderCls}>
+            <div>
+              <Modal.Heading className="text-lg font-semibold">Delete {confirmDelete}?</Modal.Heading>
+              <p className="mt-1 text-xs text-foreground/55">
+                {isBackupSecret(confirmDelete)
+                  ? 'This key is managed by Heka\'s automatic backups — the daemon uses it directly, tasks never reference it.'
+                  : 'Tasks referencing it will fail to resolve it at run time.'}
+              </p>
+            </div>
+            <Modal.CloseTrigger aria-label="Close delete confirmation" isDisabled={remove.isPending} />
+          </Modal.Header>
+          <Modal.Body className={dialogBodyCls}>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
+              {isBackupSecret(confirmDelete)
+                ? backupSecretWarning(confirmDelete)
+                : 'This cannot be undone. The key must be added again before tasks can use it.'}
+            </div>
+          </Modal.Body>
+          <Modal.Footer className={dialogFooterCls}>
+            <button
+              type="button"
+              className={pillBtn}
+              onClick={() => setConfirmDelete(null)}
+              disabled={remove.isPending}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={primaryBtn}
+              disabled={remove.isPending}
+              onClick={() => {
+                const k = confirmDelete
+                setConfirmDelete(null)
+                remove.mutate(k)
+              }}
+            >
+              {remove.isPending ? 'Deleting…' : 'Delete anyway'}
+            </button>
+          </Modal.Footer>
+        </AppDialog>
       )}
     </section>
   )

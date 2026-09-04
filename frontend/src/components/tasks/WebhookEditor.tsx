@@ -6,32 +6,51 @@ import {RemoveRow, SelectField, pillBtn} from '../controls'
 import {SecretValue} from './SecretValue'
 import type {WebhookDraft, WebhookFormat} from '../../lib/taskForm'
 
-const FORMATS: WebhookFormat[] = ['slack', 'pumble', 'discord', 'telegram', 'generic']
+const FORMATS: WebhookFormat[] = ['slack', 'discord', 'telegram', 'generic']
 
-const GUIDES: Record<WebhookFormat, {title: string; url: string; hint: string}> = {
+// Pumble incoming webhooks accept Slack-style payloads, so one format value
+// ("slack") serves both — the dropdown and guides just name both platforms.
+const FORMAT_LABELS: Record<WebhookFormat, string> = {
+  slack: 'Slack / Pumble',
+  discord: 'Discord',
+  telegram: 'Telegram',
+  generic: 'Generic',
+}
+
+const GUIDES: Record<WebhookFormat, {links: Array<{label: string; url: string}>; hint: string}> = {
   slack: {
-    title: 'Slack Incoming Webhook',
-    url: 'https://api.slack.com/messaging/webhooks',
-    hint: 'Create a Slack app → Incoming Webhooks → Add to Slack → copy the webhook URL.',
-  },
-  pumble: {
-    title: 'Pumble Webhook',
-    url: 'https://www.zoho.com/pumble/help/integrations/webhooks.html',
-    hint: 'In Pumble → Settings → Integrations → Incoming Webhooks → create and copy the URL.',
+    links: [
+      {
+        label: 'Slack Incoming Webhook',
+        url: 'https://api.slack.com/messaging/webhooks',
+      },
+      {
+        label: 'Pumble Webhook',
+        url: 'https://www.zoho.com/pumble/help/integrations/webhooks.html',
+      },
+    ],
+    hint: 'Slack: create an app → Incoming Webhooks → Add to Slack → copy the webhook URL. Pumble: Settings → Integrations → Incoming Webhooks → copy the URL — both accept the same payload.',
   },
   discord: {
-    title: 'Discord Webhook',
-    url: 'https://support.discord.com/hc/en-us/articles/228383668',
+    links: [
+      {
+        label: 'Discord Webhook',
+        url: 'https://support.discord.com/hc/en-us/articles/228383668',
+      },
+    ],
     hint: 'Server Settings → Integrations → Webhooks → New Webhook → Copy Webhook URL.',
   },
   telegram: {
-    title: 'Telegram Bot',
-    url: 'https://core.telegram.org/bots#creating-a-new-bot',
+    links: [
+      {
+        label: 'Telegram Bot',
+        url: 'https://core.telegram.org/bots#creating-a-new-bot',
+      },
+    ],
     hint: 'Create a bot via @BotFather → copy the bot token. Send a message to your bot, then visit https://api.telegram.org/bot<TOKEN>/getUpdates to find your chat_id.',
   },
   generic: {
-    title: 'Generic HTTP Webhook',
-    url: '',
+    links: [],
     hint: 'A JSON POST will be sent to the URL below. Use ${WEBHOOK_URL} or ${SECRET} references to keep the URL out of the YAML.',
   },
 }
@@ -49,7 +68,7 @@ export function WebhookEditor({
   return (
     <div className="space-y-3">
       {rows.length === 0 && (
-        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+        <p className="text-xs text-foreground/50">
           No webhook notifications configured.
         </p>
       )}
@@ -58,7 +77,7 @@ export function WebhookEditor({
         return (
           <div
             key={i}
-            className="relative space-y-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 px-4 py-3 pr-10 dark:border-zinc-800 dark:bg-zinc-900/30"
+            className="relative space-y-2 rounded-xl border border-border/80 bg-surface-secondary/50 px-4 py-3 pr-10"
           >
             {/* Close button pinned top-right */}
             <RemoveRow
@@ -76,27 +95,28 @@ export function WebhookEditor({
               }
               items={FORMATS.map((f) => ({
                 id: f,
-                label: f.charAt(0).toUpperCase() + f.slice(1),
+                label: FORMAT_LABELS[f],
               }))}
             />
 
-            {/* Guide link */}
-            {guide.url && (
+            {/* Guide links */}
+            {guide.links.map((link) => (
               <a
-                href={guide.url}
+                key={link.url}
+                href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-zinc-400 underline-offset-2 hover:text-zinc-600 hover:underline dark:text-zinc-500 dark:hover:text-zinc-300"
+                className="mr-3 inline-flex items-center gap-1 text-xs text-foreground/50 underline-offset-2 hover:text-foreground/75 hover:underline"
               >
-                How to create a {guide.title} ↗
+                How to create a {link.label} ↗
               </a>
-            )}
+            ))}
 
             {/* Platform-specific fields */}
             {row.format === 'telegram' ? (
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <span className="mb-1 block text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                  <span className="mb-1 block text-[11px] font-medium text-foreground/50">
                     Bot Token
                   </span>
                   <SecretValue
@@ -106,7 +126,7 @@ export function WebhookEditor({
                   />
                 </div>
                 <div>
-                  <span className="mb-1 block text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                  <span className="mb-1 block text-[11px] font-medium text-foreground/50">
                     Chat ID
                   </span>
                   <SecretValue
@@ -118,7 +138,7 @@ export function WebhookEditor({
               </div>
             ) : (
               <div>
-                <span className="mb-1 block text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                <span className="mb-1 block text-[11px] font-medium text-foreground/50">
                   Webhook URL
                 </span>
                 <SecretValue
@@ -130,7 +150,7 @@ export function WebhookEditor({
             )}
 
             {/* Hint */}
-            <p className="text-[11px] leading-relaxed text-zinc-400 dark:text-zinc-500">
+            <p className="text-[11px] leading-relaxed text-foreground/50">
               {guide.hint}
             </p>
           </div>

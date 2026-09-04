@@ -16,10 +16,10 @@ function splitDateTime(iso?: string) {
 function DetailBlock({label, children}: {label: string; children: React.ReactNode}) {
   return (
     <div className="min-w-0">
-      <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+      <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-foreground/50">
         {label}
       </div>
-      <div className="min-w-0 text-sm text-zinc-700 dark:text-zinc-200">{children}</div>
+      <div className="min-w-0 text-sm text-foreground/75">{children}</div>
     </div>
   )
 }
@@ -28,12 +28,12 @@ export {DetailBlock}
 
 export function DateTime({iso, empty = '—'}: {iso?: string; empty?: string}) {
   const value = splitDateTime(iso)
-  if (!value) return <span className="text-xs text-zinc-400 dark:text-zinc-500">{empty}</span>
+  if (!value) return <span className="text-xs text-foreground/50">{empty}</span>
   return (
     <span className="block whitespace-nowrap text-xs leading-tight" title={iso}>
-      <span className="text-zinc-700 dark:text-zinc-200">{value.date}</span>
+      <span className="text-foreground/75">{value.date}</span>
       {value.time && (
-        <span className="ml-1.5 text-zinc-400 dark:text-zinc-500">{value.time}</span>
+        <span className="ml-1.5 text-foreground/50">{value.time}</span>
       )}
     </span>
   )
@@ -57,13 +57,13 @@ function ScheduleCard({
   return (
     <div
       data-testid={`schedule-row-${s.id}`}
-      className="group rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm shadow-zinc-900/5 backdrop-blur transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:shadow-zinc-900/20"
+      className="group rounded-2xl border border-border/80 bg-surface/70 p-4 shadow-sm shadow-zinc-900/5 backdrop-blur transition-shadow hover:shadow-md dark:hover:shadow-zinc-900/20"
     >
       {/* Header: identity + controls */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100" title={s.slug}>
+            <span className="truncate text-sm font-semibold text-foreground" title={s.slug}>
               {s.slug}
             </span>
             <span
@@ -76,7 +76,7 @@ function ScheduleCard({
               {s.kind}
             </span>
           </div>
-          <div className="mt-0.5 truncate text-xs text-zinc-400 dark:text-zinc-500" title={s.task_slug}>
+          <div className="mt-0.5 truncate text-xs text-foreground/50" title={s.task_slug}>
             {s.task_slug}
           </div>
         </div>
@@ -99,7 +99,7 @@ function ScheduleCard({
               <button
                 type="button"
                 onClick={() => setConfirming(false)}
-                className="rounded-md px-2 py-1 text-xs text-zinc-500 outline-none hover:bg-zinc-200/70 dark:hover:bg-zinc-800"
+                className="rounded-md px-2 py-1 text-xs text-foreground/55 outline-none hover:bg-surface-secondary/70"
               >
                 No
               </button>
@@ -108,7 +108,7 @@ function ScheduleCard({
             <button
               type="button"
               onClick={() => setConfirming(true)}
-              className="rounded-lg p-1.5 text-zinc-400 outline-none hover:bg-red-100 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-accent-ring dark:hover:bg-red-950/50 dark:hover:text-red-400"
+              className="rounded-lg p-1.5 text-foreground/50 outline-none hover:bg-red-100 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-accent-ring dark:hover:bg-red-950/50 dark:hover:text-red-400"
               aria-label={`Delete schedule ${s.slug}`}
             >
               <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -121,10 +121,10 @@ function ScheduleCard({
       </div>
 
       {/* Detail row */}
-      <div className="mt-3 flex flex-wrap items-start gap-x-6 gap-y-3 border-t border-zinc-100 pt-3 dark:border-zinc-800/60">
+      <div className="mt-3 flex flex-wrap items-start gap-x-6 gap-y-3 border-t border-border/60 pt-3">
         <DetailBlock label="Rule">
           {s.kind === 'recurring' ? (
-            <span className="font-mono text-xs text-zinc-600 dark:text-zinc-300" title={s.cron}>
+            <span className="font-mono text-xs text-foreground/75" title={s.cron}>
               {s.cron}
             </span>
           ) : (
@@ -143,7 +143,7 @@ function ScheduleCard({
               <DateTime iso={finishedAt} />
             </div>
           ) : (
-            <span className="text-xs text-zinc-400 dark:text-zinc-500">Never</span>
+            <span className="text-xs text-foreground/50">Never</span>
           )}
         </DetailBlock>
 
@@ -152,7 +152,7 @@ function ScheduleCard({
             className={
               s.missed_policy === 'run_now'
                 ? 'text-xs font-medium text-emerald-600 dark:text-emerald-400'
-                : 'text-xs font-medium text-zinc-400 dark:text-zinc-500'
+                : 'text-xs font-medium text-foreground/50'
             }
             title={
               s.missed_policy === 'run_now'

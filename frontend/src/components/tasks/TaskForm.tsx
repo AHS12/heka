@@ -81,7 +81,7 @@ export function TaskForm({
       <FormErrors errors={errors} testId="form-errors" />
 
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Basics</h3>
+        <h3 className="text-sm font-semibold text-foreground/75">Basics</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Name" error={fieldError('name')} errorId="task-name-error">
             <TextInput
@@ -154,7 +154,7 @@ export function TaskForm({
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+        <h3 className="text-sm font-semibold text-foreground/75">
           {type === 'binary' ? 'Binary' : 'Script'}
         </h3>
         <Field
@@ -193,7 +193,7 @@ export function TaskForm({
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Execution</h3>
+        <h3 className="text-sm font-semibold text-foreground/75">Execution</h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Timeout (seconds)" error={fieldError('timeout')} errorId="task-timeout-error">
             <NumberInput
@@ -219,23 +219,13 @@ export function TaskForm({
               />
             </div>
           </Field>
-          <div className="pt-5">
-            <label className="flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              <Toggle
-                checked={draft.captureOutput}
-                onChange={(v) => patch({captureOutput: v})}
-                label="Capture output"
-              />
-              Capture output
-            </label>
-          </div>
         </div>
         <Field
           label="Log directory"
           hint={
             <>
               Per-run log files (stdout.log, stderr.log, run.json). Leave empty
-              to log in the working directory.
+              to use the global runs folder (settings: run_artifacts_dir).
             </>
           }
         >
@@ -255,7 +245,7 @@ export function TaskForm({
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Retry</h3>
+        <h3 className="text-sm font-semibold text-foreground/75">Retry</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Max attempts" error={fieldError('retry.max_attempts', 'max_attempts')} errorId="task-attempts-error">
             <NumberInput
@@ -283,17 +273,17 @@ export function TaskForm({
       <EnvEditor rows={draft.environment} onChange={(environment) => patch({environment})} />
 
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Notifications</h3>
+        <h3 className="text-sm font-semibold text-foreground/75">Notifications</h3>
         <p
           data-testid="schedule-pointer"
-          className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-400"
+          className="rounded-lg border border-border bg-surface-secondary/50 px-3 py-2 text-xs text-foreground/55"
         >
           Want this task on a schedule? Add one on the Schedules page after saving.
         </p>
         <Field label="Notify on">
           <div className="flex flex-wrap gap-4 pt-1">
             {NOTIFY_EVENTS.map((ev) => (
-              <label key={ev} className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+              <label key={ev} className="flex items-center gap-2 text-sm text-foreground/75">
                 <Toggle
                   checked={draft.notifyOn.includes(ev)}
                   onChange={(on) =>

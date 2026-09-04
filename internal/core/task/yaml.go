@@ -60,14 +60,19 @@ func Export(t Task) ([]byte, error) {
 }
 
 // applyDefaults fills schema defaults before validation/marshal:
-// runtime=custom (script), capture_output=true, retry.delay_seconds=30.
+// runtime=custom (script), retry.delay_seconds=30. Deprecated/alias values
+// are normalized away: capture_output (v0.7 field with no behavioral effect)
+// is dropped from canonical output, and webhook format "pumble" — whose
+// incoming webhooks accept Slack-style payloads — becomes "slack".
 func applyDefaults(t *Task) {
 	if t.Type == "script" && t.Runtime == "" {
 		t.Runtime = "custom"
 	}
-	if t.CaptureOutput == nil {
-		v := true
-		t.CaptureOutput = &v
+	t.CaptureOutput = nil
+	for i := range t.Notify.Webhooks {
+		if t.Notify.Webhooks[i].Format == "pumble" {
+			t.Notify.Webhooks[i].Format = "slack"
+		}
 	}
 	if t.Retry.MaxAttempts > 0 && t.Retry.DelaySeconds == 0 {
 		t.Retry.DelaySeconds = 30

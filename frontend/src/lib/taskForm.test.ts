@@ -25,7 +25,6 @@ function scriptTask(): task.Task {
     environment: {TARGET: '/data', TOKEN: '${SECRET_TOKEN}'},
     timeout: 120,
     retry: {max_attempts: 3, delay_seconds: 5},
-    capture_output: true,
     notify_on: ['failure'],
     notify: {webhooks: [{format: 'slack', url: 'https://hooks/${URL}'}]},
   } as unknown as task.Task

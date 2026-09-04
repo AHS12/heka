@@ -18,15 +18,15 @@ export function EnvEditor({
   }
   return (
     <div>
-      <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+      <div className="mb-1 text-xs font-medium text-foreground/55">
         Environment
       </div>
-      <p className="mb-2 text-xs text-zinc-400 dark:text-zinc-500">
+      <p className="mb-2 text-xs text-foreground/50">
         Values reference the vault (Settings → Secrets) or a literal string.
       </p>
       <div className="space-y-2">
         {rows.length === 0 && (
-          <p className="text-xs text-zinc-400 dark:text-zinc-500">None set.</p>
+          <p className="text-xs text-foreground/50">None set.</p>
         )}
         {rows.map(([key, value], i) => (
           <div key={i} className="grid grid-cols-[1fr_2fr_auto] items-center gap-2">

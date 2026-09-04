@@ -52,9 +52,6 @@ func TestParseValid(t *testing.T) {
 	if len(task.Notify.Webhooks) != 2 || task.Notify.Webhooks[1].ChatID != "${TELEGRAM_CHAT_ID}" {
 		t.Fatalf("webhooks: %+v", task.Notify)
 	}
-	if task.CaptureOutput == nil || !*task.CaptureOutput {
-		t.Fatal("capture_output default should be true")
-	}
 
 	binary, err := Parse([]byte(binaryYAML))
 	if err != nil {
@@ -69,7 +66,7 @@ func TestParseValid(t *testing.T) {
 }
 
 func TestParseDefaults(t *testing.T) {
-	// Omitted runtime / capture_output / retry delay get schema defaults.
+	// Omitted runtime / retry delay get schema defaults.
 	task, err := Parse([]byte("version: 1\nname: X\nslug: x\nscript: s.sh\ntype: script\n"))
 	if err != nil {
 		t.Fatal(err)
@@ -77,8 +74,34 @@ func TestParseDefaults(t *testing.T) {
 	if task.Runtime != "custom" {
 		t.Errorf("runtime = %q, want custom", task.Runtime)
 	}
-	if task.CaptureOutput == nil || !*task.CaptureOutput {
-		t.Errorf("capture_output = %v, want true", task.CaptureOutput)
+}
+
+// TestDeprecatedCaptureOutputAndPumbleAlias locks in the v0.8 normalization:
+// v0.7 files carrying capture_output still parse (strict schema tolerated via
+// the deprecated field) but the value is dropped from canonical export, and
+// webhook format "pumble" — same Slack-style payload — normalizes to "slack".
+func TestDeprecatedCaptureOutputAndPumbleAlias(t *testing.T) {
+	src := strings.Replace(scriptYAML, "format: slack", "format: pumble", 1)
+	parsed, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.CaptureOutput != nil {
+		t.Error("capture_output should be dropped by normalization")
+	}
+	if parsed.Notify.Webhooks[0].Format != "slack" {
+		t.Errorf("pumble format = %q, want slack", parsed.Notify.Webhooks[0].Format)
+	}
+
+	out, err := Export(parsed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "capture_output") {
+		t.Errorf("canonical export still emits capture_output:\n%s", out)
+	}
+	if strings.Contains(string(out), "pumble") {
+		t.Errorf("canonical export still emits pumble:\n%s", out)
 	}
 }
 
