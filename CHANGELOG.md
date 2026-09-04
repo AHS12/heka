@@ -5,6 +5,49 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-09-05
+
+The schedule creator grows out of its dropdowns: a pattern-first builder that
+can express any standard cron — including things like "September 23rd through
+26th at 9:00" — with a live preview of the next runs, and schedules can now be
+edited instead of deleted and recreated.
+
+### Added
+- **Pattern-based schedule builder.** The create dialog now starts with six
+  sections — Every N, Daily, Weekly, Monthly, Once, and Cron — each with
+  purpose-built inputs instead of single-choice dropdowns:
+  - **Monthly** picks days of the month from a 1–31 grid, supports ranges
+    ("23rd–26th" → `0 9 23-26 * *`) and an optional month restriction
+    (`0 9 23-26 9 *`), with honest notes for months that have no 29th/30th/31st.
+  - **Weekly** multi-selects weekdays (contiguous picks emit ranges:
+    Mon–Fri → `30 8 * * 1-5`) with Weekdays/Weekend presets.
+  - **Daily, Weekly, and Monthly** accept multiple times per day
+    (09:00 and 17:00 → `0 9,17 * * *`).
+  - **Cron** is the full-power escape hatch: raw 5- or 6-field expressions
+    with per-field breakdown, live validation, and grammar hints (lists,
+    ranges, steps, names, `@every`). Steps, names, and other shapes the
+    builder doesn't model stay available here.
+- **Live preview in the builder.** Every keystroke shows a plain-language
+  description ("At 09:00, on day 23–26, in Sep"), the generated expression
+  with a copy button, and the next five run times with relative offsets. When
+  multiple times would cross-fire (9:05 and 10:42 also means 9:42 and 10:05),
+  the preview says so explicitly.
+- **Schedule editing.** Schedule cards gain an Edit button; the same dialog
+  reopens prefilled and saves through the existing update API. Schedules
+  created in the app round-trip back into their builder section; foreign
+  expressions open in the Cron section unchanged.
+- A cron engine for the frontend (parsing, validation, next-run computation,
+  description) that mirrors the daemon's robfig parser exactly, verified
+  expression-by-expression against it via a generated golden fixture.
+
+### Changed
+- Schedule cards and the dashboard's next-run panel describe recurring rules
+  in plain language, keeping the raw expression underneath (list) or as a
+  tooltip (dashboard) for precision.
+- Cron validation in the schedule form now runs the same grammar the daemon
+  will apply, with field-accurate messages ("end of range (7) above maximum
+  (6)") before anything is saved.
+
 ## [0.8.1] - 2026-09-04
 
 A correctness pass over notifications and run artifacts: every webhook

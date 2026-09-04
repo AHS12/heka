@@ -38,6 +38,31 @@ export function useCreateSchedule() {
   })
 }
 
+export function useUpdateSchedule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (args: {
+      id: string
+      slug: string
+      taskSlug: string
+      kind: string
+      cron: string
+      runAt: string
+      missedPolicy: string
+    }) =>
+      api.updateSchedule(
+        args.id,
+        args.slug,
+        args.taskSlug,
+        args.kind,
+        args.cron,
+        args.runAt,
+        args.missedPolicy
+      ),
+    onSuccess: () => void qc.invalidateQueries({queryKey: SCHEDULES_KEY}),
+  })
+}
+
 export function useDeleteSchedule() {
   const qc = useQueryClient()
   return useMutation({
