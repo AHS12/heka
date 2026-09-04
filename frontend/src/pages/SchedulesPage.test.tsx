@@ -1,17 +1,20 @@
 // SchedulesPage tests (SPEC-14 §2): the missed-run reconcile button surfaces
 // HeroUI success/danger toasts, and the schedule card shows the missed policy.
 import {afterEach, describe, expect, it, vi} from 'vitest'
-import {render, screen, waitFor} from '@testing-library/react'
+import {fireEvent, render, screen, waitFor} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 import {MemoryRouter} from 'react-router-dom'
 import {Toast} from '@heroui/react'
-import {ListSchedules, ReconcileSchedules} from '@wailsjs/go/app/App'
+import {CreateSchedule, ListSchedules, ListTasks, ReconcileSchedules, UpdateSchedule} from '@wailsjs/go/app/App'
 import type {ipc} from '@wailsjs/go/models'
 import {SchedulesPage} from './SchedulesPage'
 
 const mList = vi.mocked(ListSchedules)
 const mReconcile = vi.mocked(ReconcileSchedules)
+const mUpdate = vi.mocked(UpdateSchedule)
+const mCreate = vi.mocked(CreateSchedule)
+const mListTasks = vi.mocked(ListTasks)
 
 const seed: ipc.Schedule[] = [
   {
@@ -81,5 +84,86 @@ describe('SchedulesPage', () => {
     expect(await screen.findByTestId('schedule-missed-policy-s1')).toHaveTextContent(
       'Run now'
     )
+  })
+
+  it('shows a humanized rule with the raw cron underneath', async () => {
+    mList.mockResolvedValue(seed)
+    renderPage()
+
+    const rule = await screen.findByTestId('schedule-rule-s1')
+    expect(rule).toHaveTextContent('At 09:00, every day')
+    expect(screen.getByText('0 9 * * *', {selector: 'span'})).toBeTruthy()
+  })
+
+  it('opens the edit dialog prefilled and saves through UpdateSchedule', async () => {
+    mList.mockResolvedValue(seed)
+    mUpdate.mockResolvedValue({...seed[0], slug: 'daily-backup'})
+    const user = userEvent.setup()
+
+    renderPage()
+    await user.click(await screen.findByTestId('schedule-edit-s1'))
+
+    expect(await screen.findByText('Edit schedule')).toBeTruthy()
+    const slugInput = screen.getByLabelText('Schedule slug') as HTMLInputElement
+    expect(slugInput.value).toBe('daily-backup')
+
+    await user.click(screen.getByTestId('save-schedule'))
+    await waitFor(() => {
+      expect(mUpdate).toHaveBeenCalledTimes(1)
+    })
+    const [id, slug, taskSlug, kind, cron, runAt, missedPolicy] = mUpdate.mock.calls[0]
+    expect(id).toBe('s1')
+    expect(slug).toBe('daily-backup')
+    expect(taskSlug).toBe('backup')
+    expect(kind).toBe('recurring')
+    expect(cron).toBe('0 9 * * *')
+    expect(runAt).toBe('')
+    expect(missedPolicy).toBe('run_now')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Schedule updated')
+  })
+
+  it('keeps foreign crons intact through an edit round-trip', async () => {
+    mList.mockResolvedValue([{...seed[0], cron: '*/15 9-17 * * 1-5'}])
+    mUpdate.mockResolvedValue({...seed[0], cron: '*/15 9-17 * * 1-5'})
+    const user = userEvent.setup()
+
+    renderPage()
+    await user.click(await screen.findByTestId('schedule-edit-s1'))
+    await screen.findByText('Edit schedule')
+
+    await user.click(screen.getByTestId('save-schedule'))
+    await waitFor(() => {
+      expect(mUpdate).toHaveBeenCalledTimes(1)
+    })
+    expect(mUpdate.mock.calls[0][4]).toBe('*/15 9-17 * * 1-5')
+  })
+
+  it('creates a schedule through the dialog', async () => {
+    mList.mockResolvedValue(seed)
+    mCreate.mockResolvedValue(seed[0])
+    mListTasks.mockResolvedValue([
+      {slug: 'backup', name: 'Backup', type: 'script', runtime: 'powershell', enabled: true, updated_at: ''},
+    ])
+    const user = userEvent.setup()
+
+    renderPage()
+    await user.click(await screen.findByRole('button', {name: '+ New schedule'}))
+
+    await screen.findByRole('heading', {name: 'Create schedule'})
+    await user.type(screen.getByLabelText('Schedule slug'), 'nightly-job')
+    // Pick the task through the hidden native select (HeroUI popover does not
+    // open in jsdom).
+    const selects = document.querySelectorAll('select')
+    fireEvent.change(selects[0], {target: {value: 'backup'}})
+
+    await user.click(screen.getByTestId('save-schedule'))
+    await waitFor(() => {
+      expect(mCreate).toHaveBeenCalledTimes(1)
+    })
+    const [slug, taskSlug, kind, cron] = mCreate.mock.calls[0]
+    expect(slug).toBe('nightly-job')
+    expect(taskSlug).toBe('backup')
+    expect(kind).toBe('recurring')
+    expect(cron).toBe('@every 15m')
   })
 })

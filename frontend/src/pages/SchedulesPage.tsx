@@ -2,28 +2,39 @@ import {useEffect, useState, useMemo} from 'react'
 import {useSearchParams} from 'react-router-dom'
 import {Modal, Toast} from '@heroui/react'
 import {apiErrorDetails} from '../lib/api'
-import {useSchedules, useCreateSchedule, useDeleteSchedule, useToggleSchedule, useReconcileSchedules} from '../lib/schedules'
+import type {Schedule} from '../lib/api'
+import {
+  useSchedules,
+  useCreateSchedule,
+  useUpdateSchedule,
+  useDeleteSchedule,
+  useToggleSchedule,
+  useReconcileSchedules,
+} from '../lib/schedules'
 import {useTasks} from '../lib/tasks'
 import {ScheduleTable} from '../components/schedules/ScheduleTable'
-import {ScheduleForm, emptyScheduleDraft, draftToCron, validateScheduleDraft} from '../components/schedules/ScheduleForm'
+import {
+  ScheduleForm,
+  emptyScheduleDraft,
+  draftFromSchedule,
+  draftToPayload,
+  validateScheduleDraft,
+} from '../components/schedules/ScheduleForm'
+import type {ScheduleDraft} from '../components/schedules/ScheduleForm'
 import {pillBtn, primaryBtn} from '../components/controls'
 import {AppDialog, dialogBodyCls, dialogFooterCls, dialogHeaderCls} from '../components/AppDialog'
-
-function toRFC3339(localDateTime: string): string {
-  if (!localDateTime) return ''
-  const date = new Date(localDateTime)
-  return Number.isNaN(date.getTime()) ? localDateTime : date.toISOString()
-}
 
 export function SchedulesPage() {
   const schedules = useSchedules()
   const tasks = useTasks()
   const create = useCreateSchedule()
+  const update = useUpdateSchedule()
   const del = useDeleteSchedule()
   const toggle = useToggleSchedule()
   const reconcile = useReconcileSchedules()
   const [showForm, setShowForm] = useState(false)
-  const [draft, setDraft] = useState(emptyScheduleDraft())
+  const [editing, setEditing] = useState<Schedule | null>(null)
+  const [draft, setDraft] = useState<ScheduleDraft>(emptyScheduleDraft())
   const [errors, setErrors] = useState<string[]>([])
   const [search, setSearch] = useState('')
   const [searchParams, setSearchParams] = useSearchParams()
@@ -47,34 +58,40 @@ export function SchedulesPage() {
     )
   }, [schedules.data, search])
 
-  const handleCreate = () => {
+  const closeForm = () => {
+    setShowForm(false)
+    setEditing(null)
+    setErrors([])
+  }
+
+  const openEdit = (schedule: Schedule) => {
+    setEditing(schedule)
+    setDraft(draftFromSchedule(schedule))
+    setErrors([])
+    setShowForm(true)
+  }
+
+  const handleSave = () => {
     const validationErrors = validateScheduleDraft(draft)
     if (validationErrors.length > 0) {
       setErrors(validationErrors)
       return
     }
-    create.mutate(
-      {
-        slug: draft.slug.trim(),
-        taskSlug: draft.taskSlug,
-        kind: draft.kind,
-        cron: draftToCron(draft),
-        runAt: draft.kind === 'onetime' ? toRFC3339(draft.runAt) : '',
-        missedPolicy: draft.missedPolicy,
-      },
-      {
-        onSuccess: () => {
-          setShowForm(false)
-          setDraft(emptyScheduleDraft())
-          setErrors([])
-          Toast.toast.success('Schedule created')
-        },
-        onError: (err) => {
-          setErrors(apiErrorDetails(err))
-        },
-      }
-    )
+    const payload = draftToPayload(draft)
+    const onSuccess = () => {
+      Toast.toast.success(editing ? 'Schedule updated' : 'Schedule created')
+      closeForm()
+      setDraft(emptyScheduleDraft())
+    }
+    const onError = (err: unknown) => setErrors(apiErrorDetails(err))
+    if (editing) {
+      update.mutate({id: editing.id, ...payload}, {onSuccess, onError})
+    } else {
+      create.mutate(payload, {onSuccess, onError})
+    }
   }
+
+  const saving = create.isPending || update.isPending
 
   return (
     <div className="space-y-3">
@@ -119,7 +136,12 @@ export function SchedulesPage() {
           </button>
           <button
             type="button"
-            onClick={() => setShowForm(true)}
+            onClick={() => {
+              setEditing(null)
+              setDraft(emptyScheduleDraft())
+              setErrors([])
+              setShowForm(true)
+            }}
             className={primaryBtn}
           >
             + New schedule
@@ -141,6 +163,7 @@ export function SchedulesPage() {
         <ScheduleTable
           schedules={filtered}
           onToggle={(id, enabled) => toggle.mutate({id, enabled})}
+          onEdit={openEdit}
           onDelete={(id) => del.mutate(id)}
         />
       )}
@@ -149,19 +172,19 @@ export function SchedulesPage() {
         <AppDialog
           isOpen
           onOpenChange={(open) => {
-            if (!open && !create.isPending) {
-              setShowForm(false)
-              setErrors([])
-            }
+            if (!open && !saving) closeForm()
           }}
           size="lg"
+          dialogClassName="max-w-2xl"
         >
           <Modal.Header className={dialogHeaderCls}>
             <div>
-              <Modal.Heading className="text-lg font-semibold">Create schedule</Modal.Heading>
+              <Modal.Heading className="text-lg font-semibold">
+                {editing ? 'Edit schedule' : 'Create schedule'}
+              </Modal.Heading>
               <p className="mt-1 text-xs text-foreground/55">Choose a task and tell Heka exactly when it should run.</p>
             </div>
-            <Modal.CloseTrigger aria-label="Close create schedule dialog" isDisabled={create.isPending} />
+            <Modal.CloseTrigger aria-label="Close schedule dialog" isDisabled={saving} />
           </Modal.Header>
           <Modal.Body className={dialogBodyCls}>
             <ScheduleForm
@@ -172,22 +195,15 @@ export function SchedulesPage() {
               }}
               tasks={tasks.data ?? []}
               errors={errors}
+              errorTitle={editing ? 'Schedule could not be updated' : 'Schedule could not be created'}
             />
           </Modal.Body>
           <Modal.Footer className={dialogFooterCls}>
-            <button
-              type="button"
-              className={pillBtn}
-              disabled={create.isPending}
-              onClick={() => {
-                setShowForm(false)
-                setErrors([])
-              }}
-            >
+            <button type="button" className={pillBtn} disabled={saving} onClick={closeForm}>
               Cancel
             </button>
-            <button type="button" className={primaryBtn} disabled={create.isPending} onClick={handleCreate}>
-              {create.isPending ? 'Creating…' : 'Create schedule'}
+            <button type="button" className={primaryBtn} disabled={saving} onClick={handleSave} data-testid="save-schedule">
+              {saving ? 'Saving…' : editing ? 'Save changes' : 'Create schedule'}
             </button>
           </Modal.Footer>
         </AppDialog>

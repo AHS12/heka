@@ -1,5 +1,6 @@
 import {useState} from 'react'
 import type {Schedule} from '../../lib/api'
+import {describeCron} from '../../lib/cron'
 import {StatusChip} from '../tasks/TaskTable'
 import {Toggle} from '../controls'
 
@@ -42,10 +43,12 @@ export function DateTime({iso, empty = '—'}: {iso?: string; empty?: string}) {
 function ScheduleCard({
   schedule,
   onToggle,
+  onEdit,
   onDelete,
 }: {
   schedule: Schedule
   onToggle: (id: string, enabled: boolean) => void
+  onEdit: (schedule: Schedule) => void
   onDelete: (id: string) => void
 }) {
   const [confirming, setConfirming] = useState(false)
@@ -82,6 +85,17 @@ function ScheduleCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={() => onEdit(s)}
+            className="rounded-lg p-1.5 text-foreground/50 outline-none hover:bg-surface-secondary hover:text-accent focus-visible:ring-2 focus-visible:ring-accent-ring"
+            aria-label={`Edit schedule ${s.slug}`}
+            data-testid={`schedule-edit-${s.id}`}
+          >
+            <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+            </svg>
+          </button>
           <Toggle
             checked={s.enabled}
             onChange={(next) => onToggle(s.id, next)}
@@ -124,8 +138,13 @@ function ScheduleCard({
       <div className="mt-3 flex flex-wrap items-start gap-x-6 gap-y-3 border-t border-border/60 pt-3">
         <DetailBlock label="Rule">
           {s.kind === 'recurring' ? (
-            <span className="font-mono text-xs text-foreground/75" title={s.cron}>
-              {s.cron}
+            <span>
+              <span className="block text-xs leading-tight text-foreground/75" data-testid={`schedule-rule-${s.id}`}>
+                {describeCron(s.cron ?? '')}
+              </span>
+              <span className="block font-mono text-[10px] text-foreground/45" title={s.cron}>
+                {s.cron}
+              </span>
             </span>
           ) : (
             <DateTime iso={s.run_at} />
@@ -189,10 +208,12 @@ function ScheduleCard({
 export function ScheduleTable({
   schedules,
   onToggle,
+  onEdit,
   onDelete,
 }: {
   schedules: Schedule[]
   onToggle: (id: string, enabled: boolean) => void
+  onEdit: (schedule: Schedule) => void
   onDelete: (id: string) => void
 }) {
   return (
@@ -202,6 +223,7 @@ export function ScheduleTable({
           key={s.id}
           schedule={s}
           onToggle={onToggle}
+          onEdit={onEdit}
           onDelete={onDelete}
         />
       ))}

@@ -28,6 +28,7 @@ import {useStats, statusLabel} from '../lib/runs'
 import {useSchedules} from '../lib/schedules'
 import {useRunTask, useTasks} from '../lib/tasks'
 import {apiErrorDetails, type Schedule, type StatsResult} from '../lib/api'
+import {describeCron} from '../lib/cron'
 import {useAccent, ACCENT_COLORS, type PresetAccent} from '../lib/accent'
 import {useTheme} from '../lib/theme'
 import {AppDialog, dialogBodyCls, dialogFooterCls, dialogHeaderCls} from '../components/AppDialog'
@@ -301,10 +302,11 @@ function NextUpPanel({accentHex}: {accentHex: string}) {
       </button>
       {upcoming.kind === 'recurring' && upcoming.cron && (
         <span
-          className="hidden rounded-full px-2 py-0.5 font-mono text-[10px] sm:inline"
+          className="hidden max-w-52 truncate rounded-full px-2 py-0.5 text-[10px] sm:inline"
           style={{color: accentHex, backgroundColor: accentHex + '15'}}
+          title={upcoming.cron}
         >
-          {upcoming.cron}
+          {describeCron(upcoming.cron)}
         </span>
       )}
       <button
