@@ -24,7 +24,11 @@ type Task struct {
 	Environment     map[string]string `yaml:"environment,omitempty" json:"environment,omitempty"`
 	Timeout          int               `yaml:"timeout" json:"timeout"`
 	Retry            Retry             `yaml:"retry,omitempty" json:"retry,omitempty"`
-	CaptureOutput    *bool             `yaml:"capture_output,omitempty" json:"capture_output,omitempty"`
+	// Deprecated: no behavioral effect (the executor always records
+	// status/exit/duration; output is capped in the runs row). Kept in the
+	// struct so v0.7 task files still parse; applyDefaults drops the value
+	// so canonical export omits it.
+	CaptureOutput *bool `yaml:"capture_output,omitempty" json:"capture_output,omitempty"`
 	NotifyOn         []string          `yaml:"notify_on,omitempty" json:"notify_on,omitempty"`
 	Notify           Notify            `yaml:"notify,omitempty" json:"notify,omitempty"`
 }

@@ -148,7 +148,6 @@ type: script
 runtime: powershell
 script: ./scripts/research.ps1
 timeout: 300
-capture_output: true
 \`\`\`
 
 ## Code Style & Conventions

@@ -66,7 +66,7 @@ export function ScheduleForm({draft, onChange, tasks, errors}: {
             isInvalid={Boolean(fieldError('task', 'task_slug'))}
             value={draft.taskSlug}
             onChange={(taskSlug) => update({taskSlug})}
-            items={tasks.map((task) => ({id: task.slug, label: `${task.name} (${task.slug})`}))}
+            items={tasks.map((task) => ({id: task.slug, label: task.name}))}
             placeholder="Choose task…"
           />
         </Field>

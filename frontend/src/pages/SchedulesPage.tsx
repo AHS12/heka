@@ -154,7 +154,7 @@ export function SchedulesPage() {
               setErrors([])
             }
           }}
-          size="md"
+          size="lg"
         >
           <Modal.Header className={dialogHeaderCls}>
             <div>

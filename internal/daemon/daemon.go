@@ -224,7 +224,7 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 		notifier.NotifyTaskResult(notify.TaskResult{
 			Task:     &t,
 			Status:   r.FinalStatus,
-			Trigger:  "manual",
+			Trigger:  r.Trigger,
 			Duration: r.Duration,
 			ExitCode: r.ExitCode,
 		})

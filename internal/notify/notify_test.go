@@ -183,6 +183,16 @@ func TestWebhookPayloads(t *testing.T) {
 	if !strings.Contains(strings.Join(posts, "\n"), "-100123") {
 		t.Fatalf("telegram chat_id missing: %v", posts)
 	}
+
+	// Every payload names the task and its outcome (no title/message split
+	// like the desktop toast): "Alpha — Failed • Trigger: manual • Duration: 5s".
+	joined := strings.Join(posts, "\n")
+	if !strings.Contains(joined, "Alpha — Failed") {
+		t.Fatalf("webhook payload missing task name/status: %v", posts)
+	}
+	if !strings.Contains(joined, "Trigger: manual") {
+		t.Fatalf("webhook payload missing trigger: %v", posts)
+	}
 }
 
 func TestUnresolvableWebhookSkipped(t *testing.T) {

@@ -219,23 +219,13 @@ export function TaskForm({
               />
             </div>
           </Field>
-          <div className="pt-5">
-            <label className="flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              <Toggle
-                checked={draft.captureOutput}
-                onChange={(v) => patch({captureOutput: v})}
-                label="Capture output"
-              />
-              Capture output
-            </label>
-          </div>
         </div>
         <Field
           label="Log directory"
           hint={
             <>
               Per-run log files (stdout.log, stderr.log, run.json). Leave empty
-              to log in the working directory.
+              to use the global runs folder (settings: run_artifacts_dir).
             </>
           }
         >

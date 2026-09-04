@@ -136,36 +136,40 @@ func TestOutputDirWritesToWorkspace(t *testing.T) {
 	}
 }
 
-// TestDefaultLogDirUsesWorkingDirectory verifies that when output_dir is
-// empty, logs go to the task's working directory.
-func TestDefaultLogDirUsesWorkingDirectory(t *testing.T) {
+// TestGlobalArtifactsRootFallback verifies that a task without output_dir
+// writes its per-run artifacts under the configured global root (config
+// run_artifacts_dir) rather than the task's working directory.
+func TestGlobalArtifactsRootFallback(t *testing.T) {
 	database, err := db.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer database.Close()
 
-	workspace := t.TempDir()
-	exe := New(database, 1<<20, time.Second, nil, "")
+	artifactsRoot := t.TempDir()
+	exe := New(database, 1<<20, time.Second, nil, artifactsRoot)
 
-	task := helperTask("worklog", "out-err")
-	h, err := exe.Start(context.Background(), task, Options{BaseDir: workspace})
+	task := helperTask("groot", "out-err")
+	h, err := exe.Start(context.Background(), task, Options{BaseDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitDone(t, h)
 
-	runs, _ := database.Runs().ListByTask("worklog", 5)
+	runs, _ := database.Runs().ListByTask("groot", 5)
 	if len(runs) != 1 || runs[0].Status != "success" {
 		t.Fatalf("runs = %+v", runs)
 	}
 
-	// Logs land directly in the working directory (base dir).
-	dir := filepath.Join(workspace, runs[0].GroupID)
-	for _, name := range []string{"stdout.log", "run.json"} {
+	dir := filepath.Join(artifactsRoot, runs[0].GroupID)
+	for _, name := range []string{"stdout.log", "stderr.log", "run.json"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
-			t.Fatalf("missing artifact %s in working dir: %v", name, err)
+			t.Fatalf("missing artifact %s in global root: %v", name, err)
 		}
+	}
+	so, err := os.ReadFile(filepath.Join(dir, "stdout.log"))
+	if err != nil || string(so) != "stdout-line\n" {
+		t.Fatalf("stdout.log = %q (%v)", so, err)
 	}
 }
 
@@ -575,7 +579,7 @@ func TestOnGroupFinishedFiresOnce(t *testing.T) {
 	tk := helperTask("callback", "fail-until",
 		"HELPER_COUNT_FILE="+countFile, "HELPER_FAIL_UNTIL=99")
 	tk.Retry.MaxAttempts = 3
-	h, err := exe.Start(context.Background(), tk, Options{BaseDir: dir})
+	h, err := exe.Start(context.Background(), tk, Options{BaseDir: dir, Trigger: "schedule"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -589,6 +593,9 @@ func TestOnGroupFinishedFiresOnce(t *testing.T) {
 	r := results[0]
 	if r.TaskSlug != "callback" || r.FinalStatus != "failed" {
 		t.Fatalf("result = %+v", r)
+	}
+	if r.Trigger != "schedule" {
+		t.Fatalf("result trigger = %q, want schedule", r.Trigger)
 	}
 	if r.ExitCode != 3 || r.Duration <= 0 {
 		t.Fatalf("result fields = %+v", r)

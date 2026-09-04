@@ -5,6 +5,40 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-09-04
+
+A correctness pass over notifications and run artifacts: every webhook
+payload now identifies the task it came from, notifications report the real
+trigger, and the declared-but-dead `capture_output` setting is gone.
+
+### Fixed
+- Webhook notifications name the task and its outcome. Payloads read like
+  the desktop toast — "deploy — Failed • Trigger: schedule • Duration:
+  5.1s" — instead of a bare "Trigger: … • Duration: …" that gave no way to
+  tell which task ran.
+- Scheduled runs no longer notify as "Trigger: manual". The completion
+  callback now receives the actual trigger (manual, schedule, cli, system)
+  through the executor's group result.
+- Missed-run reconciliation and the NEXT RUN display evaluate cron specs in
+  the daemon's local timezone. Stored windows are UTC while the running
+  engine fires local ticks, so on a UTC+6 machine a daily 9:00 schedule that
+  fired while the PC was off reported "0 caught up" at boot and silently
+  dropped the missed run.
+- Webhook format "pumble" validates again. Pumble incoming webhooks accept
+  Slack-style payloads, so the editor now offers a single "Slack / Pumble"
+  option that saves the canonical "slack" format; existing YAML with
+  "pumble" loads as-is and re-exports as "slack".
+- Per-run artifacts (stdout.log, stderr.log, run.json) land under the
+  global runs folder (`<data_dir>/runs`, configurable via
+  `run_artifacts_dir`) unless a task sets `output_dir`. They previously went
+  to the task's working directory, leaving the configured runs root — and
+  the "run artifacts" part of backups — empty.
+
+### Removed
+- The `capture_output` task field. It had no behavioral effect (output is
+  always capped and stored on the run row). Existing YAML files keep
+  parsing; the field is dropped the next time the task is saved.
+
 ## [0.8.0] - 2026-09-04
 
 Backup & restore, plus a proper home for a growing vault. Every archive is an
