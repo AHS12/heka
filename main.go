@@ -34,7 +34,7 @@ const (
 	defaultWinHeight = 940
 )
 
-var appVersion = "0.8.2"
+var appVersion = "0.8.5"
 
 //go:embed CHANGELOG.md
 var changelog string

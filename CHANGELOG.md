@@ -5,6 +5,67 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.5] - 2026-09-06
+
+Heka learns to introduce itself and to scale: a first-run tour, a What's New
+dialog fed by the changelog embedded right in the binary, a hidden `heka dev`
+toolbox for rehearsing both, and — the big one — server-side search with
+cursor pagination for the tasks and schedules lists, so the pages stay fast
+and complete even with hundreds of entries. Freshness is engineered rather
+than polled: a tiny revision pulse catches scheduled runs, CLI commands, and
+on-disk YAML edits without ever refetching the pages you're scrolling.
+
+### Added
+- **What's New dialog.** CHANGELOG.md ships inside the binary. After an
+  update the shell greets you with every release newer than the one you last
+  saw (newest first), rendered as proper markdown; a fresh install shows this
+  release's notes right after the first tour. The About page carries a
+  "View changelog" button that opens the whole file, plus Website and Docs
+  buttons (heka.ahs12.xyz) beside the existing GitHub link.
+- **First-run tour.** A five-step spotlight tour over the always-visible
+  chrome — nav pills, daemon status, theme toggle, Settings — with
+  high-contrast popover and arrow styling that stays legible on every theme
+  variant, plus a visible ring around the highlighted element. Replayable
+  from Settings → Appearance or the About page; the tour hands straight over
+  to the release notes on a fresh install.
+- **Server-side search and cursor pagination** for the tasks and schedules
+  lists. Search is debounced (one request per settled query — tasks match
+  name and slug, schedules match slug and task slug) and runs on the daemon;
+  type and enabled filters (tasks) and the kind filter (schedules) moved into
+  SQL as well. The lists load 50 rows at a time over stable slug keyset
+  cursors and keep every page already scrolled into memory as you scroll for
+  more, with a "X shown · Y total" footer and honest loading states: a
+  spinner in the search field while a query is in flight, a "Loading more…"
+  row while the next page arrives.
+- **Revision pulse.** A new `/v1/revision` endpoint exposes one cheap
+  aggregate signature per domain (tasks, schedules, runs). The GUI diffs it
+  every few seconds and invalidates exactly the list whose signature moved —
+  so a scheduled run firing in the background, a `heka run` from another
+  terminal, or a YAML file edited on disk all appear in the open lists within
+  seconds, without refetching a single page.
+
+### Changed
+- Tasks and schedules lists no longer poll. Freshness comes from mutation
+  invalidations (Run Now, enable/disable, delete, create/update/import,
+  reconcile) plus the revision pulse for everything outside the GUI;
+  window focus still refetches as a safety net. Run-toggling stays
+  optimistic — chips flip instantly and roll back on failure, now correct
+  across every loaded page.
+- `/v1/tasks` and `/v1/schedules` now return `{items, total, next_cursor}`
+  envelopes instead of bare arrays. Calls without a `limit` (the CLI, the
+  dashboard's next-run panel, the schedule-form picker) still receive full
+  lists — `heka list --json` output is byte-identical. Schedules' `kind`
+  filter moved from the handler's in-memory loop into SQL.
+- Schedule cards lead their header with the enable switch; edit and delete
+  sit side by side next to it.
+- Reconcile schedules now refreshes the tasks list too, since reconciled
+  runs change task chips.
+
+### Fixed
+- New IPC query parameters are URL-encoded properly, so search text
+  containing spaces, `%`, or `&` reaches the daemon intact (the older runs
+  filter path keeps its behavior).
+
 ## [0.8.2] - 2026-09-05
 
 The schedule creator grows out of its dropdowns: a pattern-first builder that
