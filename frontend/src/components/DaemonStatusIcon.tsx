@@ -85,6 +85,7 @@ export function DaemonStatusIcon({mode}: {mode: DaemonMode}) {
           type="button"
           role="status"
           data-mode={mode}
+          data-tour="daemon"
           aria-label={LABEL[mode]}
           className="grid size-6 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
         >

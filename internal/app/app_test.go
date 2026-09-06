@@ -82,7 +82,7 @@ func (s *stubCaller) SecretsUsage() (map[string][]string, error) { return nil, s
 func (s *stubCaller) Shutdown() error                            { return s.err }
 
 func newAppWith(caller ipcCaller, started *int, startErr error) *App {
-	a := NewApp("Heka", "0.1.0")
+	a := NewApp("Heka", "0.1.0", "# Changelog")
 	a.client = caller
 	a.start = func(config.Config) error { *started++; return startErr }
 	return a
@@ -158,7 +158,7 @@ func TestStartDaemonError(t *testing.T) {
 
 func TestClientIsCached(t *testing.T) {
 	caller := &stubCaller{health: ipc.Health{Core: "healthy"}}
-	a := NewApp("Heka", "0.1.0")
+	a := NewApp("Heka", "0.1.0", "# Changelog")
 	a.client = caller // pre-set beats lazy construction
 	a.loadCfg = func() (config.Config, error) {
 		t.Fatal("loadCfg must not run when a client is injected")
@@ -190,7 +190,7 @@ func TestWatchdogEnabledMapsStatusDTO(t *testing.T) {
 	}
 	defer func() { osapp.NewInstaller = orig }()
 
-	a := NewApp("Heka", "0.1.0")
+	a := NewApp("Heka", "0.1.0", "# Changelog")
 	dto, err := a.WatchdogEnabled()
 	if err != nil {
 		t.Fatal(err)
@@ -207,7 +207,7 @@ func TestWatchdogEnabledNotInstalled(t *testing.T) {
 	}
 	defer func() { osapp.NewInstaller = orig }()
 
-	a := NewApp("Heka", "0.1.0")
+	a := NewApp("Heka", "0.1.0", "# Changelog")
 	dto, err := a.WatchdogEnabled()
 	if err != nil {
 		t.Fatal(err)
@@ -226,7 +226,7 @@ func TestWatchdogEnabledZeroIntervalFallsBackToDefault(t *testing.T) {
 	}
 	defer func() { osapp.NewInstaller = orig }()
 
-	a := NewApp("Heka", "0.1.0")
+	a := NewApp("Heka", "0.1.0", "# Changelog")
 	dto, err := a.WatchdogEnabled()
 	if err != nil {
 		t.Fatal(err)
@@ -243,7 +243,7 @@ func TestWatchdogEnabledErrorPropagates(t *testing.T) {
 	}
 	defer func() { osapp.NewInstaller = orig }()
 
-	a := NewApp("Heka", "0.1.0")
+	a := NewApp("Heka", "0.1.0", "# Changelog")
 	if _, err := a.WatchdogEnabled(); err == nil || err.Error() != "schtasks boom" {
 		t.Fatalf("err = %v", err)
 	}

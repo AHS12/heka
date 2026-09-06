@@ -78,7 +78,7 @@ export function TopNav() {
         </span>
       </div>
 
-      <nav aria-label="Main" className="flex flex-wrap items-center gap-2">
+      <nav aria-label="Main" data-tour="nav" className="flex flex-wrap items-center gap-2">
         {NAV_ITEMS.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.end} className={PILL}>
             {item.label}
@@ -88,7 +88,7 @@ export function TopNav() {
 
       <div className="flex-1" />
 
-      <NavLink to="/settings" aria-label="Settings" className={ICON_PILL}>
+      <NavLink to="/settings" aria-label="Settings" data-tour="settings" className={ICON_PILL}>
         <GearIcon />
       </NavLink>
 
@@ -100,6 +100,7 @@ export function TopNav() {
         type="button"
         aria-label={next === 'dark' ? 'Switch to dark theme' : 'Switch to light theme'}
         onClick={() => setTheme(next)}
+        data-tour="theme"
         className={ICON_PILL}
       >
         <ThemeIcon dark={next === 'dark'} />

@@ -436,3 +436,88 @@ code, pre, .font-mono {
   border-radius: 8px;
   background: color-mix(in oklab, var(--accent) 45%, transparent);
 }
+
+/* ======================== TOUR (driver.js) ======================== */
+
+/* High-contrast tour chrome: popover and arrow use the theme's strongest
+   pair — --background surface with --foreground border/arrow — so they stay
+   legible on every theme variant and against the dim overlay. driver.js
+   ships unlayered defaults, so these rules pair the hook class for
+   specificity and set properties individually to beat its `all:unset`. */
+.driver-popover.heka-tour-popover {
+  background-color: var(--background);
+  color: var(--foreground);
+  border: 2px solid var(--foreground);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
+  padding: 16px 18px 14px;
+  max-width: 320px;
+  font-family: inherit;
+}
+.driver-popover.heka-tour-popover .driver-popover-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+.driver-popover.heka-tour-popover .driver-popover-description {
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 6px;
+  color: color-mix(in oklab, var(--foreground) 82%, var(--background));
+}
+.driver-popover.heka-tour-popover .driver-popover-close-btn {
+  color: color-mix(in oklab, var(--foreground) 55%, var(--background));
+}
+.driver-popover.heka-tour-popover .driver-popover-close-btn:hover,
+.driver-popover.heka-tour-popover .driver-popover-close-btn:focus {
+  color: var(--foreground);
+}
+.driver-popover.heka-tour-popover .driver-popover-progress-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: color-mix(in oklab, var(--foreground) 60%, var(--background));
+}
+.driver-popover.heka-tour-popover .driver-popover-footer-btn {
+  border: 2px solid var(--foreground);
+  border-radius: 9999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
+  background-color: transparent;
+}
+.driver-popover.heka-tour-popover .driver-popover-footer-btn:hover,
+.driver-popover.heka-tour-popover .driver-popover-footer-btn:focus {
+  background-color: var(--surface-secondary);
+}
+.driver-popover.heka-tour-popover .driver-popover-footer-btn.driver-popover-btn-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+/* Next / Finish is the filled button of the pair. */
+.driver-popover.heka-tour-popover .driver-popover-navigation-btns button:last-child {
+  background-color: var(--foreground);
+  color: var(--background);
+}
+.driver-popover.heka-tour-popover .driver-popover-navigation-btns button:last-child:hover,
+.driver-popover.heka-tour-popover .driver-popover-navigation-btns button:last-child:focus {
+  opacity: 0.85;
+}
+/* The highlighted element gets a visible ring on top of the dim overlay. */
+.driver-active .driver-active-element {
+  outline: 2px solid var(--foreground) !important;
+  outline-offset: 2px;
+}
+
+/* The arrow: a solid --foreground triangle, one step larger than driver's
+   default, reading as the tip of the 2px popover border — visible against
+   both the dim overlay and every theme's surface. driver.js colors only the
+   side pointing away from the popover, so override exactly that side. */
+.driver-popover.heka-tour-popover .driver-popover-arrow {
+  border-width: 7px;
+}
+.driver-popover.heka-tour-popover .driver-popover-arrow-side-left  { border-left-color: var(--foreground); }
+.driver-popover.heka-tour-popover .driver-popover-arrow-side-right { border-right-color: var(--foreground); }
+.driver-popover.heka-tour-popover .driver-popover-arrow-side-top   { border-top-color: var(--foreground); }
+.driver-popover.heka-tour-popover .driver-popover-arrow-side-bottom{ border-bottom-color: var(--foreground); }

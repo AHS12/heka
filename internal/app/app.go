@@ -124,6 +124,7 @@ type RunListResultDTO = ipc.RunListResult
 type App struct {
 	name      string
 	version   string
+	changelog string
 	ctx       context.Context
 	statePath string // window geometry file; empty disables persistence
 
@@ -135,12 +136,13 @@ type App struct {
 }
 
 // NewApp creates the application struct with production seams.
-func NewApp(name, version string) *App {
+func NewApp(name, version, changelog string) *App {
 	return &App{
-		name:    name,
-		version: version,
-		start:   daemon.Start,
-		loadCfg: config.LoadDefault,
+		name:      name,
+		version:   version,
+		changelog: changelog,
+		start:     daemon.Start,
+		loadCfg:   config.LoadDefault,
 	}
 }
 
@@ -235,6 +237,13 @@ func (a *App) AppInfo() Info {
 		Version: a.version,
 		Daemon:  "not-running",
 	}
+}
+
+// Changelog returns the embedded CHANGELOG.md so the shell can render the
+// "What's New" dialog and the About page without touching the daemon or the
+// network.
+func (a *App) Changelog() string {
+	return a.changelog
 }
 
 // Health polls the daemon through the IPC client and maps the result to the

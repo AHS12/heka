@@ -95,6 +95,14 @@ vi.mock('@wailsjs/go/app/App', () => ({
   RestoreBackup: vi.fn(),
   PickBackupFile: vi.fn(),
   Shutdown: vi.fn(),
+  Changelog: vi.fn().mockResolvedValue(''),
+  TakeDevTrigger: vi.fn().mockResolvedValue(null),
+}))
+
+// The tour is a browser-visual component; jsdom tests stub driver.js so
+// AppTour (mounted via OnboardingGate) stays inert.
+vi.mock('driver.js', () => ({
+  driver: vi.fn(() => ({drive: vi.fn(), destroy: vi.fn(), refresh: vi.fn()})),
 }))
 
 // CodeMirror measures text with Range.getClientRects on every animation

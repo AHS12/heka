@@ -6,6 +6,7 @@ import {Outlet} from 'react-router-dom'
 import {TopNav} from '../components/TopNav'
 import {DaemonDownBanner} from '../components/DaemonDownBanner'
 import {SchedulerPausedBanner} from '../components/SchedulerPausedBanner'
+import {OnboardingGate} from '../components/OnboardingGate'
 import {useQuery} from '@tanstack/react-query'
 import {daemonStatus} from '../lib/api'
 
@@ -70,6 +71,9 @@ export function AppLayout() {
         <SchedulerPausedBanner />
         <Outlet key={daemonKey} />
       </main>
+      {/* First-run tour + What's New + heka dev triggers. Sibling of <main>
+          so overlays never live inside the scroll container. */}
+      <OnboardingGate />
     </div>
   )
 }

@@ -99,7 +99,7 @@ func NewApp(cfg config.Config, client APIClient) *App {
 		a.listCmd(), a.runCmd(), a.statusCmd(), a.logsCmd(),
 		a.enableCmd(), a.disableCmd(), a.schedulesCmd(),
 		a.backupCmd(), a.restoreCmd(),
-		a.daemonCmd(),
+		a.daemonCmd(), a.devCmd(),
 	)
 	a.root = root
 	return a

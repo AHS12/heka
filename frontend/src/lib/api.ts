@@ -61,6 +61,8 @@ import {
   RestoreBackup,
   PickBackupFile,
   Shutdown,
+  Changelog,
+  TakeDevTrigger,
 } from '@wailsjs/go/app/App'
 import type {task} from '@wailsjs/go/models'
 
@@ -881,5 +883,32 @@ export async function getSecretsUsage(): Promise<Record<string, string[]>> {
     return result ?? {}
   } catch (err) {
     throw toAPIError(err)
+  }
+}
+
+// ---- Embedded changelog & dev triggers (What's New + onboarding tour).
+
+/** One-shot dev trigger dropped by `heka dev …` (see internal/app/devtrigger.go). */
+export interface DevTrigger {
+  trigger: 'whats-new' | 'tour' | 'reset' | 'update-from'
+  version?: string
+}
+
+/** Raw embedded CHANGELOG.md — local to the binary, no daemon needed. */
+export async function getChangelog(): Promise<string> {
+  try {
+    return (await Changelog()) ?? ''
+  } catch (err) {
+    return ''
+  }
+}
+
+/** Consumes the pending dev trigger; null when nothing is waiting. */
+export async function takeDevTrigger(): Promise<DevTrigger | null> {
+  try {
+    const result = (await TakeDevTrigger()) as unknown as DevTrigger | null
+    return result?.trigger ? result : null
+  } catch (err) {
+    return null
   }
 }
