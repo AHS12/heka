@@ -116,6 +116,9 @@ func (s *Server) Handler() http.Handler {
 	// Dashboard stats (SPEC-16 §1).
 	mux.HandleFunc("/v1/stats", s.handleStats)
 
+	// Revision pulse (per-domain change signatures for the GUI lists).
+	mux.HandleFunc("/v1/revision", s.handleRevision)
+
 	// Settings (SPEC-16 §2).
 	mux.HandleFunc("/v1/settings", s.handleSettings)
 	mux.HandleFunc("/v1/settings/sound-preview", s.handleSoundPreview)

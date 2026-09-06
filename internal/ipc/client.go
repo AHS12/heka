@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"syscall"
@@ -173,10 +174,62 @@ func (c *Client) Health() (Health, error) {
 	return h, err
 }
 
-// ListTasks hits GET /v1/tasks.
+// ListTasks hits GET /v1/tasks (full list, envelope unwrapped).
 func (c *Client) ListTasks() ([]TaskSummary, error) {
-	var out []TaskSummary
-	err := c.do("GET", "/v1/tasks", nil, &out)
+	out, err := c.ListTasksPage(TaskFilters{})
+	return out.Tasks, err
+}
+
+// TaskFilters holds optional query parameters for the paginated tasks
+// listing (GUI tasks page).
+type TaskFilters struct {
+	Q       string // substring over name and slug
+	Enabled string // "", "enabled", "disabled"
+	Type    string // exact task type
+	Cursor  string // opaque slug cursor
+	Limit   int    // 0 = no pagination (full list)
+}
+
+// TaskListResult is the paginated tasks response from the IPC layer.
+type TaskListResult struct {
+	Tasks      []TaskSummary `json:"tasks"`
+	Total      int           `json:"total"`
+	NextCursor string        `json:"next_cursor"`
+}
+
+// ListTasksPage hits GET /v1/tasks with filter params. Params are URL-encoded
+// (url.Values) so q may contain spaces, &, %, etc.
+func (c *Client) ListTasksPage(f TaskFilters) (TaskListResult, error) {
+	v := url.Values{}
+	if f.Q != "" {
+		v.Set("q", f.Q)
+	}
+	if f.Enabled != "" {
+		v.Set("enabled", f.Enabled)
+	}
+	if f.Type != "" {
+		v.Set("type", f.Type)
+	}
+	if f.Cursor != "" {
+		v.Set("cursor", f.Cursor)
+	}
+	if f.Limit > 0 {
+		v.Set("limit", fmt.Sprint(f.Limit))
+	}
+	path := "/v1/tasks"
+	if len(v) > 0 {
+		path += "?" + v.Encode()
+	}
+	var out TaskListResult
+	err := c.do("GET", path, nil, &out)
+	return out, err
+}
+
+// Revision hits GET /v1/revision: per-domain change signatures for the GUI's
+// revision pulse.
+func (c *Client) Revision() (RevisionDTO, error) {
+	var out RevisionDTO
+	err := c.do("GET", "/v1/revision", nil, &out)
 	return out, err
 }
 
@@ -366,19 +419,54 @@ func (c *Client) SystemLog(limit int) ([]DaemonLog, error) {
 
 // Schedules (SPEC-09).
 func (c *Client) ListSchedules() ([]Schedule, error) {
-	var out []Schedule
-	err := c.do("GET", "/v1/schedules", nil, &out)
-	return out, err
+	out, err := c.ListSchedulesPage(ScheduleFilters{Kind: ""})
+	return out.Schedules, err
 }
 
 // ListSchedulesFiltered returns schedules filtered by kind ("recurring" or
 // "onetime"). Empty kind returns all (SPEC-14 §3).
 func (c *Client) ListSchedulesFiltered(kind string) ([]Schedule, error) {
-	var out []Schedule
-	path := "/v1/schedules"
-	if kind != "" {
-		path += "?kind=" + kind
+	out, err := c.ListSchedulesPage(ScheduleFilters{Kind: kind})
+	return out.Schedules, err
+}
+
+// ScheduleFilters holds optional query parameters for the paginated schedules
+// listing (GUI schedules page).
+type ScheduleFilters struct {
+	Q      string // substring over slug and task_slug
+	Kind   string // "recurring" | "onetime"; "" = all
+	Cursor string // opaque slug cursor
+	Limit  int    // 0 = no pagination (full list)
+}
+
+// ScheduleListResult is the paginated schedules response from the IPC layer.
+type ScheduleListResult struct {
+	Schedules  []Schedule `json:"schedules"`
+	Total      int        `json:"total"`
+	NextCursor string     `json:"next_cursor"`
+}
+
+// ListSchedulesPage hits GET /v1/schedules with filter params, URL-encoded
+// via url.Values.
+func (c *Client) ListSchedulesPage(f ScheduleFilters) (ScheduleListResult, error) {
+	v := url.Values{}
+	if f.Q != "" {
+		v.Set("q", f.Q)
 	}
+	if f.Kind != "" {
+		v.Set("kind", f.Kind)
+	}
+	if f.Cursor != "" {
+		v.Set("cursor", f.Cursor)
+	}
+	if f.Limit > 0 {
+		v.Set("limit", fmt.Sprint(f.Limit))
+	}
+	path := "/v1/schedules"
+	if len(v) > 0 {
+		path += "?" + v.Encode()
+	}
+	var out ScheduleListResult
 	err := c.do("GET", path, nil, &out)
 	return out, err
 }

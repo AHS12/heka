@@ -85,6 +85,11 @@ function ScheduleCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <Toggle
+            checked={s.enabled}
+            onChange={(next) => onToggle(s.id, next)}
+            label={`${s.enabled ? 'Disable' : 'Enable'} ${s.slug}`}
+          />
           <button
             type="button"
             onClick={() => onEdit(s)}
@@ -96,11 +101,6 @@ function ScheduleCard({
               <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
             </svg>
           </button>
-          <Toggle
-            checked={s.enabled}
-            onChange={(next) => onToggle(s.id, next)}
-            label={`${s.enabled ? 'Disable' : 'Enable'} ${s.slug}`}
-          />
           {confirming ? (
             <span className="inline-flex items-center gap-1.5">
               <button

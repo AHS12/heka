@@ -7,6 +7,7 @@ import {TopNav} from '../components/TopNav'
 import {DaemonDownBanner} from '../components/DaemonDownBanner'
 import {SchedulerPausedBanner} from '../components/SchedulerPausedBanner'
 import {OnboardingGate} from '../components/OnboardingGate'
+import {useDataPulse} from '../lib/revision'
 import {useQuery} from '@tanstack/react-query'
 import {daemonStatus} from '../lib/api'
 
@@ -15,6 +16,9 @@ const SCROLLBAR_FADE_MS = 600
 export function AppLayout() {
   const mainRef = useRef<HTMLElement>(null)
   const [scrolling, setScrolling] = useState(false)
+  // Revision pulse: background runs, CLI commands, and on-disk YAML edits
+  // land in the open lists within one cheap poll, without refetching pages.
+  useDataPulse()
 
   // Watch the daemon-status query directly (not via useDaemonMode) so we can
   // detect the down→up transition without coupling to the banner's start logic.

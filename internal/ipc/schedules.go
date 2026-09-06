@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/oklog/ulid/v2"
 
@@ -45,25 +46,54 @@ func toScheduleWithRun(s db.ScheduleWithRun) Schedule {
 func (s *Server) handleSchedules(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		kind := r.URL.Query().Get("kind")
-		rows, err := s.deps.Schedules.ListWithLatestRun()
+		q := r.URL.Query()
+		f := db.SchedulePageFilter{Q: q.Get("q"), Kind: q.Get("kind"), Cursor: q.Get("cursor")}
+		if raw := q.Get("limit"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+				f.Limit = n
+			}
+		}
+		result, err := s.deps.Schedules.ListPage(f)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal", err.Error())
 			return
 		}
-		out := make([]Schedule, 0, len(rows))
-		for _, row := range rows {
-			if kind != "" && kind != row.Kind {
-				continue
-			}
+		out := make([]Schedule, 0, len(result.Schedules))
+		for _, row := range result.Schedules {
 			out = append(out, toScheduleWithRun(row))
 		}
-		writeJSON(w, http.StatusOK, out)
+		writeJSON(w, http.StatusOK, ScheduleListWithTotal{
+			Schedules: out, Total: result.Total, NextCursor: result.NextCursor,
+		})
 	case "POST":
 		s.createSchedule(w, r)
 	default:
 		requireMethod(w, r, "GET")
 	}
+}
+
+// handleRevision answers GET /v1/revision with per-domain change signatures
+// (the GUI's revision pulse).
+func (s *Server) handleRevision(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, "GET") {
+		return
+	}
+	tasks, err := s.deps.Tasks.Revision()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	schedules, err := s.deps.Schedules.Revision()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	runs, err := s.deps.Runs.Revision()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, RevisionDTO{Tasks: tasks, Schedules: schedules, Runs: runs})
 }
 
 func (s *Server) createSchedule(w http.ResponseWriter, r *http.Request) {

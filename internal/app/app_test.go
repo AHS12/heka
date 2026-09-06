@@ -45,6 +45,16 @@ func (s *stubCaller) SetSecret(string, string) error                       { ret
 func (s *stubCaller) ListSecrets() ([]string, error)                       { return nil, s.err }
 func (s *stubCaller) DeleteSecret(string) error                            { return s.err }
 func (s *stubCaller) ListSchedulesFiltered(string) ([]ipc.Schedule, error) { return nil, s.err }
+
+func (s *stubCaller) ListTasksPage(ipc.TaskFilters) (ipc.TaskListResult, error) {
+	return ipc.TaskListResult{}, s.err
+}
+
+func (s *stubCaller) ListSchedulesPage(ipc.ScheduleFilters) (ipc.ScheduleListResult, error) {
+	return ipc.ScheduleListResult{}, s.err
+}
+
+func (s *stubCaller) Revision() (ipc.RevisionDTO, error) { return ipc.RevisionDTO{}, s.err }
 func (s *stubCaller) CreateSchedule(ipc.Schedule) (ipc.Schedule, error)    { return ipc.Schedule{}, s.err }
 func (s *stubCaller) UpdateSchedule(string, ipc.Schedule) (ipc.Schedule, error) {
 	return ipc.Schedule{}, s.err

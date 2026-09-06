@@ -6,15 +6,19 @@ import userEvent from '@testing-library/user-event'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 import {MemoryRouter} from 'react-router-dom'
 import {Toast} from '@heroui/react'
-import {CreateSchedule, ListSchedules, ListTasks, ReconcileSchedules, UpdateSchedule} from '@wailsjs/go/app/App'
+import {CreateSchedule, ListSchedulesPage, ListTasks, ReconcileSchedules, UpdateSchedule} from '@wailsjs/go/app/App'
 import type {ipc} from '@wailsjs/go/models'
 import {SchedulesPage} from './SchedulesPage'
 
-const mList = vi.mocked(ListSchedules)
+const mListPage = vi.mocked(ListSchedulesPage)
 const mReconcile = vi.mocked(ReconcileSchedules)
 const mUpdate = vi.mocked(UpdateSchedule)
 const mCreate = vi.mocked(CreateSchedule)
 const mListTasks = vi.mocked(ListTasks)
+
+/** The binding returns a generated model class; tests seed plain objects. */
+const schedPage = (schedules: ipc.Schedule[], next = '') =>
+  ({schedules, total: schedules.length, next_cursor: next} as any)
 
 const seed: ipc.Schedule[] = [
   {
@@ -48,7 +52,7 @@ describe('SchedulesPage', () => {
   })
 
   it('shows a success toast when reconcile starts', async () => {
-    mList.mockResolvedValue(seed)
+    mListPage.mockResolvedValue(schedPage(seed))
     mReconcile.mockResolvedValue()
     const user = userEvent.setup()
 
@@ -62,7 +66,7 @@ describe('SchedulesPage', () => {
   })
 
   it('shows a danger toast when reconcile fails', async () => {
-    mList.mockResolvedValue(seed)
+    mListPage.mockResolvedValue(schedPage(seed))
     mReconcile.mockRejectedValue(new Error('internal: db locked'))
     const user = userEvent.setup()
 
@@ -77,8 +81,21 @@ describe('SchedulesPage', () => {
     })
   })
 
+  it('searches server-side with a debounce (one request for the final value)', async () => {
+    mListPage.mockResolvedValue(schedPage(seed))
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByTestId('schedule-missed-policy-s1')
+
+    await user.type(screen.getByPlaceholderText('Search schedules…'), 'daily')
+    await waitFor(() =>
+      expect(mListPage.mock.calls.some((c) => c[0] === 'daily')).toBe(true)
+    )
+    expect(mListPage.mock.calls.filter((c) => c[0] !== '')).toHaveLength(1)
+  })
+
   it('shows the missed policy on each schedule card', async () => {
-    mList.mockResolvedValue(seed)
+    mListPage.mockResolvedValue(schedPage(seed))
     renderPage()
 
     expect(await screen.findByTestId('schedule-missed-policy-s1')).toHaveTextContent(
@@ -87,7 +104,7 @@ describe('SchedulesPage', () => {
   })
 
   it('shows a humanized rule with the raw cron underneath', async () => {
-    mList.mockResolvedValue(seed)
+    mListPage.mockResolvedValue(schedPage(seed))
     renderPage()
 
     const rule = await screen.findByTestId('schedule-rule-s1')
@@ -96,7 +113,7 @@ describe('SchedulesPage', () => {
   })
 
   it('opens the edit dialog prefilled and saves through UpdateSchedule', async () => {
-    mList.mockResolvedValue(seed)
+    mListPage.mockResolvedValue(schedPage(seed))
     mUpdate.mockResolvedValue({...seed[0], slug: 'daily-backup'})
     const user = userEvent.setup()
 
@@ -123,7 +140,7 @@ describe('SchedulesPage', () => {
   })
 
   it('keeps foreign crons intact through an edit round-trip', async () => {
-    mList.mockResolvedValue([{...seed[0], cron: '*/15 9-17 * * 1-5'}])
+    mListPage.mockResolvedValue(schedPage([{...seed[0], cron: '*/15 9-17 * * 1-5'}]))
     mUpdate.mockResolvedValue({...seed[0], cron: '*/15 9-17 * * 1-5'})
     const user = userEvent.setup()
 
@@ -139,7 +156,7 @@ describe('SchedulesPage', () => {
   })
 
   it('creates a schedule through the dialog', async () => {
-    mList.mockResolvedValue(seed)
+    mListPage.mockResolvedValue(schedPage(seed))
     mCreate.mockResolvedValue(seed[0])
     mListTasks.mockResolvedValue([
       {slug: 'backup', name: 'Backup', type: 'script', runtime: 'powershell', enabled: true, updated_at: ''},

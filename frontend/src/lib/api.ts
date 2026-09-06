@@ -63,6 +63,9 @@ import {
   Shutdown,
   Changelog,
   TakeDevTrigger,
+  ListTasksPage,
+  ListSchedulesPage,
+  DataRevision,
 } from '@wailsjs/go/app/App'
 import type {task} from '@wailsjs/go/models'
 
@@ -469,6 +472,77 @@ export interface RunListResult {
   runs: Run[]
   total: number
   next_cursor?: string
+}
+
+// ---- Paginated task & schedule listings (server-side search + cursor).
+
+export interface TaskListResult {
+  tasks: TaskSummary[]
+  total: number
+  next_cursor?: string
+}
+
+export interface ScheduleListResult {
+  schedules: Schedule[]
+  total: number
+  next_cursor?: string
+}
+
+/** Per-domain change signatures for the revision pulse (lib/revision.ts). */
+export interface DataRevision {
+  tasks: string
+  schedules: string
+  runs: string
+}
+
+export interface TaskPageQuery {
+  q?: string
+  enabled?: 'enabled' | 'disabled'
+  type?: string
+  cursor?: string
+  limit?: number
+}
+
+export async function listTasksPage(f: TaskPageQuery): Promise<TaskListResult> {
+  try {
+    return (await ListTasksPage(
+      f.q ?? '',
+      f.enabled ?? '',
+      f.type ?? '',
+      f.cursor ?? '',
+      f.limit ?? 0
+    )) as unknown as TaskListResult
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export interface SchedulePageQuery {
+  q?: string
+  kind?: string
+  cursor?: string
+  limit?: number
+}
+
+export async function listSchedulesPage(f: SchedulePageQuery): Promise<ScheduleListResult> {
+  try {
+    return (await ListSchedulesPage(
+      f.q ?? '',
+      f.kind ?? '',
+      f.cursor ?? '',
+      f.limit ?? 0
+    )) as unknown as ScheduleListResult
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function getRevision(): Promise<DataRevision> {
+  try {
+    return (await DataRevision()) as unknown as DataRevision
+  } catch (err) {
+    throw toAPIError(err)
+  }
 }
 
 export async function listRuns(filters: {

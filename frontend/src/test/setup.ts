@@ -97,6 +97,9 @@ vi.mock('@wailsjs/go/app/App', () => ({
   Shutdown: vi.fn(),
   Changelog: vi.fn().mockResolvedValue(''),
   TakeDevTrigger: vi.fn().mockResolvedValue(null),
+  ListTasksPage: vi.fn().mockResolvedValue({tasks: [], total: 0, next_cursor: ''}),
+  ListSchedulesPage: vi.fn().mockResolvedValue({schedules: [], total: 0, next_cursor: ''}),
+  DataRevision: vi.fn().mockResolvedValue({tasks: '', schedules: '', runs: ''}),
 }))
 
 // The tour is a browser-visual component; jsdom tests stub driver.js so
@@ -152,6 +155,35 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
 // HeroUI Tabs/Tooltip use SharedElementTransition which calls getAnimations().
 if (typeof Element !== 'undefined' && !Element.prototype.getAnimations) {
   Element.prototype.getAnimations = () => []
+}
+
+// Infinite-scroll sentinels need IntersectionObserver; jsdom has none. The
+// stub records instances so tests can drive them via `.trigger()`.
+if (typeof globalThis.IntersectionObserver === 'undefined') {
+  class IOStub {
+    static instances: IOStub[] = []
+    cb: IntersectionObserverCallback
+    constructor(cb: IntersectionObserverCallback) {
+      this.cb = cb
+      IOStub.instances.push(this)
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return []
+    }
+    trigger() {
+      this.cb(
+        [{isIntersecting: true} as IntersectionObserverEntry],
+        this as unknown as IntersectionObserver
+      )
+    }
+    root = null
+    rootMargin = ''
+    thresholds = []
+  }
+  ;(globalThis as unknown as {IntersectionObserver: unknown}).IntersectionObserver = IOStub
 }
 
 // Sane defaults so pages render without "query data undefined" noise; tests

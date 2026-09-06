@@ -175,6 +175,130 @@ func (s *TaskStore) Delete(slug string) error {
 	return err
 }
 
+// TaskPageFilter holds optional filters for the paginated tasks listing
+// (GUI tasks page). Enabled is a pointer so "absent" is distinct from false.
+type TaskPageFilter struct {
+	Q       string // substring search over name and slug
+	Enabled *bool  // nil = all
+	Type    string // exact task type (from the parsed YAML index)
+	Cursor  string // base64-encoded slug cursor
+	Limit   int
+}
+
+// TaskPageResult is the paginated tasks response. Total counts every task
+// matching the filters (cursor excluded), so the GUI can show "50 shown ·
+// 214 total".
+type TaskPageResult struct {
+	Tasks      []TaskWithRun
+	Total      int
+	NextCursor string
+}
+
+// ListPage returns a filtered, cursor-paginated slice of the tasks index
+// with its latest run joined, ordered by slug (the cursor keyset is stable
+// across inserts/deletes elsewhere in the set). The q parameter is a plain
+// substring; % and _ in user input are escaped so they match literally.
+func (s *TaskStore) ListPage(f TaskPageFilter) (TaskPageResult, error) {
+	where := []string{}
+	args := []any{}
+
+	if f.Q != "" {
+		escaped := escapeLike(f.Q)
+		where = append(where, "(t.slug LIKE ? ESCAPE '\\' OR t.name LIKE ? ESCAPE '\\')")
+		args = append(args, "%"+escaped+"%", "%"+escaped+"%")
+	}
+	if f.Enabled != nil {
+		where = append(where, "t.enabled = ?")
+		args = append(args, b(*f.Enabled))
+	}
+	if f.Type != "" {
+		where = append(where, "json_extract(t.parsed_json, '$.type') = ?")
+		args = append(args, f.Type)
+	}
+	// Count WHERE clause (without the cursor predicate) so Total reflects
+	// every match, not just the remaining ones.
+	filterClause := ""
+	if len(where) > 0 {
+		filterClause = " WHERE " + strings.Join(where, " AND ")
+	}
+	var total int
+	if err := s.db.sql.QueryRow(
+		`SELECT COUNT(*) FROM tasks t`+filterClause, args...,
+	).Scan(&total); err != nil {
+		return TaskPageResult{}, err
+	}
+
+	// Keyset predicate for the page itself.
+	if f.Cursor != "" {
+		if slug, err := decodeSlugCursor(f.Cursor); err == nil {
+			where = append(where, "t.slug > ?")
+			args = append(args, slug)
+		}
+	}
+	pageClause := ""
+	if len(where) > 0 {
+		pageClause = " WHERE " + strings.Join(where, " AND ")
+	}
+
+	limit := f.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	rows, err := s.db.sql.Query(`
+SELECT t.id, t.slug, t.name, t.yaml_path, t.parsed_json, t.enabled, t.created_at, t.updated_at,
+       COALESCE(r.status, ''),
+       CASE WHEN r.started_at IS NULL THEN '' ELSE r.started_at END
+  FROM tasks t
+  LEFT JOIN runs r ON r.task_slug = t.slug AND r.run_id = (
+        SELECT r2.run_id FROM runs r2
+         WHERE r2.task_slug = t.slug
+         ORDER BY r2.started_at DESC, r2.run_id DESC LIMIT 1)`+pageClause+`
+ ORDER BY t.slug
+ LIMIT ?`, append(args, limit+1)...)
+	if err != nil {
+		return TaskPageResult{}, err
+	}
+	defer rows.Close()
+	var all []TaskWithRun
+	for rows.Next() {
+		var tw TaskWithRun
+		if err := rows.Scan(&tw.ID, &tw.Slug, &tw.Name, &tw.YAMLPath, &tw.ParsedJSON,
+			&tw.Enabled, &tw.CreatedAt, &tw.UpdatedAt, &tw.LastStatus, &tw.LastRunAt); err != nil {
+			return TaskPageResult{}, err
+		}
+		all = append(all, tw)
+	}
+	if err := rows.Err(); err != nil {
+		return TaskPageResult{}, err
+	}
+
+	if len(all) > limit {
+		page := all[:limit]
+		return TaskPageResult{
+			Tasks:      page,
+			Total:      total,
+			NextCursor: encodeSlugCursor(page[len(page)-1].Slug),
+		}, nil
+	}
+	return TaskPageResult{Tasks: all, Total: total}, nil
+}
+
+// Revision returns an opaque signature that changes whenever the tasks index
+// changes (create, delete, enable/disable, file-edit resync). Pure cheap
+// aggregates — the GUI's revision pulse diffs this instead of refetching
+// list pages. Granularity note: updated_at is second-precision, so a
+// content-only edit inside the same second as the previous write is missed
+// until the next change or user interaction.
+func (s *TaskStore) Revision() (string, error) {
+	var sig string
+	err := s.db.sql.QueryRow(
+		`SELECT COUNT(*) || ':' || COALESCE(SUM(enabled), 0) || ':' || COALESCE(MAX(updated_at), '')
+		   FROM tasks`,
+	).Scan(&sig)
+	return sig, err
+}
+
 func (s *TaskStore) SetEnabled(slug string, enabled bool) error {
 	_, err := s.db.sql.Exec(`UPDATE tasks SET enabled = ?, updated_at = ? WHERE slug = ?`, b(enabled), Now(), slug)
 	return err
@@ -553,6 +677,150 @@ func escapeLike(s string) string {
 	s = strings.ReplaceAll(s, `%`, `\%`)
 	s = strings.ReplaceAll(s, `_`, `\_`)
 	return s
+}
+
+// encodeSlugCursor/decodeSlugCursor build the single-field slug cursors used
+// by the tasks/schedules keyset pagination (ORDER BY slug).
+func encodeSlugCursor(slug string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(slug))
+}
+
+func decodeSlugCursor(cursor string) (string, error) {
+	b, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// Revision returns an opaque signature that changes whenever the runs table
+// changes: MAX(run_id) moves when a run is created (run_id is a time-ordered
+// ULID), and the active count catches in-place status transitions (running →
+// finished) that leave run_id untouched.
+func (s *RunStore) Revision() (string, error) {
+	var sig string
+	err := s.db.sql.QueryRow(
+		`SELECT COALESCE(MAX(run_id), '') || ':' ||
+		        (SELECT COUNT(*) FROM runs WHERE status IN ('running', 'queued'))
+		   FROM runs`,
+	).Scan(&sig)
+	return sig, err
+}
+
+// SchedulePageFilter holds optional filters for the paginated schedules
+// listing (GUI schedules page).
+type SchedulePageFilter struct {
+	Q      string // substring search over slug and task_slug
+	Kind   string // "recurring" | "onetime"; "" = all
+	Cursor string // base64-encoded slug cursor
+	Limit  int
+}
+
+// SchedulePageResult is the paginated schedules response; Total counts every
+// match (cursor excluded).
+type SchedulePageResult struct {
+	Schedules  []ScheduleWithRun
+	Total      int
+	NextCursor string
+}
+
+// ListPage returns a filtered, cursor-paginated slice of schedules with
+// latest-run details, ordered by slug.
+func (s *ScheduleStore) ListPage(f SchedulePageFilter) (SchedulePageResult, error) {
+	where := []string{}
+	args := []any{}
+
+	if f.Q != "" {
+		escaped := escapeLike(f.Q)
+		where = append(where, "(s.slug LIKE ? ESCAPE '\\' OR s.task_slug LIKE ? ESCAPE '\\')")
+		args = append(args, "%"+escaped+"%", "%"+escaped+"%")
+	}
+	if f.Kind != "" {
+		where = append(where, "s.kind = ?")
+		args = append(args, f.Kind)
+	}
+	filterClause := ""
+	if len(where) > 0 {
+		filterClause = " WHERE " + strings.Join(where, " AND ")
+	}
+	var total int
+	if err := s.db.sql.QueryRow(
+		`SELECT COUNT(*) FROM schedules s`+filterClause, args...,
+	).Scan(&total); err != nil {
+		return SchedulePageResult{}, err
+	}
+
+	if f.Cursor != "" {
+		if slug, err := decodeSlugCursor(f.Cursor); err == nil {
+			where = append(where, "s.slug > ?")
+			args = append(args, slug)
+		}
+	}
+	pageClause := ""
+	if len(where) > 0 {
+		pageClause = " WHERE " + strings.Join(where, " AND ")
+	}
+
+	limit := f.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	rows, err := s.db.sql.Query(`
+SELECT s.id, s.slug, s.task_slug, s.kind, s.cron, s.run_at, s.timezone, s.enabled,
+       s.missed_policy, s.next_run_at, s.last_run_at, s.last_status, s.created_at,
+       COALESCE(r.run_id, ''), COALESCE(r.status, ''), COALESCE(r.started_at, ''),
+       COALESCE(r.finished_at, ''),
+       (SELECT COUNT(*) FROM runs sr WHERE sr.schedule_id = s.id AND sr.status = 'skipped'),
+       (SELECT COUNT(*) FROM runs mr WHERE mr.schedule_id = s.id AND mr.status = 'missed')
+  FROM schedules s
+  LEFT JOIN runs r ON r.schedule_id = s.id AND r.run_id = (
+        SELECT r2.run_id FROM runs r2
+         WHERE r2.schedule_id = s.id
+         ORDER BY r2.started_at DESC, r2.run_id DESC LIMIT 1)`+pageClause+`
+ ORDER BY s.slug
+ LIMIT ?`, append(args, limit+1)...)
+	if err != nil {
+		return SchedulePageResult{}, err
+	}
+	defer rows.Close()
+	var all []ScheduleWithRun
+	for rows.Next() {
+		var item ScheduleWithRun
+		if err := rows.Scan(&item.ID, &item.Slug, &item.TaskSlug, &item.Kind, &item.Cron, &item.RunAt,
+			&item.Timezone, &item.Enabled, &item.MissedPolicy, &item.NextRunAt, &item.LastRunAt,
+			&item.LastStatus, &item.CreatedAt, &item.LastRunID, &item.LastRunStatus,
+			&item.LastRunStarted, &item.LastRunFinished, &item.SkippedCount, &item.MissedCount); err != nil {
+			return SchedulePageResult{}, err
+		}
+		all = append(all, item)
+	}
+	if err := rows.Err(); err != nil {
+		return SchedulePageResult{}, err
+	}
+
+	if len(all) > limit {
+		page := all[:limit]
+		return SchedulePageResult{
+			Schedules:  page,
+			Total:      total,
+			NextCursor: encodeSlugCursor(page[len(page)-1].Slug),
+		}, nil
+	}
+	return SchedulePageResult{Schedules: all, Total: total}, nil
+}
+
+// Revision returns an opaque signature that changes whenever the schedules
+// table changes (CRUD, enable/disable, a run firing, missed-run
+// reconciliation rewriting next/last_run_at).
+func (s *ScheduleStore) Revision() (string, error) {
+	var sig string
+	err := s.db.sql.QueryRow(
+		`SELECT COUNT(*) || ':' || COALESCE(SUM(enabled), 0) || ':' ||
+		        COALESCE(MAX(last_run_at), '') || ':' || COALESCE(MAX(next_run_at), '')
+		   FROM schedules`,
+	).Scan(&sig)
+	return sig, err
 }
 
 // ListByKind filters schedules by kind ("recurring" or "onetime").
