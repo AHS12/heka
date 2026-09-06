@@ -4,7 +4,8 @@ import {Modal, Toast} from '@heroui/react'
 import {apiErrorDetails} from '../lib/api'
 import type {Schedule} from '../lib/api'
 import {
-  useSchedules,
+  useSchedulesPage,
+  schedulePageRows,
   useCreateSchedule,
   useUpdateSchedule,
   useDeleteSchedule,
@@ -12,6 +13,7 @@ import {
   useReconcileSchedules,
 } from '../lib/schedules'
 import {useTasks} from '../lib/tasks'
+import {useDebounced, useSentinel} from '../lib/hooks'
 import {ScheduleTable} from '../components/schedules/ScheduleTable'
 import {
   ScheduleForm,
@@ -25,7 +27,6 @@ import {pillBtn, primaryBtn} from '../components/controls'
 import {AppDialog, dialogBodyCls, dialogFooterCls, dialogHeaderCls} from '../components/AppDialog'
 
 export function SchedulesPage() {
-  const schedules = useSchedules()
   const tasks = useTasks()
   const create = useCreateSchedule()
   const update = useUpdateSchedule()
@@ -37,7 +38,20 @@ export function SchedulesPage() {
   const [draft, setDraft] = useState<ScheduleDraft>(emptyScheduleDraft())
   const [errors, setErrors] = useState<string[]>([])
   const [search, setSearch] = useState('')
+  const debouncedQ = useDebounced(search)
   const [searchParams, setSearchParams] = useSearchParams()
+
+  // Server-side search over slug + task_slug; changing it produces a new
+  // query key so the scroll accumulation resets cleanly.
+  const filters = useMemo(() => ({q: debouncedQ.trim() || undefined}), [debouncedQ])
+  const schedules = useSchedulesPage(filters)
+  const rows = schedulePageRows(schedules.data)
+  const total = schedules.data?.pages[0]?.total ?? 0
+  const searching = schedules.isFetching
+
+  const sentinelRef = useSentinel(() => {
+    if (schedules.hasNextPage && !schedules.isFetchingNextPage) void schedules.fetchNextPage()
+  })
 
   // Deep-link from the dashboard quick action: /schedules?new=1 opens the
   // create form once, then the param is stripped so refresh stays clean.
@@ -49,14 +63,6 @@ export function SchedulesPage() {
       setSearchParams(next, {replace: true})
     }
   }, [searchParams, setSearchParams])
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return schedules.data ?? []
-    return (schedules.data ?? []).filter(
-      (s) => s.slug.toLowerCase().includes(q) || s.task_slug.toLowerCase().includes(q)
-    )
-  }, [schedules.data, search])
 
   const closeForm = () => {
     setShowForm(false)
@@ -99,10 +105,24 @@ export function SchedulesPage() {
         <h2 className="text-lg font-semibold">Schedules</h2>
         <div className="flex items-center gap-2">
           <div className="relative">
-            <svg className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-foreground/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
+            {searching ? (
+              <svg
+                className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-foreground/50"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                data-testid="schedules-search-spinner"
+              >
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </svg>
+            ) : (
+              <svg className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-foreground/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            )}
             <input
               type="text"
               placeholder="Search schedules…"
@@ -151,21 +171,39 @@ export function SchedulesPage() {
 
       {schedules.isLoading ? (
         <p className="text-sm text-foreground/50">Loading schedules…</p>
-      ) : (schedules.data ?? []).length === 0 ? (
+      ) : rows.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-foreground/50">
-          No schedules yet — create one to automate task runs.
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-foreground/50">
-          No schedules match "{search}".
+          {total === 0 && !filters.q
+            ? 'No schedules yet — create one to automate task runs.'
+            : `No schedules match "${search.trim()}".`}
         </div>
       ) : (
-        <ScheduleTable
-          schedules={filtered}
-          onToggle={(id, enabled) => toggle.mutate({id, enabled})}
-          onEdit={openEdit}
-          onDelete={(id) => del.mutate(id)}
-        />
+        <>
+          <ScheduleTable
+            schedules={rows}
+            onToggle={(id, enabled) => toggle.mutate({id, enabled})}
+            onEdit={openEdit}
+            onDelete={(id) => del.mutate(id)}
+          />
+          {/* Infinite scroll trigger: load the next keyset page on approach. */}
+          <div ref={sentinelRef} aria-hidden className="h-px" />
+          {schedules.isFetchingNextPage && (
+            <p className="flex items-center justify-center gap-2 py-2 text-xs text-foreground/50">
+              <svg className="size-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </svg>
+              Loading more schedules…
+            </p>
+          )}
+          <p data-testid="schedules-footer" className="flex items-center justify-center gap-2 pb-1 text-[11px] text-foreground/45">
+            {rows.length} shown · {total} total
+            {searching && (
+              <svg className="size-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </svg>
+            )}
+          </p>
+        </>
       )}
 
       {showForm && (

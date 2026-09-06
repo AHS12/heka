@@ -58,6 +58,9 @@ type ipcCaller interface {
 	ListSecrets() ([]string, error)
 	DeleteSecret(key string) error
 	ListSchedulesFiltered(kind string) ([]ipc.Schedule, error)
+	ListTasksPage(f ipc.TaskFilters) (ipc.TaskListResult, error)
+	ListSchedulesPage(f ipc.ScheduleFilters) (ipc.ScheduleListResult, error)
+	Revision() (ipc.RevisionDTO, error)
 	CreateSchedule(s ipc.Schedule) (ipc.Schedule, error)
 	UpdateSchedule(id string, s ipc.Schedule) (ipc.Schedule, error)
 	DeleteSchedule(id string) error
@@ -120,10 +123,20 @@ type RunDTO = ipc.Run
 // RunListResultDTO is the paginated runs response (SPEC-14 §1).
 type RunListResultDTO = ipc.RunListResult
 
+// TaskListResultDTO is the paginated tasks response (GUI tasks page).
+type TaskListResultDTO = ipc.TaskListResult
+
+// ScheduleListResultDTO is the paginated schedules response (GUI schedules page).
+type ScheduleListResultDTO = ipc.ScheduleListResult
+
+// RevisionDTO carries the per-domain change signatures for the revision pulse.
+type RevisionDTO = ipc.RevisionDTO
+
 // App is the Wails-bound struct. Its exported methods become JS bindings.
 type App struct {
 	name      string
 	version   string
+	changelog string
 	ctx       context.Context
 	statePath string // window geometry file; empty disables persistence
 
@@ -135,12 +148,13 @@ type App struct {
 }
 
 // NewApp creates the application struct with production seams.
-func NewApp(name, version string) *App {
+func NewApp(name, version, changelog string) *App {
 	return &App{
-		name:    name,
-		version: version,
-		start:   daemon.Start,
-		loadCfg: config.LoadDefault,
+		name:      name,
+		version:   version,
+		changelog: changelog,
+		start:     daemon.Start,
+		loadCfg:   config.LoadDefault,
 	}
 }
 
@@ -235,6 +249,13 @@ func (a *App) AppInfo() Info {
 		Version: a.version,
 		Daemon:  "not-running",
 	}
+}
+
+// Changelog returns the embedded CHANGELOG.md so the shell can render the
+// "What's New" dialog and the About page without touching the daemon or the
+// network.
+func (a *App) Changelog() string {
+	return a.changelog
 }
 
 // Health polls the daemon through the IPC client and maps the result to the
@@ -641,6 +662,52 @@ func (a *App) ListRuns(task, status, from, to, q, cursor, order string, limit in
 		return RunListResultDTO{}, wrapIPCError(err)
 	}
 	return result, nil
+}
+
+// ListTasksPage is the paginated tasks listing for the GUI tasks page:
+// server-side search (name/slug), enabled/type filters, slug-keyset cursor.
+
+func (a *App) ListTasksPage(q, enabled, taskType, cursor string, limit int) (TaskListResultDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return TaskListResultDTO{}, err
+	}
+	result, err := client.ListTasksPage(ipc.TaskFilters{
+		Q: q, Enabled: enabled, Type: taskType, Cursor: cursor, Limit: limit,
+	})
+	if err != nil {
+		return TaskListResultDTO{}, wrapIPCError(err)
+	}
+	return result, nil
+}
+
+func (a *App) ListSchedulesPage(q, kind, cursor string, limit int) (ScheduleListResultDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return ScheduleListResultDTO{}, err
+	}
+	result, err := client.ListSchedulesPage(ipc.ScheduleFilters{
+		Q: q, Kind: kind, Cursor: cursor, Limit: limit,
+	})
+	if err != nil {
+		return ScheduleListResultDTO{}, wrapIPCError(err)
+	}
+	return result, nil
+}
+
+// DataRevision returns the per-domain change signatures for the GUI's
+// revision pulse: the frontend diffs them and invalidates exactly the list
+// whose signature moved.
+func (a *App) DataRevision() (RevisionDTO, error) {
+	client, err := a.cfgClient()
+	if err != nil {
+		return RevisionDTO{}, err
+	}
+	rev, err := client.Revision()
+	if err != nil {
+		return RevisionDTO{}, wrapIPCError(err)
+	}
+	return rev, nil
 }
 
 func (a *App) GetRun(runID string) (RunDTO, error) {

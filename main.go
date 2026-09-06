@@ -34,7 +34,10 @@ const (
 	defaultWinHeight = 940
 )
 
-var appVersion = "0.8.2"
+var appVersion = "0.8.5"
+
+//go:embed CHANGELOG.md
+var changelog string
 
 //go:embed all:frontend/dist
 var assets embed.FS
@@ -93,7 +96,7 @@ func runGUI() {
 	// and the maximized flag are re-applied in App.Startup because Wails v2
 	// options carry no X/Y.
 	width, height := defaultWinWidth, defaultWinHeight
-	a := app.NewApp(appName, appVersion)
+	a := app.NewApp(appName, appVersion, changelog)
 	if cfg, err := config.LoadDefault(); err == nil {
 		statePath := app.WindowStatePath(cfg.DataDir)
 		a.SetWindowStatePath(statePath)

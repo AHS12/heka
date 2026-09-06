@@ -32,6 +32,7 @@ import {useAccent, ACCENT_COLORS, ACCENT_PRESETS} from '../lib/accent'
 import type {Accent} from '../lib/accent'
 import type {ThemeChoice} from '../lib/theme'
 import {useAnimations} from '../lib/animations'
+import {useOnboarding} from '../lib/onboarding'
 import {Field, SelectField, TextInput, pillBtn, primaryBtn} from '../components/controls'
 import {Switch, Tabs, Modal} from '@heroui/react'
 import {AppDialog, dialogHeaderCls, dialogBodyCls, dialogFooterCls} from '../components/AppDialog'
@@ -138,6 +139,7 @@ function AppearanceSection() {
   const {choice, resolved, effectiveVariant, setTheme, setVariant} = useTheme()
   const {accent, customColor, setAccent, setCustomColor} = useAccent()
   const {enabled: animationsOn, setEnabled: setAnimations} = useAnimations()
+  const startTour = useOnboarding((s) => s.startTour)
 
   // Show mode-specific variants
   const variants = choice === 'dark' || (choice === 'system' && window.matchMedia?.('(prefers-color-scheme: dark)')?.matches)
@@ -228,6 +230,23 @@ function AppearanceSection() {
               </Switch.Control>
             </Switch.Content>
           </Switch>
+        </div>
+        <div className="flex items-center justify-between rounded-xl border border-border/80 bg-surface/60 px-4 py-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              App tour
+            </p>
+            <p className="mt-0.5 text-xs text-foreground/55">
+              Replay the guided introduction
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => startTour(true)}
+            className={pillBtn}
+          >
+            Replay tour
+          </button>
         </div>
       </div>
     </section>

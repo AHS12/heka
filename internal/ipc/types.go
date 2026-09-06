@@ -78,6 +78,29 @@ type RunListWithTotal struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
+// TaskListWithTotal is the paginated envelope for GET /v1/tasks.
+type TaskListWithTotal struct {
+	Tasks      []TaskSummary `json:"tasks"`
+	Total      int           `json:"total"`
+	NextCursor string        `json:"next_cursor,omitempty"`
+}
+
+// ScheduleListWithTotal is the paginated envelope for GET /v1/schedules.
+type ScheduleListWithTotal struct {
+	Schedules  []Schedule `json:"schedules"`
+	Total      int        `json:"total"`
+	NextCursor string     `json:"next_cursor,omitempty"`
+}
+
+// RevisionDTO carries opaque per-domain change signatures for the GUI's
+// revision pulse: the frontend diffs them and invalidates exactly the list
+// whose signature moved. Empty signature = no rows.
+type RevisionDTO struct {
+	Tasks     string `json:"tasks"`
+	Schedules string `json:"schedules"`
+	Runs      string `json:"runs"`
+}
+
 // DaemonLog is one entry of the daemon's own event log (scheduler reconcile,
 // lifecycle, wake detection) surfaced in the GUI Logs → System view.
 type DaemonLog struct {

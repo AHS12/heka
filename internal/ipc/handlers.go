@@ -35,16 +35,33 @@ func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		rows, err := s.deps.Tasks.ListWithLastRun()
+		q := r.URL.Query()
+		f := db.TaskPageFilter{Q: q.Get("q"), Type: q.Get("type"), Cursor: q.Get("cursor")}
+		switch q.Get("enabled") {
+		case "enabled":
+			yes := true
+			f.Enabled = &yes
+		case "disabled":
+			no := false
+			f.Enabled = &no
+		}
+		if raw := q.Get("limit"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+				f.Limit = n
+			}
+		}
+		result, err := s.deps.Tasks.ListPage(f)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal", err.Error())
 			return
 		}
-		summaries := make([]TaskSummary, 0, len(rows))
-		for _, row := range rows {
+		summaries := make([]TaskSummary, 0, len(result.Tasks))
+		for _, row := range result.Tasks {
 			summaries = append(summaries, summarizeTask(row.Task, row.LastStatus, row.LastRunAt))
 		}
-		writeJSON(w, http.StatusOK, summaries)
+		writeJSON(w, http.StatusOK, TaskListWithTotal{
+			Tasks: summaries, Total: result.Total, NextCursor: result.NextCursor,
+		})
 	case "POST":
 		s.createTask(w, r)
 	default:

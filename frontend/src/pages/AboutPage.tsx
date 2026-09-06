@@ -1,6 +1,8 @@
 import {useState} from 'react'
 
 import {openURL} from '../lib/api'
+import {useOnboarding} from '../lib/onboarding'
+import {pillBtn, primaryBtn} from '../components/controls'
 import {APP_VERSION} from '../lib/version'
 
 function CopyButton({text}: {text: string}) {
@@ -159,6 +161,8 @@ timeout: 300
 
 export function AboutPage() {
   const [skillCopied, setSkillCopied] = useState(false)
+  const startTour = useOnboarding((s) => s.startTour)
+  const showWhatsNew = useOnboarding((s) => s.showWhatsNew)
 
   const handleDownloadSkill = () => {
     const blob = new Blob([SKILL_CONTENT], {type: 'text/markdown'})
@@ -195,6 +199,28 @@ export function AboutPage() {
               A local task runner & scheduler for programmers — with first-class AI agent support.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => void openURL('https://heka.ahs12.xyz/')}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/80 px-3 py-1.5 text-xs font-medium text-foreground/75 shadow-sm transition-colors hover:border-accent hover:text-accent dark:hover:border-accent dark:hover:text-accent"
+          >
+            <svg className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+            Website
+          </button>
+          <button
+            type="button"
+            onClick={() => void openURL('https://heka.ahs12.xyz/docs/')}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/80 px-3 py-1.5 text-xs font-medium text-foreground/75 shadow-sm transition-colors hover:border-accent hover:text-accent dark:hover:border-accent dark:hover:text-accent"
+          >
+            <svg className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            </svg>
+            Docs
+          </button>
           <button
             type="button"
             onClick={() => void openURL('https://github.com/AHS12/heka')}
@@ -352,6 +378,30 @@ $ heka daemon status             # Verify daemon`}
               ))}
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Changelog & tour — the embedded CHANGELOG.md opens as a dialog */}
+      <section className="space-y-2">
+        <div className="px-1">
+          <h3 className="text-sm font-semibold text-foreground/75">Changelog &amp; Tour</h3>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/80 bg-surface/70 p-4 shadow-sm backdrop-blur-sm">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">What&rsquo;s new in Heka</p>
+            <p className="mt-0.5 text-xs text-foreground/55">
+              Release notes ship inside the app — no browser needed. Rerun the
+              guided tour anytime.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" className={pillBtn} onClick={() => startTour(true)}>
+              Replay tour
+            </button>
+            <button type="button" className={primaryBtn} onClick={() => showWhatsNew('all', true)}>
+              View changelog
+            </button>
+          </div>
         </div>
       </section>
 

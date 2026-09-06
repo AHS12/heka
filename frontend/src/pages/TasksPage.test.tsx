@@ -1,5 +1,7 @@
-// TasksPage tests (SPEC-13 §6.3/§6.4): seeded table, optimistic enable
-// toggle with rollback, Run Now group_id toast, and import error list.
+// TasksPage tests (SPEC-13 §6.3/§6.4): seeded table, server-side search with
+// debounce, cursor pagination (sentinel-driven fetchNextPage + footer
+// counts), optimistic enable toggle with rollback, Run Now group_id toast,
+// and import error list.
 import {describe, expect, it, vi} from 'vitest'
 import {render, screen, waitFor} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -8,7 +10,7 @@ import {MemoryRouter} from 'react-router-dom'
 import {
   GetTask,
   GetTaskYAML,
-  ListTasks,
+  ListTasksPage,
   RunTask,
   SetTaskEnabled,
   ImportTaskFromFile,
@@ -16,7 +18,7 @@ import {
 import type {app} from '@wailsjs/go/models'
 import {TasksPage} from './TasksPage'
 
-const mList = vi.mocked(ListTasks)
+const mListPage = vi.mocked(ListTasksPage)
 const mRun = vi.mocked(RunTask)
 const mToggle = vi.mocked(SetTaskEnabled)
 const mImport = vi.mocked(ImportTaskFromFile)
@@ -44,6 +46,10 @@ const seed: app.TaskSummaryDTO[] = [
   },
 ]
 
+function pageOf(tasks: app.TaskSummaryDTO[], opts: {total?: number; nextCursor?: string} = {}) {
+  return {tasks, total: opts.total ?? tasks.length, next_cursor: opts.nextCursor ?? ''} as any
+}
+
 function renderPage() {
   const client = new QueryClient({defaultOptions: {queries: {retry: false}}})
   return render(
@@ -56,18 +62,49 @@ function renderPage() {
 }
 
 describe('TasksPage', () => {
-  it('renders the seeded tasks in the table', async () => {
-    mList.mockResolvedValue(seed)
+  it('renders the seeded tasks in the table with footer counts', async () => {
+    mListPage.mockResolvedValue(pageOf(seed))
     renderPage()
     expect(await screen.findByText('Backup')).toBeInTheDocument()
     expect(screen.getByText('Pack')).toBeInTheDocument()
     expect(screen.getByText('Never')).toBeInTheDocument() // pack has no last run
     const chip = screen.getByText('success')
     expect(chip).toHaveAttribute('data-status', 'success')
+    expect(screen.getByTestId('tasks-footer')).toHaveTextContent('2 shown · 2 total')
+  })
+
+  it('searches server-side with a debounce (one request for the final value)', async () => {
+    mListPage.mockResolvedValue(pageOf(seed))
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Backup')
+
+    await user.type(screen.getByPlaceholderText('Search tasks…'), 'backup')
+    // 300ms debounce: exactly one fetch carries the final query.
+    await waitFor(() =>
+      expect(mListPage.mock.calls.some((c) => c[0] === 'backup')).toBe(true)
+    )
+    expect(mListPage.mock.calls.filter((c) => c[0] !== '')).toHaveLength(1)
+  })
+
+  it('loads the next page when the scroll sentinel intersects', async () => {
+    mListPage
+      .mockResolvedValueOnce(pageOf([seed[0]], {total: 2, nextCursor: 'cursor-1'}))
+      .mockResolvedValue(pageOf([seed[1]], {total: 2}))
+    renderPage()
+    await screen.findByText('Backup')
+
+    const io = (IntersectionObserver as any).instances.at(-1)
+    io.trigger()
+    await waitFor(() => {
+      expect(mListPage).toHaveBeenLastCalledWith('', '', '', 'cursor-1', 50)
+    })
+    expect(await screen.findByText('Pack')).toBeInTheDocument()
+    expect(screen.getByTestId('tasks-footer')).toHaveTextContent('2 shown · 2 total')
   })
 
   it('toggles enable optimistically and rolls back on error', async () => {
-    mList.mockResolvedValue(seed)
+    mListPage.mockResolvedValue(pageOf(seed))
     let rejectToggle!: (e: Error) => void
     mToggle.mockImplementation(
       () =>
@@ -96,7 +133,8 @@ describe('TasksPage', () => {
   })
 
   it('shows a run indicator while a task is active', async () => {
-    mList.mockResolvedValue([
+    mListPage.mockResolvedValue(
+      pageOf([
       {
         slug: 'slow-task',
         name: 'Slow',
@@ -117,7 +155,7 @@ describe('TasksPage', () => {
         last_status: 'success',
         last_run_at: '2026-08-25T09:00:00Z',
       },
-    ] as app.TaskSummaryDTO[])
+    ] as app.TaskSummaryDTO[]))
     renderPage()
     await screen.findByText('Slow')
     const running = screen.getByText('running')
@@ -129,7 +167,7 @@ describe('TasksPage', () => {
   })
 
   it('toasts the group_id from Run Now', async () => {
-    mList.mockResolvedValue(seed)
+    mListPage.mockResolvedValue(pageOf(seed))
     mRun.mockResolvedValue({group_id: 'group-42', status: 'running'})
     const user = userEvent.setup()
 
@@ -144,7 +182,7 @@ describe('TasksPage', () => {
   })
 
   it('opens the edit dialog when a row is clicked', async () => {
-    mList.mockResolvedValue(seed)
+    mListPage.mockResolvedValue(pageOf(seed))
     mGetTask.mockResolvedValue({
       enabled: true,
       updated_at: '2026-08-25T10:00:00Z',
@@ -172,7 +210,7 @@ describe('TasksPage', () => {
   })
 
   it('renders the 422 list from a failed import', async () => {
-    mList.mockResolvedValue(seed)
+    mListPage.mockResolvedValue(pageOf(seed))
     mImport.mockRejectedValue(new Error('invalid_task: ["script: required","timeout: must be positive"]'))
     const user = userEvent.setup()
 
@@ -189,7 +227,7 @@ describe('TasksPage', () => {
   })
 
   it('ignores a canceled import dialog', async () => {
-    mList.mockResolvedValue(seed)
+    mListPage.mockResolvedValue(pageOf(seed))
     mImport.mockRejectedValue(new Error('dialog canceled'))
     const user = userEvent.setup()
 
