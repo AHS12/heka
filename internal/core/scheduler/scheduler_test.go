@@ -350,6 +350,125 @@ func TestReconcileSubSecondRunDoesNotMaskNextTick(t *testing.T) {
 	}
 }
 
+// Regression (v0.8.5 field report, 2026-09-15): reconcile closed the window
+// with db.Now() immediately after run.Start, but the executor inserts the run
+// row asynchronously — started_at landed a second AFTER last_run_at. The
+// strict `started_at > last_run_at` fired-count then included that previous
+// window's own run in every subsequent window, so missed = expected - fired
+// = 0 forever and a missed daily 09:00 after a late boot never caught up.
+// The window start must take the max with the latest run's started_at.
+func TestReconcileLaggedRunInsertDoesNotMaskNextTick(t *testing.T) {
+	database, sch, runner := setup(t)
+
+	now := time.Now()
+	tick := time.Date(now.Year(), now.Month(), now.Day(), 9, 0, 0, 0, now.Location())
+	for !tick.Before(now.Add(-time.Minute)) {
+		tick = tick.AddDate(0, 0, -1)
+	}
+	prev := tick.AddDate(0, 0, -1)
+	// last_run_at is the moment the window was closed; the run row appears
+	// one second later, exactly like the executor's async insert.
+	closed := prev.Add(4 * time.Hour).UTC().Format(time.RFC3339)
+	inserted := prev.Add(4 * time.Hour).Add(time.Second).UTC().Format(time.RFC3339)
+
+	saveSchedule(t, database, db.Schedule{
+		ID: "s15", Slug: "daily-check", TaskSlug: "daily", Kind: "recurring",
+		Cron: "00 09 * * *", Enabled: true, MissedPolicy: "run_now",
+		LastRunAt:  closed,
+		LastStatus: "success",
+		CreatedAt:  prev.AddDate(0, 0, -1).UTC().Format(time.RFC3339),
+	})
+	if err := database.Runs().Create(db.Run{
+		RunID: ulid.Make().String(), GroupID: ulid.Make().String(),
+		TaskSlug: "daily", ScheduleID: "s15", Trigger: "schedule",
+		Status: "success", StartedAt: &inserted, FinishedAt: &inserted, CreatedAt: inserted,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := sch.ReconcileWithReason("startup"); err != nil {
+		t.Fatal(err)
+	}
+	if runner.count() != 1 {
+		t.Fatalf("missed tick masked by lagged run row: fires = %d, want 1", runner.count())
+	}
+}
+
+// Reconcile must leave ticks inside the freshness margin to the live cron
+// engine: a pass racing the exact tick second counts the occurrence while the
+// engine fires it too, doubling the run. A missed tick is recovered by the
+// next periodic pass instead.
+func TestReconcileIgnoresFreshTicks(t *testing.T) {
+	database, sch, runner := setup(t)
+	// Ticks of an @every spec are anchored to the window start, so the last
+	// tick sits exactly one interval after last_run_at.
+	freshAt := time.Now().Add(-5 * time.Second) // tick 5s ago: inside the margin
+	lastRunAt := freshAt.Add(-1 * time.Minute).Format(time.RFC3339)
+	saveSchedule(t, database, db.Schedule{
+		ID: "s16", Slug: "fresh", TaskSlug: "daily", Kind: "recurring",
+		Cron: "@every 1m", Enabled: true, MissedPolicy: "run_now",
+		LastRunAt: lastRunAt,
+		CreatedAt: freshAt.Add(-time.Hour).Format(time.RFC3339),
+	})
+	if err := sch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := sch.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	if runner.count() != 0 {
+		t.Fatalf("reconcile raced a fresh tick: fires = %d, want 0", runner.count())
+	}
+	// Once the tick is no longer fresh, the next pass owns it.
+	row, err := database.Schedules().Get("s16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row.LastRunAt = freshAt.Add(-125 * time.Second).Format(time.RFC3339)
+	saveSchedule(t, database, row)
+	if err := sch.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	if runner.count() != 1 {
+		t.Fatalf("stale tick not caught up: fires = %d, want 1", runner.count())
+	}
+}
+
+// Reconcile must not double-fire a window: a missed activation before the
+// last recorded run (e.g. daily schedule last run 14th ~10:20, machine opens
+// 15th 01:00) is outside the window and belongs to the live engine's next
+// normal tick at 09:00 — no spurious catch-up on boot.
+func TestReconcileDoesNotReplayFutureTick(t *testing.T) {
+	database, sch, runner := setup(t)
+	// Last run sits a couple of hours after the most recent tick whose next
+	// activation is still in the future (the "last ran 14th 10:20, booted
+	// later that same cycle" case); any machine-local time is handled by
+	// walking back until last-run + margin is comfortably behind now.
+	prevTick := time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 9, 0, 0, 0, time.Now().Location())
+	for !prevTick.Add(90 * time.Minute).Before(time.Now().Add(-reconcileFreshness)) {
+		prevTick = prevTick.AddDate(0, 0, -1)
+	}
+	lastRunAt := prevTick.Add(2 * time.Hour)
+	saveSchedule(t, database, db.Schedule{
+		ID: "s17", Slug: "daily-check", TaskSlug: "daily", Kind: "recurring",
+		Cron: "00 09 * * *", Enabled: true, MissedPolicy: "run_now",
+		LastRunAt: lastRunAt.UTC().Format(time.RFC3339),
+		CreatedAt: lastRunAt.Add(-24 * time.Hour).UTC().Format(time.RFC3339),
+	})
+	if err := sch.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := sch.Reconcile(); err != nil {
+		t.Fatal(err)
+	}
+	if runner.count() != 0 {
+		t.Fatalf("reconcile replayed a future tick: fires = %d, want 0", runner.count())
+	}
+}
+
 func TestReconcileSkippedWhilePaused(t *testing.T) {
 	database, sch, runner := setup(t)
 	saveSchedule(t, database, db.Schedule{
