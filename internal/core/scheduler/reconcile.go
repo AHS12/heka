@@ -43,6 +43,12 @@ func (s *Scheduler) ReconcileWithReason(reason string) error {
 	}
 
 	now := time.Now()
+	// Ticks within the freshness margin are left to the live cron engine: a
+	// pass starting at (or a few hundred ms before) the exact tick second
+	// would race the engine's own dispatch for that tick. Those ticks are
+	// picked up by the next periodic pass if the engine fails to fire them.
+	end := now.Add(-reconcileFreshness)
+
 	scheds, err := s.db.Schedules().List()
 	if err != nil {
 		return err
@@ -52,11 +58,8 @@ func (s *Scheduler) ReconcileWithReason(reason string) error {
 		if sch.Kind != "recurring" || !sch.Enabled {
 			continue
 		}
-		start := parseTime(sch.LastRunAt)
-		if start.IsZero() {
-			start = parseTime(sch.CreatedAt)
-		}
-		expected := countOccurrences(sch.Cron, start, now)
+		start := s.windowStart(sch)
+		expected := countOccurrences(sch.Cron, start, end)
 		if expected <= 0 {
 			continue
 		}
@@ -179,3 +182,30 @@ func (s *Scheduler) countFired(scheduleID string, since time.Time) int {
 	}
 	return n
 }
+
+// windowStart is the exclusive lower bound of the unaccounted window: the
+// latest of the schedule's recorded last_run_at and its most recent
+// schedule-triggered run's started_at (falling back to created_at). The max
+// matters because the run row is created asynchronously after the window was
+// closed with db.Now(), so started_at can land seconds AFTER last_run_at —
+// using the raw last_run_at would re-count that run in every subsequent
+// window and mask exactly one missed activation (v0.8.5 field report: a
+// daily 09:00 schedule missed after a late boot never caught up).
+func (s *Scheduler) windowStart(sch db.Schedule) time.Time {
+	start := parseTime(sch.LastRunAt)
+	if start.IsZero() {
+		start = parseTime(sch.CreatedAt)
+	}
+	if rows, err := s.db.Runs().ListBySchedule(sch.ID, 1); err == nil && len(rows) > 0 {
+		if rows[0].StartedAt != nil {
+			if at := parseTime(*rows[0].StartedAt); at.After(start) {
+				start = at
+			}
+		}
+	}
+	return start
+}
+
+// reconcileFreshness is how recent a tick may be before reconcile leaves it
+// to the live cron engine.
+const reconcileFreshness = 30 * time.Second

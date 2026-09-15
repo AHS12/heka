@@ -5,6 +5,29 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.6] - 2026-09-15
+
+Fixed a bug where tasks missed while your PC was off could stay unfired
+forever, plus a few small quality-of-life touches.
+
+### Fixed
+- **Missed tasks now catch up reliably.** If your PC was off when a task was
+  scheduled to run (for example, a daily 9:00 task and you booted at 11:00),
+  Heka now fires it on startup — and, in some situations it could previously
+  be skipped over even though the logs said "0 caught up", it now catches up
+  every time. Reopen your machine late with confidence: missed work runs
+  without you needing to press anything.
+- **No duplicate runs on boot.** Schedules also feel more predictable
+  right after startup: a task won't accidentally be fired twice when the
+  boot lands exactly on its scheduled minute, and a fresh boot won't re-fire
+  a task that hasn't come due yet — it runs again at its next normal time.
+- Tasks missed across multiple days now fire exactly once, as intended.
+
+### Changed
+- **Removed the "App tour" card from Settings → Appearance.** The tour is
+  still available from the About page, and still plays automatically on
+  first launch.
+
 ## [0.8.5] - 2026-09-06
 
 Heka learns to introduce itself and to scale: a first-run tour, a What's New
