@@ -12,13 +12,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gen2brain/beeep"
 	"github.com/oklog/ulid/v2"
 
 	"heka/internal/config"
 	"heka/internal/core/backup"
 	"heka/internal/db"
 	"heka/internal/ipc"
+	"heka/internal/notify"
 )
 
 const (
@@ -54,7 +54,7 @@ func newBackupManager(cfg config.Config, database *db.DB, version string, resolv
 		version:  version,
 		resolver: resolver,
 		notify: func(title, message string) {
-			_ = beeep.Notify(title, message, "")
+			_ = notify.DesktopToast(title, message)
 		},
 		now: time.Now,
 	}

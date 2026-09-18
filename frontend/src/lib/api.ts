@@ -39,6 +39,8 @@ import {
   StartupSet,
   WatchdogEnabled,
   WatchdogSet,
+  CLIToolStatus,
+  CLIToolSet,
   PauseScheduler,
   ResumeScheduler,
   ReconcileSchedules,
@@ -624,16 +626,22 @@ export async function startupSet(on: boolean): Promise<void> {
   }
 }
 
-export async function watchdogEnabled(): Promise<{installed: boolean; intervalMinutes: number}> {
+export async function watchdogEnabled(): Promise<{installed: boolean; intervalMinutes: number; supported: boolean; mode: string}> {
   try {
-    // The binding returns a WatchdogStatusDTO struct: {installed, interval_minutes}.
+    // The binding returns a WatchdogStatusDTO struct: {supported, installed, interval_minutes, mode}.
     const result = (await WatchdogEnabled()) as unknown as {
+      supported: boolean
       installed: boolean
       interval_minutes: number
+      mode?: string
     }
     return {
+      // Older daemons (pre-SPEC-17) have no supported flag; treat as supported.
+      supported: result?.supported ?? true,
       installed: !!result?.installed,
       intervalMinutes: result?.interval_minutes ?? 0,
+      // Older daemons have no mode field; assume the scheduled flavor.
+      mode: result?.mode ?? 'scheduled',
     }
   } catch (err) {
     throw toAPIError(err)
@@ -643,6 +651,42 @@ export async function watchdogEnabled(): Promise<{installed: boolean; intervalMi
 export async function watchdogSet(on: boolean): Promise<void> {
   try {
     await WatchdogSet(on)
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+// ---- Terminal CLI (macOS, Herd-style — SPEC-18 §3.1).
+
+export interface CLIToolInfo {
+  supported: boolean
+  installed: boolean
+  binDir: string
+  profile?: string
+}
+
+export async function cliToolStatus(): Promise<CLIToolInfo> {
+  try {
+    const result = (await CLIToolStatus()) as unknown as {
+      supported: boolean
+      installed: boolean
+      bin_dir: string
+      profile?: string
+    }
+    return {
+      supported: !!result?.supported,
+      installed: !!result?.installed,
+      binDir: result?.bin_dir ?? '',
+      profile: result?.profile,
+    }
+  } catch (err) {
+    throw toAPIError(err)
+  }
+}
+
+export async function cliToolSet(on: boolean): Promise<void> {
+  try {
+    await CLIToolSet(on)
   } catch (err) {
     throw toAPIError(err)
   }

@@ -91,7 +91,10 @@ func NewApp(cfg config.Config, client APIClient) *App {
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errors.New("specify a command (try 'heka --help')")
+			// Bare invocation. On darwin this is reached only from a real
+			// terminal (the TTY heuristic routes Dock/Finder launches to the
+			// GUI), so help text is the useful answer (SPEC-18 §3.1).
+			return cmd.Help()
 		},
 	}
 	root.PersistentFlags().BoolVar(&a.json, "json", false, "emit machine-readable JSON (for agents)")

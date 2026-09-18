@@ -4,9 +4,48 @@ package ipc
 
 import (
 	"fmt"
+	"net"
+	"os"
+	"os/user"
+	"strings"
 
+	"github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
+
+	"heka/internal/config"
 )
+
+// EndpointPath is the IPC endpoint for a configuration (SPEC-06 §4).
+func EndpointPath(config.Config) string {
+	return `\\.\pipe\` + pipeName()
+}
+
+// pipeName is the named pipe for this process: HEKA_PIPE_NAME overrides it
+// (useful for running several instances per user, and for tests); otherwise
+// it derives from the OS username, e.g. heka-alice.
+func pipeName() string {
+	if overridden := os.Getenv("HEKA_PIPE_NAME"); overridden != "" {
+		return overridden
+	}
+	u := os.Getenv("USERNAME")
+	if u == "" {
+		if current, err := user.Current(); err == nil {
+			u = current.Username
+		}
+	}
+	return "heka-" + sanitizeUser(u)
+}
+
+// sanitizeUser normalizes a username for use inside a pipe name. os/user on
+// Windows can return DOMAIN\user — backslashes are illegal in pipe names —
+// and the bare form must match the USERNAME env form so processes whose
+// environment lacks USERNAME still resolve the same endpoint.
+func sanitizeUser(u string) string {
+	if i := strings.LastIndexAny(u, `\/`); i >= 0 {
+		return u[i+1:]
+	}
+	return u
+}
 
 // fallbackPipeSD is the owner-only descriptor used when the current user's
 // SID cannot be resolved. Better than the permissive default (which grants
@@ -39,4 +78,17 @@ func currentUserSID() (string, error) {
 		return "", err
 	}
 	return u.User.Sid.String(), nil
+}
+
+// Listen binds the IPC endpoint. A successful bind doubles as the daemon's
+// singleton lock (SPEC-06 §1): a second daemon fails here.
+func Listen(cfg config.Config) (net.Listener, error) {
+	return winio.ListenPipe(EndpointPath(cfg), &winio.PipeConfig{
+		SecurityDescriptor: pipeSecurityDescriptor(),
+	})
+}
+
+// Dial connects to a running daemon's endpoint.
+func Dial(cfg config.Config) (net.Conn, error) {
+	return winio.DialPipe(EndpointPath(cfg), nil)
 }

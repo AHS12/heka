@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getlantern/systray"
+	"github.com/efeenesc/systray"
 
 	"heka/internal/config"
 	"heka/internal/db"
@@ -50,13 +50,13 @@ func RunTray(deps TrayDeps) {
 }
 
 func onReady(deps TrayDeps) {
-	systray.SetTitle("Heka")
-	systray.SetTooltip(fmt.Sprintf("Heka v%s — task scheduler", deps.Version))
+	// Icon first, then title/tooltip: on macOS 26 Tahoe a status item that
+	// starts title-only may never render (SPEC-17 §4.10). Title stays off —
+	// the item shows the template icon alone.
 	if len(iconPNG) > 0 {
-		if icoBytes, err := pngToICO(iconPNG); err == nil {
-			systray.SetIcon(icoBytes)
-		}
+		systray.SetIcon(trayIcon())
 	}
+	systray.SetTooltip(fmt.Sprintf("Heka v%s — task scheduler", deps.Version))
 
 	// ---- Static top-level items
 	openItem := systray.AddMenuItem("Open", "Open the Heka GUI")
@@ -97,10 +97,19 @@ func onReady(deps TrayDeps) {
 	startupEnabled, _ := startupRegistrar.Enabled()
 	startupItem := systray.AddMenuItemCheckbox("Start with system", "Register daemon for OS startup", startupEnabled)
 
-	// ---- Watchdog guard
-	watchdogInstaller := NewInstaller()
-	watchdogEnabled, _, _ := watchdogInstaller.Status()
-	watchdogItem := systray.AddMenuItemCheckbox("Watchdog guard", "Enable the OS watchdog", watchdogEnabled)
+	// ---- Watchdog guard (hidden where the platform has no watchdog:
+	// darwin's launchd KeepAlive covers restarts, SPEC-17 §4.5)
+	var watchdogInstaller Installer
+	var watchdogItem *systray.MenuItem
+	var watchdogCh <-chan struct{}
+	if WatchdogSupported() {
+		watchdogInstaller = NewInstaller()
+		watchdogEnabled, _, _ := watchdogInstaller.Status()
+		watchdogItem = systray.AddMenuItemCheckbox("Watchdog guard", "Enable the OS watchdog", watchdogEnabled)
+		watchdogCh = watchdogItem.ClickedCh
+	} else {
+		watchdogCh = make(chan struct{}) // never fires
+	}
 
 	systray.AddSeparator()
 
@@ -183,7 +192,7 @@ func onReady(deps TrayDeps) {
 				}
 			}
 
-		case <-watchdogItem.ClickedCh:
+		case <-watchdogCh:
 			en, _, _ := watchdogInstaller.Status()
 			if en {
 				_ = watchdogInstaller.Uninstall()

@@ -5,6 +5,7 @@ package osapp
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"time"
@@ -37,6 +38,22 @@ type Installer interface {
 	Uninstall() error
 	Status() (Installed bool, Interval time.Duration, err error)
 }
+
+// ErrWatchdogUnsupported is returned by installs on platforms without a
+// watchdog — darwin relies on launchd KeepAlive instead (SPEC-17 §4.5).
+var ErrWatchdogUnsupported = errors.New("watchdog not supported on this platform")
+
+// ErrCLIToolUnsupported is returned by CLI-on-PATH operations off-macOS
+// (SPEC-18 §3.1: only darwin ships the Herd-style wiring).
+var ErrCLIToolUnsupported = errors.New("terminal CLI setup not supported on this platform")
+
+// WatchdogSupported reports whether the platform has a watchdog at all.
+// Var so tests can force the supported path on any host.
+var WatchdogSupported = func() bool { return watchdogSupportedImpl() }
+
+// WatchdogMode reports the delivery style: "launchd" (darwin — respawns on
+// crash, no interval), "scheduled" (schtasks / systemd timer), or "none".
+var WatchdogMode = func() string { return watchdogModeImpl() }
 
 // RepairEntries reconciles OS registration (watchdog + startup) with the
 // currently running binary. After an upgrade the recorded exe path can point

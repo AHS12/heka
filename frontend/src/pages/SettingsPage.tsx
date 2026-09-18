@@ -15,6 +15,8 @@ import {
   startupSet,
   watchdogEnabled,
   watchdogSet,
+  cliToolStatus,
+  cliToolSet,
   getDataDir,
   getTasksDir,
   openDataDir,
@@ -277,6 +279,7 @@ function DataDirSection() {
 function StartupSection() {
   const qc = useQueryClient()
   const enabled = useQuery({queryKey: ['startup'], queryFn: startupEnabled})
+  const cli = useQuery({queryKey: ['clitool'], queryFn: cliToolStatus})
   const [error, setError] = useState<string | null>(null)
 
   const toggle = useMutation({
@@ -284,9 +287,22 @@ function StartupSection() {
     onSuccess: () => {
       setError(null)
       void qc.invalidateQueries({queryKey: ['startup']})
+      void qc.invalidateQueries({queryKey: ['health']})
     },
     onError: (err) => setError(apiErrorDetails(err).join('; ')),
   })
+
+  const cliToggle = useMutation({
+    mutationFn: (on: boolean) => cliToolSet(on),
+    onSuccess: () => {
+      setError(null)
+      void qc.invalidateQueries({queryKey: ['clitool']})
+    },
+    onError: (err) => setError(apiErrorDetails(err).join('; ')),
+  })
+
+  const cliOn = cli.data?.installed ?? false
+  const cliSupported = cli.data?.supported ?? false
 
   return (
     <section className="space-y-3">
@@ -295,11 +311,31 @@ function StartupSection() {
       </h3>
       <ToggleRow
         label="Start with system"
-        hint="Register the daemon to start when you log in"
+        hint={
+          toggle.isPending
+            ? 'Applying — reconciling the launchd agent…'
+            : 'Register the daemon to start when you log in'
+        }
         checked={enabled.data ?? false}
         disabled={enabled.isLoading || toggle.isPending}
         onChange={(on) => { setError(null); toggle.mutate(on) }}
       />
+      {cliSupported && (
+        <ToggleRow
+          label="Terminal CLI"
+          hint={
+            cliOn
+              ? `heka is on your PATH (${cli.data?.binDir}) — try 'heka daemon status' in a new terminal`
+              : `Make 'heka' available in every terminal via ${cli.data?.binDir}`
+          }
+          checked={cliOn}
+          disabled={cli.isLoading || cliToggle.isPending}
+          onChange={(on) => { setError(null); cliToggle.mutate(on) }}
+        />
+      )}
+      {cli.data?.profile && (
+        <p className="text-xs text-foreground/55">{cli.data.profile}</p>
+      )}
       {error && (
         <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
       )}
@@ -341,6 +377,7 @@ function ReliabilitySection() {
     onSuccess: () => {
       setError(null)
       void qc.invalidateQueries({queryKey: ['watchdog']})
+      void qc.invalidateQueries({queryKey: ['health']})
     },
     onError: (err) => setError(apiErrorDetails(err).join('; ')),
   })
@@ -364,6 +401,8 @@ function ReliabilitySection() {
   })
 
   const installed = status.data?.installed ?? false
+  const supported = status.data?.supported ?? true
+  const launchd = status.data?.mode === 'launchd'
   const wdInterval = status.data?.intervalMinutes ?? 5
   const reconcileCurrent = settings.data?.reconcile_interval_min ?? 2
   const watchdogCurrent = settings.data?.watchdog_interval_min ?? 5
@@ -385,17 +424,25 @@ function ReliabilitySection() {
         disabled={health.isLoading || pauseToggle.isPending}
         onChange={(pause) => { setError(null); pauseToggle.mutate(pause) }}
       />
-      <ToggleRow
+      {supported && (
+        <ToggleRow
         label="Watchdog guard"
         hint={
-          installed
-            ? `Checks every ${wdInterval}m — restarts the daemon if it goes down`
-            : 'Periodically checks the daemon and restarts it if it goes down'
+          toggle.isPending
+            ? 'Applying — reconciling the launchd agent…'
+            : launchd
+              ? installed
+                ? 'launchd restarts the daemon automatically when it crashes'
+                : 'launchd restarts the daemon automatically when it crashes (applies on next daemon start)'
+              : installed
+                ? `Checks every ${wdInterval}m — restarts the daemon if it goes down`
+                : 'Periodically checks the daemon and restarts it if it goes down'
         }
-        checked={installed}
-        disabled={status.isLoading || toggle.isPending}
-        onChange={(on) => { setError(null); toggle.mutate(on) }}
-      />
+          checked={installed}
+          disabled={status.isLoading || toggle.isPending}
+          onChange={(on) => { setError(null); toggle.mutate(on) }}
+        />
+      )}
       <div className="rounded-xl border border-border/80 bg-surface/60 px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <Field label="Missed-run reconciliation">
@@ -407,7 +454,7 @@ function ReliabilitySection() {
               items={RECONCILE_OPTIONS}
             />
           </Field>
-          {installed && (
+          {installed && !launchd && (
             <Field label="Watchdog check">
               <SelectField
                 aria-label="Watchdog check interval"

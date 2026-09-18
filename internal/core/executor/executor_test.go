@@ -537,8 +537,14 @@ func TestWorkingDirectoryResolution(t *testing.T) {
 	if len(runs) != 1 || runs[0].Status != "success" {
 		t.Fatalf("runs = %+v", runs)
 	}
-	if strings.TrimSpace(runs[0].Stdout) != sub {
-		t.Fatalf("cwd = %q, want %q", strings.TrimSpace(runs[0].Stdout), sub)
+	// The OS reports the cwd as a physical path; on macOS /var/folders is a
+	// symlink to /private/var, so resolve the expectation the same way.
+	want := sub
+	if resolved, err := filepath.EvalSymlinks(sub); err == nil {
+		want = resolved
+	}
+	if strings.TrimSpace(runs[0].Stdout) != want {
+		t.Fatalf("cwd = %q, want %q", strings.TrimSpace(runs[0].Stdout), want)
 	}
 }
 

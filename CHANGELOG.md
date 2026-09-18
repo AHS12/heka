@@ -5,6 +5,29 @@ All notable changes to Heka are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-09-18
+
+Heka comes to the Mac. Everything you already know from the Windows app is
+here — the same quiet background scheduler, now as a proper Mac application.
+
+### Added
+- **macOS support.** A universal app for Apple Silicon and Intel Macs,
+  installed by dragging it into Applications from a DMG.
+- **Menu-bar control.** The familiar Heka menu — Open, Run Task, Active Jobs,
+  Recent Runs, Pause, Quit — now lives in the Mac menu bar.
+- **Starts with your Mac, and stays started.** Turn on login start, and a
+  background watchdog quietly brings Heka back if it ever crashes. A clean
+  stop stays stopped.
+- **Notifications that look like Heka.** macOS toasts now carry the Heka icon
+  instead of a generic system one.
+- **A real terminal CLI.** Flip one switch in Settings and `heka` becomes
+  available in any new terminal, so `heka run`, `heka logs`, and the rest work
+  exactly as they do on Windows.
+
+### Fixed
+- No more phantom second icon in the Mac Dock while the background daemon is
+  running.
+
 ## [0.8.6] - 2026-09-15
 
 Fixed a bug where tasks missed while your PC was off could stay unfired

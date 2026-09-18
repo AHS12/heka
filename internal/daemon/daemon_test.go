@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,13 +24,24 @@ import (
 // TestMain isolates this package's tests onto their own named pipe (parallel
 // package runs would otherwise collide on the shared per-user endpoint). The
 // OS watchdog installer is stubbed out package-wide: no test may touch the
-// real Task Scheduler.
+// real Task Scheduler. HOME is sandboxed too: the daemon's startup/repair
+// code resolves ~/Library/LaunchAgents via the environment, and without this
+// a test daemon repoints the user's real agent plist at a temp test binary
+// and bootstraps real launchd (the historical silent boot-start breaker).
 func TestMain(m *testing.M) {
 	_ = os.Setenv("HEKA_PIPE_NAME", fmt.Sprintf("heka-daemon-test-%d", os.Getpid()))
 	osapp.NewInstaller = func() osapp.Installer {
 		return &fakeOSInstaller{installed: false, taskInterval: 0}
 	}
-	os.Exit(m.Run())
+	home, err := os.MkdirTemp("", "heka-daemon-test-home-")
+	if err == nil {
+		_ = os.Setenv("HOME", home)
+	}
+	code := m.Run()
+	if home != "" {
+		_ = os.RemoveAll(home)
+	}
+	os.Exit(code)
 }
 
 // fakeOSInstaller is the osapp.Installer seam: records Install calls without
@@ -57,13 +69,30 @@ func (f *fakeOSInstaller) Status() (bool, time.Duration, error) {
 
 // testConfig returns a config rooted at a fresh temp dir, so tests never
 // touch the real data location or collide with a user daemon's files.
+// HEKA_DATA_DIR points at a short path: the unix socket must fit macOS's
+// ~104-byte sun_path limit (SPEC-17 §8), and t.TempDir() homes nest too deep.
 func testConfig(t *testing.T) config.Config {
 	t.Helper()
-	cfg, err := config.Load(map[string]string{"LOCALAPPDATA": t.TempDir()}, t.TempDir())
+	cfg, err := config.Load(map[string]string{
+		"LOCALAPPDATA":  t.TempDir(),
+		"HEKA_DATA_DIR": shortDataDir(t),
+	}, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	return cfg
+}
+
+// shortDataDir returns a unique short data dir under the OS temp dir,
+// removed when the test ends.
+var shortDataSeq atomic.Int64
+
+func shortDataDir(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(os.TempDir(),
+		fmt.Sprintf("heka-test-%d-%d", os.Getpid(), shortDataSeq.Add(1)))
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
 
 // startRun launches Run in a goroutine and waits until it answers pings.
@@ -522,8 +551,13 @@ func TestApplyWatchdogTaskRecreatesOnIntervalChange(t *testing.T) {
 	}
 	inst := &fakeOSInstaller{installed: true, taskInterval: 5 * time.Minute}
 	orig := osapp.NewInstaller
+	origMode := osapp.WatchdogMode
 	osapp.NewInstaller = func() osapp.Installer { return inst }
-	t.Cleanup(func() { osapp.NewInstaller = orig })
+	osapp.WatchdogMode = func() string { return "scheduled" } // cadence is the scheduled flavor's concern
+	t.Cleanup(func() {
+		osapp.NewInstaller = orig
+		osapp.WatchdogMode = origMode
+	})
 
 	// Installed task's cadence differs from settings → recreated.
 	if err := d.applyWatchdogTask(); err != nil {
@@ -549,6 +583,35 @@ func TestApplyWatchdogTaskRecreatesOnIntervalChange(t *testing.T) {
 	}
 	if inst2.taskInterval != 0 {
 		t.Fatalf("uninstalled task must not be created: %v", inst2.taskInterval)
+	}
+}
+
+// launchd mode has no cadence to reconcile — applyWatchdogTask must skip
+// Install entirely: reloading the agent from inside the running daemon
+// bootouts (kills) the caller, the supervised-start self-destruct.
+func TestApplyWatchdogTaskSkipsLaunchdMode(t *testing.T) {
+	database, err := db.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	d := newDaemon(config.Config{}, "test", database)
+
+	inst := &fakeOSInstaller{installed: true, taskInterval: 0} // launchd Status: installed, interval 0
+	orig := osapp.NewInstaller
+	origMode := osapp.WatchdogMode
+	osapp.NewInstaller = func() osapp.Installer { return inst }
+	osapp.WatchdogMode = func() string { return "launchd" }
+	t.Cleanup(func() {
+		osapp.NewInstaller = orig
+		osapp.WatchdogMode = origMode
+	})
+
+	if err := d.applyWatchdogTask(); err != nil {
+		t.Fatal(err)
+	}
+	if inst.taskInterval != 0 {
+		t.Fatalf("launchd mode must not touch the agent (caller would be killed): %+v", inst)
 	}
 }
 
@@ -624,7 +687,7 @@ func buildBinary(t *testing.T) string {
 
 func TestCLIEndToEnd(t *testing.T) {
 	binary := buildBinary(t)
-	dataDir := t.TempDir()
+	dataDir := shortDataDir(t)
 	tasksDir := t.TempDir()
 	// Isolate the spawned daemon on its own pipe so it can never collide
 	// with the in-process daemons' TestMain pipe (both directions are one
@@ -637,6 +700,8 @@ func TestCLIEndToEnd(t *testing.T) {
 	}
 
 	cmd := exec.Command(binary, "daemon")
+	// HOME is sandboxed package-wide by TestMain, so the spawned daemon's
+	// launchd/repair code never touches the real ~/Library/LaunchAgents.
 	cmd.Env = append(os.Environ(),
 		"HEKA_DATA_DIR="+dataDir,
 		"HEKA_TASKS_DIR="+tasksDir,

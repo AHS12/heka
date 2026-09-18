@@ -123,8 +123,41 @@ No graphs, no nodes, no pipelines to learn. That's the point.
 ## Install
 
 Grab the latest installer from
-[**Releases**](https://github.com/AHS12/heka/releases) — Windows today,
-macOS coming soon.
+[**Releases**](https://github.com/AHS12/heka/releases) — Windows `.exe`
+(NSIS) and macOS `.dmg` (drag to Applications).
+
+### macOS
+
+Open the DMG and drag **Heka** to Applications. The app is ad-hoc signed —
+on first launch, if Gatekeeper complains, right-click **Open** once, or run:
+
+```bash
+xattr -cr /Applications/Heka.app
+```
+
+**Terminal CLI (Herd-style):** enable *Settings → Startup → Terminal CLI* to
+put `heka` on your PATH (a symlink in
+`~/Library/Application Support/Heka/bin` plus one line in your shell
+profile). Then in a **new** terminal:
+
+```bash
+heka daemon status
+heka run daily-research
+```
+
+**Notifications:** the first task notification asks macOS for permission
+once — allow it and every toast afterwards carries the Heka icon
+(System Settings → Notifications to change later).
+
+**Watchdog guard** (Settings → Reliability): macOS uses launchd — with the
+guard on, a crashed daemon is restarted within seconds; a clean
+`heka daemon stop` stays down. Combine freely with "Start with system"
+(login autostart), which is a separate toggle.
+
+**Uninstall:** stop the daemon first (`heka daemon stop`, or
+`heka daemon startup off` if it starts at login), drag Heka.app to the
+Trash, then delete the CLI wiring: remove the `# Heka CLI` line from your
+shell profile and `rm -rf "$HOME/Library/Application Support/Heka/bin"`.
 
 Or build from source (Go 1.25, Node, and the
 [Wails CLI](https://wails.io/docs/gettingstarted/installation) required):
@@ -132,8 +165,42 @@ Or build from source (Go 1.25, Node, and the
 ```bash
 git clone https://github.com/AHS12/heka.git
 cd heka
-make build          # → build/bin/heka.exe
+make build          # → build/bin/Heka.app (macOS) / build/bin/heka.exe (Windows)
 ```
+
+## Development
+
+Want to build Heka from source or work on it? Here's the whole setup.
+
+**Prerequisites**
+
+- **Go 1.25+**
+- **Node.js 20+** (frontend)
+- **Wails CLI v2.15.0** — `go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0`
+- Platform toolchain: Xcode Command Line Tools on macOS; WebView2 and
+  [NSIS](https://nsis.sourceforge.io/) on Windows (the latter for installers)
+
+```bash
+git clone https://github.com/AHS12/heka.git
+cd heka
+cd frontend && npm install && cd ..
+make dev            # daemon + GUI with hot reload (Ctrl-C stops both)
+```
+
+**Common commands**
+
+| Command | What it does |
+| ------- | ------------ |
+| `make dev` | Daemon + GUI together, with hot reload |
+| `make test` | Go tests + frontend suite |
+| `make check` | Quality gate: vet + lint + tests |
+| `make build` | Local app bundle (macOS) / executable (Windows) |
+
+Tasks are plain YAML; edit them in the data directory's `tasks/` folder
+(`~/Library/Application Support/heka/tasks` on macOS,
+`%LOCALAPPDATA%\heka\tasks` on Windows) or create them in the app. Set
+`HEKA_HOME` to put the data directory somewhere else. Releasing and version
+bumps are documented in [docs/releasing.md](docs/releasing.md).
 
 ## Use cases — for humans
 

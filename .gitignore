@@ -1,6 +1,11 @@
 # Wails / Go
 build/bin/
 build/*.exe
+build/*.dmg
+build/*.app
+build/*.dll
+build/heka-dev
+build/dist/
 frontend/dist
 frontend/wailsjs
 
@@ -27,3 +32,5 @@ Thumbs.db
 .commandcode/
 todo.md
 punch.md
+.heka-mac-test.log
+specs

@@ -4,8 +4,8 @@ go 1.25.0
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
+	github.com/efeenesc/systray v0.0.1
 	github.com/gen2brain/beeep v0.11.2
-	github.com/getlantern/systray v1.2.2
 	github.com/minio/minio-go/v7 v7.3.0
 	github.com/oklog/ulid/v2 v2.1.2
 	github.com/robfig/cron/v3 v3.0.1
@@ -82,4 +82,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-// replace github.com/wailsapp/wails/v2 v2.11.0 => C:\Users\AHS12\go\pkg\mod
+replace github.com/efeenesc/systray => ./third_party/systray
