@@ -151,9 +151,13 @@ jobs:
             if ($cmd) { $makensis = $cmd.Source }
           }
           if (-not $makensis) { throw "makensis.exe not found after NSIS install" }
-          & $makensis -DINFO_PRODUCTVERSION="$env:VERSION" `
-            -DARG_WAILS_AMD64_BINARY=..\..\bin\heka-gui.exe `
-            -DARG_HEKA_AMD64_BINARY=..\..\bin\heka.exe project.nsi
+          $nsisArgs = @(
+            "-DINFO_PRODUCTVERSION=$env:VERSION"
+            "-DARG_WAILS_AMD64_BINARY=..\..\bin\heka-gui.exe"
+            "-DARG_HEKA_AMD64_BINARY=..\..\bin\heka.exe"
+            "project.nsi"
+          )
+          & $makensis $nsisArgs
 
       - name: Stage installer
         shell: pwsh
