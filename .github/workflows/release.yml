@@ -2,7 +2,7 @@ name: Release Installers
 
 # Automatic: creating/publishing a GitHub Release builds its tag and attaches
 # the installers. Manual: run this workflow with a release tag to rebuild and
-# replace that release's assets.
+# replace that release's assets. Manual runs also choose the platform(s).
 on:
   release:
     types: [published]
@@ -12,6 +12,15 @@ on:
         description: "Release tag to rebuild (e.g. v0.9.0)"
         required: true
         type: string
+      platform:
+        description: "Platform(s) to build"
+        required: true
+        default: both
+        type: choice
+        options:
+          - both
+          - windows
+          - macos
 
 permissions:
   contents: write
@@ -87,6 +96,7 @@ jobs:
 
   windows:
     needs: resolve
+    if: ${{ github.event_name == 'release' || inputs.platform == 'both' || inputs.platform == 'windows' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -110,6 +120,10 @@ jobs:
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
           "$(go env GOPATH)\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis --no-progress -y
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -128,8 +142,15 @@ jobs:
         env:
           VERSION: ${{ needs.resolve.outputs.version }}
         run: |
-          $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
-          if (-not (Test-Path $makensis)) { $makensis = "makensis" }
+          $makensis = @(
+            "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+            "$env:ProgramFiles\NSIS\makensis.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $makensis) {
+            $cmd = Get-Command makensis -ErrorAction SilentlyContinue
+            if ($cmd) { $makensis = $cmd.Source }
+          }
+          if (-not $makensis) { throw "makensis.exe not found after NSIS install" }
           & $makensis -DINFO_PRODUCTVERSION="$env:VERSION" `
             -DARG_WAILS_AMD64_BINARY=..\..\bin\heka-gui.exe `
             -DARG_HEKA_AMD64_BINARY=..\..\bin\heka.exe project.nsi
@@ -152,6 +173,7 @@ jobs:
 
   macos:
     needs: resolve
+    if: ${{ github.event_name == 'release' || inputs.platform == 'both' || inputs.platform == 'macos' }}
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
