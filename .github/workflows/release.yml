@@ -124,6 +124,25 @@ jobs:
         shell: pwsh
         run: choco install nsis --no-progress -y
 
+      # wails_tools.nsh embeds the WebView2 bootstrapper via File "tmp\...".
+      # Wails only writes that file during `wails build -nsis`; since this job
+      # invokes makensis directly, stage it from the Wails module cache (exact
+      # bytes Wails embeds), falling back to Microsoft's evergreen bootstrapper.
+      - name: Stage WebView2 bootstrapper
+        shell: pwsh
+        run: |
+          $dest = "build/windows/installer/tmp"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $target = Join-Path $dest "MicrosoftEdgeWebview2Setup.exe"
+          $src = Get-ChildItem -Path "$(go env GOMODCACHE)\github.com\wailsapp\wails\v2@*\internal\webview2runtime\MicrosoftEdgeWebview2Setup.exe" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($src) {
+            Copy-Item $src.FullName $target -Force
+          } else {
+            Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $target
+          }
+          if (-not (Test-Path $target)) { throw "Failed to stage WebView2 bootstrapper" }
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
