@@ -163,6 +163,17 @@ func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
 	a.fitWindowToScreen()
 	a.restoreWindow()
+	// launchd self-heal (darwin, SPEC-17 §4.12): if the agent plist
+	// registers the daemon but launchd lost the job (a failed reload after a
+	// toggle), re-bootstrap it now — the GUI is not the daemon's job, so the
+	// reload cannot kill it, and no daemon is running yet (the GUI opens
+	// before any daemon start), so no spawn collision. Best-effort: the user
+	// sees the state in Settings regardless.
+	if cfg, err := a.resolvedCfg(); err == nil {
+		if err := osapp.EnsureAgentLoaded(cfg); err != nil {
+			wruntime.LogInfo(a.ctx, "launchd agent heal: "+err.Error())
+		}
+	}
 }
 
 // taskbarMargin is the vertical slack reserved for the OS taskbar/dock when
@@ -764,55 +775,111 @@ func (a *App) StartupEnabled() (bool, error) {
 	return osapp.NewStartupRegistrar().Enabled()
 }
 
-// StartupSet enables or disables OS-level startup registration for the daemon.
+// StartupSet enables or disables OS-level startup registration for the
+// daemon. On macOS this reconciles the launchd agent (SPEC-17 §4.12) —
+// the Watchdog bit is preserved and a running daemon ends up in the right
+// supervision state; other platforms use the plain registrar.
 func (a *App) StartupSet(on bool) error {
-	if on {
-		exe, err := osapp.GUIExecutable()
-		if err != nil {
-			return err
-		}
-		return osapp.NewStartupRegistrar().Enable(exe)
+	exe, err := osapp.GUIExecutable()
+	if err != nil {
+		return err
 	}
-	return osapp.NewStartupRegistrar().Disable()
+	cfg, err := a.resolvedCfg()
+	if err != nil {
+		return err
+	}
+	return osapp.SetStartupAgent(cfg, exe, on, a.start)
 }
 
 // WatchdogStatusDTO is the shell's view of the OS watchdog (SPEC-10 §3):
-// installed plus the check interval, so the Settings toggle can render
-// "Checks every Nm" without guessing.
+// supported (hidden in Settings where the platform has none), installed,
+// and the delivery mode — "launchd" respawns on crash with no interval
+// (darwin, SPEC-17 §4.12), "scheduled" checks periodically (schtasks /
+// systemd timer).
 type WatchdogStatusDTO struct {
-	Installed       bool  `json:"installed"`
-	IntervalMinutes int64 `json:"interval_minutes"`
+	Supported       bool   `json:"supported"`
+	Installed       bool   `json:"installed"`
+	IntervalMinutes int64  `json:"interval_minutes"`
+	Mode            string `json:"mode"`
 }
 
 // WatchdogEnabled reports whether the OS-level watchdog is installed.
 func (a *App) WatchdogEnabled() (WatchdogStatusDTO, error) {
+	if !osapp.WatchdogSupported() {
+		return WatchdogStatusDTO{Supported: false, Mode: "none"}, nil
+	}
 	installed, interval, err := osapp.NewInstaller().Status()
 	if err != nil {
 		return WatchdogStatusDTO{}, err
 	}
-	// A platform Status() can report 0 while installed (unparseable OS
-	// output). Never surface 0m to the Settings page — fall back to the
-	// default install interval.
+	mode := osapp.WatchdogMode()
 	intervalMinutes := int64(interval.Minutes())
-	if installed && intervalMinutes <= 0 {
+	// A platform Status() can report 0 while installed. For scheduled
+	// watchdogs never surface 0m — fall back to the default interval. For
+	// the launchd mode the interval is meaningless (0 stays 0; the UI shows
+	// a hint instead of a picker).
+	if installed && intervalMinutes <= 0 && mode != "launchd" {
 		intervalMinutes = int64(osapp.DefaultWatchdogInterval.Minutes())
 	}
 	return WatchdogStatusDTO{
+		Supported:       true,
 		Installed:       installed,
 		IntervalMinutes: intervalMinutes,
+		Mode:            mode,
 	}, nil
 }
 
 // WatchdogSet installs or uninstalls the OS-level watchdog.
 func (a *App) WatchdogSet(on bool) error {
-	if on {
-		exe, err := osapp.GUIExecutable()
-		if err != nil {
-			return err
-		}
-		return osapp.NewInstaller().Install(osapp.DefaultWatchdogInterval, exe)
+	if !osapp.WatchdogSupported() {
+		return osapp.ErrWatchdogUnsupported
 	}
-	return osapp.NewInstaller().Uninstall()
+	exe, err := osapp.GUIExecutable()
+	if err != nil {
+		return err
+	}
+	cfg, err := a.resolvedCfg()
+	if err != nil {
+		return err
+	}
+	return osapp.SetWatchdogAgent(cfg, exe, on, a.start)
+}
+
+// ---- Terminal CLI (macOS, Herd-style — SPEC-18 §3.1). Local OS operations
+// like Startup/Watchdog: symlink in ~/Library/Application Support/Heka/bin
+// plus an idempotent PATH line; the daemon is not involved.
+
+// CLIToolStatusDTO is the shell's view of the `heka` CLI-on-PATH wiring.
+type CLIToolStatusDTO struct {
+	Supported bool   `json:"supported"`
+	Installed bool   `json:"installed"`
+	BinDir    string `json:"bin_dir"`
+	Profile   string `json:"profile,omitempty"`
+}
+
+// CLIToolStatus reports whether the `heka` symlink + PATH wiring is in place.
+func (a *App) CLIToolStatus() (CLIToolStatusDTO, error) {
+	if !osapp.CLIToolSupported() {
+		return CLIToolStatusDTO{Supported: false}, nil
+	}
+	linkOK, pathOK, binDir := osapp.CLIToolStatus()
+	out := CLIToolStatusDTO{Supported: true, Installed: linkOK && pathOK, BinDir: binDir}
+	if linkOK && !pathOK {
+		out.Profile = "symlink only — PATH entry missing"
+	}
+	return out, nil
+}
+
+// CLIToolSet installs or removes the terminal CLI wiring.
+func (a *App) CLIToolSet(on bool) error {
+	if !osapp.CLIToolSupported() {
+		return osapp.ErrCLIToolUnsupported
+	}
+	if on {
+		_, err := osapp.EnableCLI()
+		return err
+	}
+	return osapp.DisableCLI()
 }
 
 // PauseScheduler pauses the scheduler (SPEC-15 §2).

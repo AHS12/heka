@@ -1,10 +1,10 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package osapp
 
-// On non-Windows platforms the startup registrar and watchdog installer always
-// rewrite their unit/plist files on Enable, so the path is inherently current.
-// Report "does not point at exe" so RepairEntries re-registers (idempotently).
+// On non-Windows, non-darwin platforms the watchdog installer always
+// rewrites its unit file on Install, so the path is inherently current.
+// Report "does not point at exe" so RepairEntries re-registers
+// (idempotently). Windows parses schtasks output; darwin reads the launchd
+// agent plist directly.
 func taskPointsAtImpl(exe string) bool { return false }
-
-func startupPointsAtImpl(exe string) bool { return false }

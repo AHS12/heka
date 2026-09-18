@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +27,20 @@ import (
 func TestMain(m *testing.M) {
 	_ = os.Setenv("HEKA_PIPE_NAME", fmt.Sprintf("heka-ipc-test-%d", os.Getpid()))
 	os.Exit(m.Run())
+}
+
+// shortDataDir returns a HEKA_DATA_DIR override short enough that the unix
+// socket path stays under macOS's ~104-byte sun_path limit (SPEC-17 §8):
+// t.TempDir() homes nest <data>/heka.sock too deep. Unique per test so
+// sequential tests never share a data dir; removed on cleanup.
+var shortDataSeq atomic.Int64
+
+func shortDataDir(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(os.TempDir(),
+		fmt.Sprintf("heka-test-%d-%d", os.Getpid(), shortDataSeq.Add(1)))
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
 
 // fakeRunner is the SPEC-07 §7 seam: records Start/Cancel, never spawns.
@@ -63,7 +78,10 @@ func (f *fakeRunner) Cancel(slug string) error {
 // startTestServer serves a real server over the real platform transport.
 func startTestServer(t *testing.T, deps Deps) config.Config {
 	t.Helper()
-	cfg, err := config.Load(map[string]string{"LOCALAPPDATA": t.TempDir()}, t.TempDir())
+	cfg, err := config.Load(map[string]string{
+		"LOCALAPPDATA":  t.TempDir(),
+		"HEKA_DATA_DIR": shortDataDir(t),
+	}, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +180,7 @@ func TestSystemLogRoute(t *testing.T) {
 	cfg := startTestServer(t, Deps{
 		Health: func() Health { return Health{Core: "healthy"} },
 		Tasks:  database.Tasks(), Runs: database.Runs(), Schedules: database.Schedules(),
-		Logs:   database.Logs(), Runner: &fakeRunner{},
+		Logs: database.Logs(), Runner: &fakeRunner{},
 	})
 	client := NewClient(cfg)
 	logs, err := client.SystemLog(10)
@@ -339,7 +357,10 @@ func TestPanicBecomes500Envelope(t *testing.T) {
 }
 
 func TestClientDaemonNotRunning(t *testing.T) {
-	cfg, err := config.Load(map[string]string{"LOCALAPPDATA": t.TempDir()}, t.TempDir())
+	cfg, err := config.Load(map[string]string{
+		"LOCALAPPDATA":  t.TempDir(),
+		"HEKA_DATA_DIR": shortDataDir(t),
+	}, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

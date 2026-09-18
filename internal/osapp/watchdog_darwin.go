@@ -3,84 +3,91 @@
 package osapp
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
-// runCommand is the exec seam (tests swap it for a fake).
-var runCommand = exec.Command
-
-const plistName = "com.heka.watchdog.plist"
+// The darwin watchdog is launchd's KeepAlive guard on the shared agent
+// plist (SPEC-17 §4.12): a crash or signal respawns the daemon within
+// seconds; a clean exit (`heka daemon stop`, tray Quit) stays down. The
+// periodic-check machinery (WatchOnce/schtasks) stays Windows/Linux-only —
+// launchd supervision is instantaneous, so there is no interval.
+//
+// Installer semantics (repair-safe): Install/Status/Uninstall only manage
+// the plist — they never stop or restart the daemon (RepairEntries runs
+// from inside the daemon; killing itself would flap). The GUI toggle path
+// uses SetWatchdogAgent for the full transition.
 
 type launchdInstaller struct{}
 
 func newPlatformInstaller() Installer { return &launchdInstaller{} }
 
-func plistPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
+// Install rewrites the plist with the KeepAlive guard (preserving
+// RunAtLoad) and reloads launchd — safe to call from inside the running
+// daemon. The interval parameter is ignored: launchd supervision is
+// event-driven, not periodic.
+//
+// Guard: when the plist already carries the guard, points at exePath and
+// the agent is live, this is a no-op — a reload's bootout would kill the
+// calling daemon (it IS the job's process) and the post-bootout bootstrap
+// race ("5: Input/output error") can leave the job unregistered, which is
+// how supervised starts used to destroy themselves.
+func (launchdInstaller) Install(_ time.Duration, exePath string) error {
+	if f := readAgentFlags(); f.KeepAlive && agentLoaded() && taskPointsAtImpl(exePath) {
+		return nil
 	}
-	return filepath.Join(home, "Library", "LaunchAgents", plistName), nil
-}
-
-func writePlist(path, hekaPath string, interval time.Duration) error {
-	content := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>Label</key><string>com.heka.watchdog</string>
-	<key>ProgramArguments</key>
-	<array><string>%s</string><string>daemon</string><string>watch</string><string>--once</string></array>
-	<key>StartInterval</key><integer>%d</integer>
-	<key>RunAtLoad</key><true/>
-</dict>
-</plist>
-`, hekaPath, int(interval.Seconds()))
-	return os.WriteFile(path, []byte(content), 0o600)
-}
-
-func (i *launchdInstaller) Install(interval time.Duration, hekaPath string) error {
-	path, err := plistPath()
-	if err != nil {
+	f := readAgentFlags()
+	f.KeepAlive = true
+	if err := writeAgentPlist(exePath, f); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
+	if agentLoaded() {
+		return reloadAgent()
 	}
-	if err := writePlist(path, hekaPath, interval); err != nil {
-		return err
-	}
-	cmd := runCommand("launchctl", "load", "-w", path)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("launchctl load: %w: %s", err, out)
+	if _, err := runLaunchctl("bootstrap", launchDomain(), agentPlistPath()); err != nil {
+		if _, err2 := runLaunchctl("load", agentPlistPath()); err2 != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (i *launchdInstaller) Uninstall() error {
-	path, err := plistPath()
-	if err != nil {
-		return err
+// Uninstall removes the KeepAlive guard (preserving RunAtLoad) and reloads.
+// A supervised daemon survives the reload via respawn — call sites that
+// want the daemon running detached must handle that (SetWatchdogAgent
+// false → ApplyAgent boots it detached).
+func (launchdInstaller) Uninstall() error {
+	f := readAgentFlags()
+	f.KeepAlive = false
+	if f.RunAtLoad {
+		if err := writeAgentPlist(agentExecutable(), f); err != nil {
+			return err
+		}
+		return reloadAgent()
 	}
-	if _, err := runCommand("launchctl", "unload", "-w", path).CombinedOutput(); err != nil {
-		// already gone is fine
-	}
-	_ = os.Remove(path)
-	return nil
+	_, _ = runLaunchctl("bootout", launchDomain()+"/"+launchAgentID)
+	_, _ = runLaunchctl("unload", agentPlistPath())
+	return os.Remove(agentPlistPath())
 }
 
-func (i *launchdInstaller) Status() (bool, time.Duration, error) {
-	out, err := runCommand("launchctl", "list").CombinedOutput()
+// Status reports whether the KeepAlive guard is present in the plist.
+func (launchdInstaller) Status() (bool, time.Duration, error) {
+	return readAgentFlags().KeepAlive, 0, nil
+}
+
+// watchdogSupportedImpl: launchd supervision replaces the periodic check.
+func watchdogSupportedImpl() bool { return true }
+
+func watchdogModeImpl() string { return "launchd" }
+
+// taskPointsAtImpl reports whether the agent plist launches the given
+// binary. Where it does, RepairEntries leaves the plist alone; a stale path
+// (app moved/renamed after an upgrade) triggers an idempotent re-Install.
+func taskPointsAtImpl(exe string) bool {
+	data, err := os.ReadFile(agentPlistPath())
 	if err != nil {
-		return false, 0, nil
+		return false
 	}
-	if strings.Contains(string(out), "com.heka.watchdog") {
-		return true, DefaultWatchdogInterval, nil
-	}
-	return false, 0, nil
+	return strings.Contains(string(data), "<string>"+exe+"</string>")
 }

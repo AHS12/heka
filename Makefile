@@ -1,6 +1,6 @@
 # Heka build tooling — single entry point for dev, build, and checks (SPEC-01 §4).
 
-VERSION   ?= 0.8.6
+VERSION   ?= 0.9.0
 BIN_DIR   := build
 DIST_DIR  := $(BIN_DIR)/dist
 LDFLAGS   := -X main.appVersion=$(VERSION)
@@ -28,7 +28,11 @@ endif
 
 ## dev: run the daemon and GUI together for development (Ctrl-C stops both)
 dev:
+ifeq ($(OS),Windows_NT)
 	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1
+else
+	./scripts/dev.sh
+endif
 
 ## dev-core: run only the daemon in the foreground (own terminal)
 dev-core: frontend/dist
@@ -41,6 +45,8 @@ ifeq ($(OS),Windows_NT)
 	wails build -windowsconsole -o heka$(EXE) -ldflags "$(LDFLAGS)"
 else
 	wails build -ldflags "$(LDFLAGS)"
+	codesign --force --deep -s - build/bin/Heka.app
+	codesign --verify --deep --strict build/bin/Heka.app
 endif
 
 ## test: Go tests + frontend suite (builds the frontend first so the go:embed works)
@@ -101,24 +107,23 @@ release-dev: frontend/dist
 ifeq ($(OS),Windows_NT)
 	wails build -clean -o heka-gui$(EXE) -ldflags "$(LDFLAGS)"
 	wails build -windowsconsole -o heka$(EXE) -ldflags "$(LDFLAGS)"
+	powershell -NoProfile -Command "Copy-Item build\bin\heka$(EXE) $(DIST_DIR)\heka$(EXE) -Force"
+	powershell -NoProfile -Command "Copy-Item build\bin\heka-gui$(EXE) $(DIST_DIR)\heka-gui$(EXE) -Force"
+	@echo   Dev build v$(VERSION) ^> $(DIST_DIR)/
 else
 	wails build -clean -nopackage -ldflags "$(LDFLAGS)"
+	cp build/bin/heka$(EXE) $(DIST_DIR)/heka$(EXE)
+	@echo   Dev build v$(VERSION) '>' $(DIST_DIR)/
 endif
-	powershell -NoProfile -Command "Copy-Item build\bin\heka$(EXE) $(DIST_DIR)\heka$(EXE) -Force"
-ifeq ($(OS),Windows_NT)
-	powershell -NoProfile -Command "Copy-Item build\bin\heka-gui$(EXE) $(DIST_DIR)\heka-gui$(EXE) -Force"
-endif
-	@echo.
-	@echo   Dev build v$(VERSION) ^> $(DIST_DIR)/
 
 ## release: full multi-platform build with installers
 release: release-windows release-linux release-mac
-	@echo.
-	@echo   All platforms built ^> $(DIST_DIR)/
-	@echo.
+	@echo   All platforms built > $(DIST_DIR)/
 
 ## release-windows: NSIS installer containing console and GUI executables
+## (Windows host only — NSIS + code signing)
 release-windows: frontend/dist
+ifeq ($(OS),Windows_NT)
 	@echo ^> Windows...
 	$(call MKDIR_P,$(DIST_DIR))
 	wails build -clean -o heka-gui$(EXE) -ldflags "$(LDFLAGS)"
@@ -126,9 +131,13 @@ release-windows: frontend/dist
 	cd build\windows\installer && set "PATH=C:\Program Files (x86)\NSIS;$(PATH)" && makensis -DINFO_PRODUCTVERSION=$(VERSION) -DARG_WAILS_AMD64_BINARY=..\..\bin\heka-gui.exe -DARG_HEKA_AMD64_BINARY=..\..\bin\heka.exe project.nsi
 	powershell -NoProfile -Command "Copy-Item build\bin\Heka-amd64-installer.exe $(DIST_DIR)\heka-$(VERSION)-amd64-setup.exe -Force"
 	@echo   OK $(DIST_DIR)/heka-$(VERSION)-amd64-setup.exe
+else
+	$(error release-windows requires a Windows host)
+endif
 
-## release-linux: binary + .deb package (cross-compiled from Windows)
+## release-linux: binary + .deb package (Windows host with dpkg-deb on PATH)
 release-linux: frontend/dist
+ifeq ($(OS),Windows_NT)
 	@echo ^> Linux (deb^)...
 	$(call MKDIR_P,$(DIST_DIR)/linux-deb/usr/bin)
 	$(call MKDIR_P,$(DIST_DIR)/linux-deb/DEBIAN)
@@ -147,13 +156,21 @@ release-linux: frontend/dist
 	dpkg-deb --build $(DIST_DIR)/linux-deb $(DIST_DIR)/heka-$(VERSION)-amd64.deb
 	$(call RM_RF,$(DIST_DIR)/linux-deb)
 	@echo   OK $(DIST_DIR)/heka-$(VERSION)-amd64.deb
+else
+	$(error release-linux currently requires a Windows host)
+endif
 
-## release-mac: .app bundle (must be built on macOS or a CI mac runner)
+## release-mac: universal .app + ad-hoc signature + DMG (macOS host only)
 release-mac: frontend/dist
-	@echo ^> macOS (.app^)...
+	@echo "> macOS (.app)..."
 	$(call MKDIR_P,$(DIST_DIR))
 	wails build -clean -platform darwin/universal -ldflags "$(LDFLAGS)"
-	@echo   OK build/bin/heka.app
+	codesign --force --deep -s - build/bin/Heka.app
+	codesign --verify --deep --strict build/bin/Heka.app
+	@echo "> macOS (DMG)..."
+	./build/darwin/make_dmg.sh
+	mv build/bin/heka-$(VERSION).dmg $(DIST_DIR)/heka-$(VERSION).dmg
+	@echo   OK $(DIST_DIR)/heka-$(VERSION).dmg
 
 # main.go embeds all:frontend/dist, so it must exist for go build/test.
 frontend/dist:

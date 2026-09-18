@@ -16,6 +16,7 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -29,12 +30,20 @@ import (
 
 const appName = "Heka"
 
-const (
+// Default window geometry (SPEC-17 §4.11): the fixed 1310×940 default was
+// sized for Windows; on darwin 1194×810 fits comfortably on 13" MacBooks.
+var (
 	defaultWinWidth  = 1310
 	defaultWinHeight = 940
 )
 
-var appVersion = "0.8.6"
+func init() {
+	if runtime.GOOS == "darwin" {
+		defaultWinWidth, defaultWinHeight = 1194, 810
+	}
+}
+
+var appVersion = "0.9.0"
 
 //go:embed CHANGELOG.md
 var changelog string
@@ -72,13 +81,26 @@ func resolveMode(args []string) mode {
 func main() {
 	switch resolveMode(os.Args[1:]) {
 	case modeGUI:
+		// Darwin TTY heuristic (SPEC-18 §3.1): a bare `heka` typed in a
+		// terminal prints help instead of opening the window; Dock/Finder
+		// launches have no TTY and open the GUI as before. `heka gui`
+		// explicitly forces the window either way.
+		if interactiveTerminal() {
+			runCLI()
+			return
+		}
 		runGUI()
 	case modeDaemon:
 		runDaemon()
 	case modeCLI:
-		if err := cli.RunWithVersion(os.Args[1:], appVersion); err != nil {
-			os.Exit(1)
-		}
+		runCLI()
+	}
+}
+
+// runCLI dispatches to the cobra tree with the process arguments.
+func runCLI() {
+	if err := cli.RunWithVersion(os.Args[1:], appVersion); err != nil {
+		os.Exit(1)
 	}
 }
 

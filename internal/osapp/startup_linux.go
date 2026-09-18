@@ -111,3 +111,7 @@ func (r *systemdStartupRegistrar) Enabled() (bool, error) {
 	_, err := os.Stat(autostartPath())
 	return err == nil, nil
 }
+
+// startupPointsAtImpl always reports "stale" — Enable rewrites the unit and
+// desktop files, so RepairEntries re-registers idempotently.
+func startupPointsAtImpl(exe string) bool { return false }

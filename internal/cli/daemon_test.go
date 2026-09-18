@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +22,19 @@ import (
 func TestMain(m *testing.M) {
 	_ = os.Setenv("HEKA_PIPE_NAME", fmt.Sprintf("heka-cli-test-%d", os.Getpid()))
 	os.Exit(m.Run())
+}
+
+// shortDataDir returns a HEKA_DATA_DIR override short enough that the unix
+// socket path stays under macOS's ~104-byte sun_path limit (SPEC-17 §8):
+// t.TempDir() homes nest <data>/heka.sock too deep. Unique per test.
+var shortDataSeq atomic.Int64
+
+func shortDataDir(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(os.TempDir(),
+		fmt.Sprintf("heka-test-%d-%d", os.Getpid(), shortDataSeq.Add(1)))
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
 
 // stubClient is the APIClient seam (SPEC-08 §4).
@@ -61,7 +76,7 @@ func (s *stubClient) Run(string) (ipc.Run, error)                 { return s.run
 func (s *stubClient) ListRuns(_ ipc.RunFilters) (ipc.RunListResult, error) {
 	return ipc.RunListResult{Runs: s.runs, Total: len(s.runs)}, s.err
 }
-func (s *stubClient) ListSchedules() ([]ipc.Schedule, error)      { return s.schedules, s.err }
+func (s *stubClient) ListSchedules() ([]ipc.Schedule, error) { return s.schedules, s.err }
 func (s *stubClient) ReconcileSchedules() error {
 	if s.reconcileErr != nil {
 		return s.reconcileErr
@@ -454,7 +469,10 @@ func TestSchedulesMissedBadSince(t *testing.T) {
 }
 
 func TestDaemonStatusWhenDown(t *testing.T) {
-	cfg, err := config.Load(map[string]string{"LOCALAPPDATA": t.TempDir()}, t.TempDir())
+	cfg, err := config.Load(map[string]string{
+		"LOCALAPPDATA":  t.TempDir(),
+		"HEKA_DATA_DIR": shortDataDir(t),
+	}, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,7 +520,10 @@ func TestUnknownCommand(t *testing.T) {
 }
 
 func TestWatchOnceFlagsThroughCLI(t *testing.T) {
-	cfg, err := config.Load(map[string]string{"LOCALAPPDATA": t.TempDir()}, t.TempDir())
+	cfg, err := config.Load(map[string]string{
+		"LOCALAPPDATA":  t.TempDir(),
+		"HEKA_DATA_DIR": shortDataDir(t),
+	}, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -523,7 +544,10 @@ func TestWatchOnceFlagsThroughCLI(t *testing.T) {
 }
 
 func TestWatchdogStatusCommand(t *testing.T) {
-	cfg, err := config.Load(map[string]string{"LOCALAPPDATA": t.TempDir()}, t.TempDir())
+	cfg, err := config.Load(map[string]string{
+		"LOCALAPPDATA":  t.TempDir(),
+		"HEKA_DATA_DIR": shortDataDir(t),
+	}, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

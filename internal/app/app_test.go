@@ -194,6 +194,9 @@ func (f fakeInstaller) Uninstall() error                     { return f.err }
 func (f fakeInstaller) Status() (bool, time.Duration, error) { return f.installed, f.interval, f.err }
 
 func TestWatchdogEnabledMapsStatusDTO(t *testing.T) {
+	supported := osapp.WatchdogSupported
+	osapp.WatchdogSupported = func() bool { return true }
+	defer func() { osapp.WatchdogSupported = supported }()
 	orig := osapp.NewInstaller
 	osapp.NewInstaller = func() osapp.Installer {
 		return fakeInstaller{installed: true, interval: 5 * time.Minute}
@@ -205,12 +208,15 @@ func TestWatchdogEnabledMapsStatusDTO(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !dto.Installed || dto.IntervalMinutes != 5 {
-		t.Fatalf("dto = %+v, want installed + 5m", dto)
+	if !dto.Supported || !dto.Installed || dto.IntervalMinutes != 5 {
+		t.Fatalf("dto = %+v, want supported + installed + 5m", dto)
 	}
 }
 
 func TestWatchdogEnabledNotInstalled(t *testing.T) {
+	supported := osapp.WatchdogSupported
+	osapp.WatchdogSupported = func() bool { return true }
+	defer func() { osapp.WatchdogSupported = supported }()
 	orig := osapp.NewInstaller
 	osapp.NewInstaller = func() osapp.Installer {
 		return fakeInstaller{installed: false}
@@ -229,7 +235,15 @@ func TestWatchdogEnabledNotInstalled(t *testing.T) {
 
 func TestWatchdogEnabledZeroIntervalFallsBackToDefault(t *testing.T) {
 	// A platform Status() that reports installed with an unparseable interval
-	// must never surface 0m to the Settings page.
+	// must never surface 0m to the Settings page — for scheduled watchdogs.
+	// The launchd mode (darwin) is interval-less by design, so the test
+	// forces the scheduled mode.
+	supported := osapp.WatchdogSupported
+	osapp.WatchdogSupported = func() bool { return true }
+	defer func() { osapp.WatchdogSupported = supported }()
+	mode := osapp.WatchdogMode
+	osapp.WatchdogMode = func() string { return "scheduled" }
+	defer func() { osapp.WatchdogMode = mode }()
 	orig := osapp.NewInstaller
 	osapp.NewInstaller = func() osapp.Installer {
 		return fakeInstaller{installed: true, interval: 0}
@@ -246,7 +260,36 @@ func TestWatchdogEnabledZeroIntervalFallsBackToDefault(t *testing.T) {
 	}
 }
 
+func TestWatchdogEnabledLaunchdModeKeepsZeroInterval(t *testing.T) {
+	// launchd respawns on crash — there is no interval to surface, so 0 is
+	// the correct value and the UI renders a hint instead of a picker
+	// (SPEC-17 §4.12).
+	supported := osapp.WatchdogSupported
+	osapp.WatchdogSupported = func() bool { return true }
+	defer func() { osapp.WatchdogSupported = supported }()
+	mode := osapp.WatchdogMode
+	osapp.WatchdogMode = func() string { return "launchd" }
+	defer func() { osapp.WatchdogMode = mode }()
+	orig := osapp.NewInstaller
+	osapp.NewInstaller = func() osapp.Installer {
+		return fakeInstaller{installed: true, interval: 0}
+	}
+	defer func() { osapp.NewInstaller = orig }()
+
+	a := NewApp("Heka", "0.1.0", "# Changelog")
+	dto, err := a.WatchdogEnabled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !dto.Installed || dto.IntervalMinutes != 0 || dto.Mode != "launchd" {
+		t.Fatalf("dto = %+v, want installed, 0m, launchd", dto)
+	}
+}
+
 func TestWatchdogEnabledErrorPropagates(t *testing.T) {
+	supported := osapp.WatchdogSupported
+	osapp.WatchdogSupported = func() bool { return true }
+	defer func() { osapp.WatchdogSupported = supported }()
 	orig := osapp.NewInstaller
 	osapp.NewInstaller = func() osapp.Installer {
 		return fakeInstaller{err: errors.New("schtasks boom")}
@@ -256,5 +299,25 @@ func TestWatchdogEnabledErrorPropagates(t *testing.T) {
 	a := NewApp("Heka", "0.1.0", "# Changelog")
 	if _, err := a.WatchdogEnabled(); err == nil || err.Error() != "schtasks boom" {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestWatchdogEnabledUnsupportedPlatform(t *testing.T) {
+	// Where the watchdog does not exist (darwin: launchd KeepAlive covers
+	// restarts), Settings must see supported=false and Set must refuse.
+	supported := osapp.WatchdogSupported
+	osapp.WatchdogSupported = func() bool { return false }
+	defer func() { osapp.WatchdogSupported = supported }()
+
+	a := NewApp("Heka", "0.1.0", "# Changelog")
+	dto, err := a.WatchdogEnabled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dto.Supported || dto.Installed {
+		t.Fatalf("dto = %+v, want unsupported and not installed", dto)
+	}
+	if err := a.WatchdogSet(true); !errors.Is(err, osapp.ErrWatchdogUnsupported) {
+		t.Fatalf("WatchdogSet err = %v, want ErrWatchdogUnsupported", err)
 	}
 }

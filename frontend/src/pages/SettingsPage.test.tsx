@@ -122,11 +122,36 @@ describe('SettingsPage reliability', () => {
     expect(screen.queryByLabelText('Watchdog check interval')).not.toBeInTheDocument()
   })
 
+  it('hides the watchdog toggle where the platform has no watchdog (macOS)', async () => {
+    const {WatchdogEnabled} = await import('@wailsjs/go/app/App')
+    vi.mocked(WatchdogEnabled).mockResolvedValue({
+      supported: false,
+      installed: false,
+      interval_minutes: 0,
+      mode: 'none',
+    })
+    mGetSettings.mockResolvedValue({
+      log_retention_days: 90,
+      sound_success: 'system',
+      sound_failure: 'system',
+      sound_timeout: 'system',
+      reconcile_interval_min: 5,
+      watchdog_interval_min: 5,
+    })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('tab', {name: /Reliability/}))
+    await screen.findByLabelText('Missed-run reconciliation interval')
+    expect(screen.queryByText('Watchdog guard')).not.toBeInTheDocument()
+  })
+
   it('saves a new watchdog interval alongside reconcile settings', async () => {
     const {WatchdogEnabled} = await import('@wailsjs/go/app/App')
     vi.mocked(WatchdogEnabled).mockResolvedValue({
+      supported: true,
       installed: true,
       interval_minutes: 5,
+      mode: 'scheduled',
     })
     mGetSettings.mockResolvedValue({
       log_retention_days: 90,
@@ -173,6 +198,61 @@ describe('SettingsPage scheduler pause', () => {
     await user.click(toggle)
     await waitFor(() => expect(mResume).toHaveBeenCalledTimes(1))
     expect(mPause).not.toHaveBeenCalled()
+  })
+})
+
+describe('SettingsPage terminal CLI', () => {
+  async function openStartup(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole('tab', {name: /Startup/}))
+    return screen.findByText('Terminal CLI')
+  }
+
+  it('hides the Terminal CLI toggle where the platform has no CLI wiring', async () => {
+    const {CLIToolStatus} = await import('@wailsjs/go/app/App')
+    vi.mocked(CLIToolStatus).mockResolvedValue({
+      supported: false, installed: false, bin_dir: '',
+    })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('tab', {name: /Startup/}))
+    expect(await screen.findByText('Start with system')).toBeInTheDocument()
+    expect(screen.queryByText('Terminal CLI')).not.toBeInTheDocument()
+  })
+
+  it('enables the terminal CLI from the Startup tab', async () => {
+    const {CLIToolStatus, CLIToolSet} = await import('@wailsjs/go/app/App')
+    vi.mocked(CLIToolStatus).mockResolvedValue({
+      supported: true,
+      installed: false,
+      bin_dir: '/Users/test/Library/Application Support/Heka/bin',
+    })
+    vi.mocked(CLIToolSet).mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderPage()
+    expect(await openStartup(user)).toBeInTheDocument()
+
+    await user.click(await screen.findByRole('switch', {name: 'Terminal CLI'}))
+    await waitFor(() =>
+      expect(vi.mocked(CLIToolSet)).toHaveBeenCalledWith(true)
+    )
+  })
+
+  it('disables the terminal CLI when already installed', async () => {
+    const {CLIToolStatus, CLIToolSet} = await import('@wailsjs/go/app/App')
+    vi.mocked(CLIToolStatus).mockResolvedValue({
+      supported: true,
+      installed: true,
+      bin_dir: '/Users/test/Library/Application Support/Heka/bin',
+    })
+    vi.mocked(CLIToolSet).mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderPage()
+    expect(await openStartup(user)).toBeInTheDocument()
+
+    await user.click(await screen.findByRole('switch', {name: 'Terminal CLI'}))
+    await waitFor(() =>
+      expect(vi.mocked(CLIToolSet)).toHaveBeenCalledWith(false)
+    )
   })
 })
 

@@ -446,9 +446,24 @@ func TestReconcileDoesNotReplayFutureTick(t *testing.T) {
 	// Last run sits a couple of hours after the most recent tick whose next
 	// activation is still in the future (the "last ran 14th 10:20, booted
 	// later that same cycle" case); any machine-local time is handled by
-	// walking back until last-run + margin is comfortably behind now.
+	// walking back until no 09:00 tick lies inside (last-run, now] — only
+	// then is the next activation strictly in the future and reconcile must
+	// stay silent.
 	prevTick := time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 9, 0, 0, 0, time.Now().Location())
-	for !prevTick.Add(90 * time.Minute).Before(time.Now().Add(-reconcileFreshness)) {
+	for {
+		lastRun := prevTick.Add(2 * time.Hour)
+		if !lastRun.Before(time.Now()) {
+			break // last-run itself is in the future: the window is empty
+		}
+		// Is there a tick between last-run and now? The 09:00 of last-run's
+		// day if it is still ahead, else the next day's 09:00.
+		candidate := time.Date(lastRun.Year(), lastRun.Month(), lastRun.Day(), 9, 0, 0, 0, lastRun.Location())
+		if !candidate.After(lastRun) {
+			candidate = candidate.AddDate(0, 0, 1)
+		}
+		if candidate.After(time.Now()) {
+			break
+		}
 		prevTick = prevTick.AddDate(0, 0, -1)
 	}
 	lastRunAt := prevTick.Add(2 * time.Hour)

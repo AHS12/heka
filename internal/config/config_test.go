@@ -3,10 +3,18 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
 const winLocalAppData = `C:\Users\alice\AppData\Local`
+
+// normalize maps both separators to "/" so windows-path literals compare
+// equal to filepath.Join output on every host.
+func normalize(p string) string {
+	return strings.ReplaceAll(p, `\`, "/")
+}
 
 func TestDefaultDataDirWindows(t *testing.T) {
 	for name, tt := range map[string]struct {
@@ -18,7 +26,9 @@ func TestDefaultDataDirWindows(t *testing.T) {
 		"home fallback":        {map[string]string{}, `C:\Users\alice\AppData\Local\heka`},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if got := defaultDataDir(tt.env, `C:\Users\alice`, "windows"); got != tt.want {
+			// filepath.Join emits the host separator, so compare with the
+			// literal normalized the same way (these tests run on every GOOS).
+			if got := defaultDataDir(tt.env, `C:\Users\alice`, "windows"); normalize(got) != normalize(tt.want) {
 				t.Fatalf("defaultDataDir = %q, want %q", got, tt.want)
 			}
 		})
@@ -41,7 +51,50 @@ func TestDefaultDataDirPosix(t *testing.T) {
 	}
 }
 
+// TestDefaultDataDirDarwin pins the macOS table: the Library default, and
+// the legacy-preferring rule for installs made before the port (SPEC-17
+// §4.2) — no data is ever moved, and an existing new-style dir wins.
+func TestDefaultDataDirDarwin(t *testing.T) {
+	home := "/home/alice"
+	preferred := filepath.Join(home, "Library", "Application Support", "heka")
+	legacy := filepath.Join(home, ".local", "share", "heka")
+
+	stubDirHasData := func(legacyHas, preferredHas bool) func() {
+		orig := dirHasData
+		dirHasData = func(dir string) bool {
+			if strings.HasSuffix(dir, legacy) {
+				return legacyHas
+			}
+			return preferredHas
+		}
+		return func() { dirHasData = orig }
+	}
+
+	for name, tt := range map[string]struct {
+		legacyHas, preferredHas bool
+		want                    string
+	}{
+		"fresh install":       {false, false, preferred},
+		"legacy carries data": {true, false, legacy},
+		"new install wins":    {true, true, preferred},
+		"legacy empty":        {false, true, preferred},
+	} {
+		t.Run(name, func(t *testing.T) {
+			restore := stubDirHasData(tt.legacyHas, tt.preferredHas)
+			defer restore()
+			if got := defaultDataDir(nil, home, "darwin"); got != tt.want {
+				t.Fatalf("defaultDataDir = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestLoadDefaults(t *testing.T) {
+	// The Load pipeline is OS-real (absolutize uses the host separators), so
+	// windows-flavored Load tests only run on windows.
+	if runtime.GOOS != "windows" {
+		t.Skip("windows-only Load pipeline test")
+	}
 	cfg, err := Load(map[string]string{"LOCALAPPDATA": winLocalAppData}, `C:\Users\alice`)
 	if err != nil {
 		t.Fatal(err)
@@ -63,6 +116,29 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultsDarwin(t *testing.T) {
+	// Mirror of TestLoadDefaults for the macOS pipeline: fresh install →
+	// Library dir, socket inside the data dir (XDG_RUNTIME_DIR is normally
+	// unset on macOS).
+	if runtime.GOOS != "darwin" {
+		t.Skip("darwin-only Load pipeline test")
+	}
+	cfg, err := Load(map[string]string{}, "/home/alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantData := filepath.Join("/home/alice", "Library", "Application Support", "heka")
+	if cfg.DataDir != wantData {
+		t.Errorf("DataDir = %q, want %q", cfg.DataDir, wantData)
+	}
+	if cfg.TasksDir != filepath.Join(wantData, "tasks") {
+		t.Errorf("TasksDir = %q", cfg.TasksDir)
+	}
+	if cfg.SocketDir != wantData {
+		t.Errorf("SocketDir = %q, want the data dir", cfg.SocketDir)
+	}
+}
+
 func TestSocketDirBehavior(t *testing.T) {
 	// socketDir's goos parameter keeps both platform behaviors testable on
 	// any host (SPEC-02 §4).
@@ -79,6 +155,9 @@ func TestSocketDirBehavior(t *testing.T) {
 }
 
 func TestHEKAHOMEShiftsBase(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows-only Load pipeline test")
+	}
 	cfg, err := Load(map[string]string{
 		"LOCALAPPDATA": winLocalAppData,
 		"HEKA_HOME":    `D:\heka`,
@@ -186,6 +265,9 @@ func TestValidation(t *testing.T) {
 }
 
 func TestMissingConfigFileIsDefaults(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows-only Load pipeline test")
+	}
 	dir := t.TempDir()
 	cfg, err := Load(map[string]string{"LOCALAPPDATA": dir}, dir)
 	if err != nil {

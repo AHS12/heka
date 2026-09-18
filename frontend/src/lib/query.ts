@@ -1,6 +1,6 @@
 // lib/query.ts (SPEC-12 §5) — TanStack Query hooks for daemon state.
 // Health polls every 5 s; when the daemon is down polling backs off to 10 s.
-import {useCallback, useState} from 'react'
+import {useCallback, useEffect, useRef, useState} from 'react'
 import {useQuery, useQueryClient} from '@tanstack/react-query'
 import * as api from './api'
 
@@ -14,7 +14,7 @@ export function useDaemonMode() {
   const queryClient = useQueryClient()
   const [starting, setStarting] = useState(false)
 
-  const {data} = useQuery({
+  const {data, status} = useQuery({
     queryKey: ['daemon-status'],
     queryFn: api.daemonStatus,
     refetchInterval: (query) =>
@@ -22,7 +22,39 @@ export function useDaemonMode() {
     retry: false,
   })
 
-  const mode: DaemonMode = starting ? 'starting' : (data ?? 'not-running')
+  // An unreachable daemon is a stopped daemon as far as the UI is
+  // concerned: retry:false keeps the last good data in state on errors, so
+  // `data ?? 'not-running'` alone would keep reporting 'running' forever
+  // after the daemon dies (the stopped-but-still-healthy GUI bug).
+  const mode: DaemonMode =
+    starting
+      ? 'starting'
+      : data === 'running' && status !== 'error'
+        ? 'running'
+        : 'not-running'
+
+  // Down → up recovery (SPEC-12 §5): with retry:false, every query that
+  // errored while the daemon was down stays dead — tasks, runs, schedules
+  // never refill on their own and the dashboard looks frozen after the
+  // daemon starts. When the poll observes a real not-running → running
+  // transition, refill everything mounted. A failed poll counts as
+  // not-running; the initial unknown state (never observed) does not, so a
+  // daemon that was already up on app open does not trigger a refill.
+  const prevObserved = useRef<DaemonMode | undefined>(undefined)
+  useEffect(() => {
+    const observed: DaemonMode | undefined =
+      status === 'error'
+        ? 'not-running'
+        : data === undefined
+          ? undefined
+          : data === 'running'
+            ? 'running'
+            : 'not-running'
+    if (observed === 'running' && prevObserved.current === 'not-running') {
+      void queryClient.invalidateQueries()
+    }
+    prevObserved.current = observed
+  }, [data, status, queryClient])
 
   const start = useCallback(async () => {
     if (starting) return
@@ -30,9 +62,9 @@ export function useDaemonMode() {
     try {
       await api.startDaemon()
     } finally {
-      // Force an immediate re-poll so the pill flips as soon as the daemon
-      // answers (SPEC-12 §5): not waiting a full 5 s cycle.
-      await queryClient.invalidateQueries({queryKey: ['daemon-status']})
+      // startDaemon resolves once the daemon answers health, so every
+      // query (not just the status poll) can refetch immediately.
+      await queryClient.invalidateQueries()
       setStarting(false)
     }
   }, [starting, queryClient])

@@ -18,12 +18,17 @@ This updates all version sources in one shot:
 | `frontend/package-lock.json` | lockfile version (keeps `npm ci` in sync) |
 
 No separate steps — `make release-windows` and `npm ci` pick up the new
-version automatically.
+version automatically. The macOS app bundle, DMG filename, and NSIS installer
+version are all derived from these five files at build time.
 
 ## Verify
 
 ```bash
+node scripts/bump-version.js --check 0.5.1   # fail if any source drifts
 make check              # Go tests + lint
 cd frontend && npm test # Frontend tests
 make release-windows    # Build installer (uses the new version)
 ```
+
+For the full release flow (tag, GitHub Actions, rebuilding an existing
+release), see [releasing.md](releasing.md).

@@ -56,7 +56,11 @@ func Load(env map[string]string, home string) (Config, error) {
 	// where "data" accounts for the env-level data-dir override already.
 	cfgPath := env["HEKA_CONFIG"]
 	if cfgPath == "" {
-		cfgPath = filepath.Join(cfg.DataDir, configFileName)
+		base := cfg.DataDir
+		if v := env["HEKA_DATA_DIR"]; v != "" {
+			base = v
+		}
+		cfgPath = filepath.Join(base, configFileName)
 	}
 	data, err := os.ReadFile(cfgPath)
 	switch {
@@ -115,7 +119,8 @@ func defaults(env map[string]string, home string) Config {
 // defaultDataDir is the per-platform base directory. The goos parameter is
 // injectable so both platform tables are testable on any machine.
 func defaultDataDir(env map[string]string, home, goos string) string {
-	if goos == "windows" {
+	switch goos {
+	case "windows":
 		if v := env["LOCALAPPDATA"]; v != "" {
 			return filepath.Join(v, "heka")
 		}
@@ -123,11 +128,36 @@ func defaultDataDir(env map[string]string, home, goos string) string {
 			return filepath.Join(v, "AppData", "Local", "heka")
 		}
 		return filepath.Join(home, "AppData", "Local", "heka")
+	case "darwin":
+		preferred := filepath.Join(home, "Library", "Application Support", "heka")
+		// Installs made before the macOS port (SPEC-17 §4.2) keep their
+		// data where the XDG fallback put it — no data is ever moved, and
+		// an existing new-style install wins.
+		legacy := filepath.Join(home, ".local", "share", "heka")
+		if dirHasData(legacy) && !dirHasData(preferred) {
+			return legacy
+		}
+		return preferred
+	default:
+		if v := env["XDG_DATA_HOME"]; v != "" {
+			return filepath.Join(v, "heka")
+		}
+		return filepath.Join(home, ".local", "share", "heka")
 	}
-	if v := env["XDG_DATA_HOME"]; v != "" {
-		return filepath.Join(v, "heka")
+}
+
+// dirHasData reports whether dir holds an existing Heka install (database,
+// config file, or a non-empty tasks dir). It is a var so tests can exercise
+// the legacy-dir rule without touching a real filesystem.
+var dirHasData = func(dir string) bool {
+	if _, err := os.Stat(filepath.Join(dir, "heka.db")); err == nil {
+		return true
 	}
-	return filepath.Join(home, ".local", "share", "heka")
+	if _, err := os.Stat(filepath.Join(dir, "config.yaml")); err == nil {
+		return true
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, "tasks"))
+	return err == nil && len(entries) > 0
 }
 
 // socketDir is the POSIX IPC socket directory; Windows uses named pipes and

@@ -111,3 +111,8 @@ func (i *schtasksInstaller) Status() (bool, time.Duration, error) {
 	}
 	return true, interval, nil
 }
+
+// watchdogSupportedImpl: this platform ships the periodic watchdog.
+func watchdogSupportedImpl() bool { return true }
+
+func watchdogModeImpl() string { return "scheduled" }

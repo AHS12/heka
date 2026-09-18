@@ -13,8 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gen2brain/beeep"
-
 	"heka/internal/config"
 	"heka/internal/core/executor"
 	"heka/internal/core/scheduler"
@@ -194,12 +192,11 @@ func startCore(cfg config.Config, version string, database *db.DB) (*Daemon, htt
 	d := newDaemon(cfg, version, database)
 	d.exec = executor.New(database, cfg.MaxOutputBytes, 5*time.Second, resolver, cfg.RunArtifactsDir)
 
-	// Notifications (SPEC-11).
-	beeep.AppName = "Heka"
+	// Notifications (SPEC-11). Desktop toasts go through notify.DesktopToast
+	// (SPEC-17 §4.13): native UNUserNotification first (bundle icon on
+	// macOS), beeep fallback.
 	notifier := notify.New(
-		notify.WithDesktop(func(title, message string) error {
-			return beeep.Notify(title, message, "")
-		}),
+		notify.WithDesktop(notify.DesktopToast),
 		notify.WithResolver(resolver),
 		notify.WithLogger(func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format+"\n", args...)
@@ -453,6 +450,14 @@ func (d *Daemon) applyWatchdogTask() error {
 		return nil
 	}
 	if int(interval.Minutes()) == d.watchdogInterval() {
+		return nil
+	}
+	if osapp.WatchdogMode() == "launchd" {
+		// launchd supervises on demand — there is no cadence to reconcile.
+		// Re-Installing from inside the running daemon would reload the
+		// agent, and a reload's bootout kills the caller (it IS the job's
+		// process): the daemon would destroy itself at every supervised
+		// start. Plist content repairs are RepairEntries' job.
 		return nil
 	}
 	exe, err := osapp.GUIExecutable()
